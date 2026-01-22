@@ -14,7 +14,7 @@ IndentCaseLabels: false
 BreakBeforeBraces: Attach
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
-AllowShortLoopsOnASingleLine: false
+AllowShortLoopsOnASingleLine: true
 AllowShortBlocksOnASingleLine: Never
 
 # 行宽

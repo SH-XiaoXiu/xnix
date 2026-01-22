@@ -20,8 +20,7 @@
 static void task_a(void) {
     while (1) {
         kprintf("A Running...\n");
-        for (volatile int i = 0; i < 100000000; i++)
-            ;
+        for (volatile int i = 0; i < 100000000; i++);
     }
 }
 
