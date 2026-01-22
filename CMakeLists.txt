@@ -23,7 +23,7 @@ endforeach()
 set(CMAKE_C_FLAGS "-m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -nostartfiles -Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "-g -O0")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
-set(CMAKE_ASM_FLAGS "-m32")
+set(CMAKE_ASM_FLAGS "-m32 -g")
 set(CMAKE_EXE_LINKER_FLAGS "-m32 -T${ARCH_DIR}/boot/kernel.ld -nostdlib -no-pie")
 
 # ============================================
@@ -82,8 +82,8 @@ add_custom_target(run
 )
 
 add_custom_target(debug
-        COMMAND qemu-system-i386 -cdrom ${CMAKE_BINARY_DIR}/xnix.iso -s -S
-        DEPENDS iso
+        COMMAND qemu-system-i386 -kernel ${CMAKE_BINARY_DIR}/xnix.elf -s -S
+        DEPENDS xnix.elf
         COMMENT "在 QEMU 调试模式下运行 Xnix (等待 GDB 连接端口1234)..."
         VERBATIM
 )
