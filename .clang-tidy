@@ -1,0 +1,31 @@
+# 内核代码质量检测配置
+# 针对裸机开发优化
+
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.*,
+  misc-*,
+  -misc-unused-parameters,
+  -misc-no-recursion,
+  performance-*,
+  portability-*,
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-uppercase-literal-suffix,
+
+HeaderFilterRegex: 'kernel/.*\.h$'
+
+CheckOptions:
+  readability-identifier-naming.FunctionCase: lower_case
+  readability-identifier-naming.VariableCase: lower_case
+  readability-identifier-naming.GlobalConstantCase: UPPER_CASE
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+  readability-identifier-naming.StructCase: lower_case
+  readability-identifier-naming.TypedefCase: lower_case
+  readability-braces-around-statements.ShortStatementLines: 1
