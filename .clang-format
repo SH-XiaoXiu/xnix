@@ -1,0 +1,75 @@
+# 内核代码风格配置
+# 基于 LLVM 风格
+
+Language: C
+BasedOnStyle: LLVM
+
+# 缩进
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+IndentCaseLabels: false
+
+# 大括号风格 (K&R)
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+
+# 行宽
+ColumnLimit: 100
+
+# 指针和引用对齐
+PointerAlignment: Right
+SpaceAroundPointerQualifiers: Default
+
+# 对齐
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
+AlignEscapedNewlines: Left
+AlignOperands: Align
+AlignTrailingComments: true
+
+# 空格
+SpaceAfterCStyleCast: false
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+
+# Include 排序和分组
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  # 1. 主头文件 (与 .c 文件同名的 .h)
+  - Regex: '^"[^/]*\.h"$'
+    Priority: 1
+    SortPriority: 1
+  # 2. 项目架构头文件 <arch/...>
+  - Regex: '^<arch/.*>'
+    Priority: 2
+    SortPriority: 2
+  # 3. 项目标准库 <xstd/...>
+  - Regex: '^<xstd/.*>'
+    Priority: 3
+    SortPriority: 3
+  # 4. 项目驱动 <drivers/...>
+  - Regex: '^<drivers/.*>'
+    Priority: 4
+    SortPriority: 4
+  # 5. 其他项目头文件 <...>
+  - Regex: '^<.*>'
+    Priority: 5
+    SortPriority: 5
+  # 6. 本地头文件 "..."
+  - Regex: '^".*"'
+    Priority: 6
+    SortPriority: 6
+
+# 其他
+InsertBraces: true
+InsertNewlineAtEOF: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+ReflowComments: true
