@@ -11,8 +11,8 @@
 #include <arch/types.h>
 
 /* IDT 门类型 */
-#define IDT_GATE_INTERRUPT  0x8E  /* P=1, DPL=0, 32位中断门 */
-#define IDT_GATE_TRAP       0x8F  /* P=1, DPL=0, 32位陷阱门 */
+#define IDT_GATE_INTERRUPT 0x8E /* P=1, DPL=0, 32位中断门 */
+#define IDT_GATE_TRAP      0x8F /* P=1, DPL=0, 32位陷阱门 */
 
 /* IDT 条目数量 */
 #define IDT_ENTRIES 256
@@ -21,19 +21,19 @@
  * @brief IDT 门描述符
  */
 struct idt_entry {
-    uint16_t base_low;    /* 处理函数地址低16位 */
-    uint16_t selector;    /* 代码段选择子 */
-    uint8_t  zero;        /* 保留，必须为0 */
-    uint8_t  flags;       /* 类型和属性 */
-    uint16_t base_high;   /* 处理函数地址高16位 */
+    uint16_t base_low;  /* 处理函数地址低16位 */
+    uint16_t selector;  /* 代码段选择子 */
+    uint8_t  zero;      /* 保留，必须为0 */
+    uint8_t  flags;     /* 类型和属性 */
+    uint16_t base_high; /* 处理函数地址高16位 */
 } __attribute__((packed));
 
 /**
  * @brief IDTR 寄存器结构
  */
 struct idt_ptr {
-    uint16_t limit;       /* IDT 大小 - 1 */
-    uint32_t base;        /* IDT 基地址 */
+    uint16_t limit; /* IDT 大小 - 1 */
+    uint32_t base;  /* IDT 基地址 */
 } __attribute__((packed));
 
 /**

@@ -5,9 +5,12 @@
  */
 
 #include "pit.h"
-#include "pic.h"
+
 #include "isr.h"
+#include "pic.h"
+
 #include <arch/io.h>
+
 #include <xstd/stdio.h>
 
 static volatile uint32_t ticks = 0;

@@ -7,9 +7,9 @@
 
 #include <drivers/vga.h>
 
-static uint16_t* vga_buffer;
-static int vga_x, vga_y;
-static uint8_t vga_color_attr;
+static uint16_t *vga_buffer;
+static int       vga_x, vga_y;
+static uint8_t   vga_color_attr;
 
 static inline uint8_t make_color(enum vga_color fg, enum vga_color bg) {
     return fg | (bg << 4);
@@ -19,10 +19,10 @@ static inline uint16_t make_entry(char c, uint8_t color) {
     return (uint16_t)c | ((uint16_t)color << 8);
 }
 
-void vga_init(void* buffer) {
-    vga_buffer = (uint16_t*)buffer;
-    vga_x = 0;
-    vga_y = 0;
+void vga_init(void *buffer) {
+    vga_buffer     = (uint16_t *)buffer;
+    vga_x          = 0;
+    vga_y          = 0;
     vga_color_attr = make_color(VGA_LIGHT_GREY, VGA_BLACK);
 }
 
@@ -73,7 +73,7 @@ void vga_putc(char c) {
     }
 }
 
-void vga_puts_at(const char* str, int x, int y) {
+void vga_puts_at(const char *str, int x, int y) {
     int i = 0;
     while (str[i] && (x + i) < VGA_WIDTH) {
         vga_buffer[y * VGA_WIDTH + x + i] = make_entry(str[i], vga_color_attr);

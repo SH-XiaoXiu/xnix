@@ -5,6 +5,7 @@
  */
 
 #include "pic.h"
+
 #include <arch/io.h>
 
 void pic_init(void) {
@@ -13,12 +14,12 @@ void pic_init(void) {
     arch_outb(PIC2_CMD, 0x11);
 
     /* ICW2: 设置中断向量偏移 */
-    arch_outb(PIC1_DATA, 0x20);  /* IRQ 0-7  -> 中断 32-39 */
-    arch_outb(PIC2_DATA, 0x28);  /* IRQ 8-15 -> 中断 40-47 */
+    arch_outb(PIC1_DATA, 0x20); /* IRQ 0-7  -> 中断 32-39 */
+    arch_outb(PIC2_DATA, 0x28); /* IRQ 8-15 -> 中断 40-47 */
 
     /* ICW3: 设置级联 */
-    arch_outb(PIC1_DATA, 0x04);  /* IRQ2 连接从片 */
-    arch_outb(PIC2_DATA, 0x02);  /* 从片连接到 IRQ2 */
+    arch_outb(PIC1_DATA, 0x04); /* IRQ2 连接从片 */
+    arch_outb(PIC2_DATA, 0x02); /* 从片连接到 IRQ2 */
 
     /* ICW4: 8086 模式 */
     arch_outb(PIC1_DATA, 0x01);
@@ -38,7 +39,7 @@ void pic_eoi(uint8_t irq) {
 
 void pic_mask(uint8_t irq) {
     uint16_t port;
-    uint8_t mask;
+    uint8_t  mask;
 
     if (irq < 8) {
         port = PIC1_DATA;
@@ -52,7 +53,7 @@ void pic_mask(uint8_t irq) {
 
 void pic_unmask(uint8_t irq) {
     uint16_t port;
-    uint8_t mask;
+    uint8_t  mask;
 
     if (irq < 8) {
         port = PIC1_DATA;

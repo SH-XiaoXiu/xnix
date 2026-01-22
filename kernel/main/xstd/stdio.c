@@ -5,31 +5,40 @@
  * @date 2026-01-20
  */
 
-#include <xstd/stdio.h>
 #include <xstd/stdint.h>
+#include <xstd/stdio.h>
 
 /* weak 默认实现，架构层覆盖 */
-__attribute__((weak)) void arch_putc(char c) { (void)c; }
-__attribute__((weak)) void arch_console_init(void) {}
+__attribute__((weak)) void arch_putc(char c) {
+    (void)c;
+}
+__attribute__((weak)) void arch_console_init(void) {
+}
 
 void kputc(char c) {
-    if (c == '\n') arch_putc('\r');
+    if (c == '\n') {
+        arch_putc('\r');
+    }
     arch_putc(c);
 }
 
-void kputs(const char* str) {
-    if (!str) return;
-    while (*str) kputc(*str++);
+void kputs(const char *str) {
+    if (!str) {
+        return;
+    }
+    while (*str) {
+        kputc(*str++);
+    }
 }
 
-void klog(const char* str) {
+void klog(const char *str) {
     kputs(str);
 }
 
 static void print_uint(uint32_t num, int base) {
     static const char digits[] = "0123456789abcdef";
-    char buf[32];
-    int i = 0;
+    char              buf[32];
+    int               i = 0;
 
     if (num == 0) {
         kputc('0');
@@ -41,7 +50,9 @@ static void print_uint(uint32_t num, int base) {
         num /= base;
     }
 
-    while (i > 0) kputc(buf[--i]);
+    while (i > 0) {
+        kputc(buf[--i]);
+    }
 }
 
 static void print_int(int32_t num) {
@@ -59,8 +70,10 @@ static inline void print_hex_padded(uint32_t num, int width) {
     }
 }
 
-void kprintf(const char* fmt, ...) {
-    if (!fmt) return;
+void kprintf(const char *fmt, ...) {
+    if (!fmt) {
+        return;
+    }
 
     __builtin_va_list args;
     __builtin_va_start(args, fmt);
@@ -73,15 +86,33 @@ void kprintf(const char* fmt, ...) {
 
         fmt++;
         switch (*fmt) {
-            case 's': kputs(__builtin_va_arg(args, const char*) ?: "(null)"); break;
-            case 'c': kputc((char)__builtin_va_arg(args, int)); break;
-            case 'd':
-            case 'i': print_int(__builtin_va_arg(args, int32_t)); break;
-            case 'u': print_uint(__builtin_va_arg(args, uint32_t), 10); break;
-            case 'x': print_uint(__builtin_va_arg(args, uint32_t), 16); break;
-            case 'p': kputs("0x"); print_hex_padded((uint32_t)(uintptr_t)__builtin_va_arg(args, void*), 8); break;
-            case '%': kputc('%'); break;
-            default:  kputc('%'); kputc(*fmt); break;
+        case 's':
+            kputs(__builtin_va_arg(args, const char *) ?: "(null)");
+            break;
+        case 'c':
+            kputc((char)__builtin_va_arg(args, int));
+            break;
+        case 'd':
+        case 'i':
+            print_int(__builtin_va_arg(args, int32_t));
+            break;
+        case 'u':
+            print_uint(__builtin_va_arg(args, uint32_t), 10);
+            break;
+        case 'x':
+            print_uint(__builtin_va_arg(args, uint32_t), 16);
+            break;
+        case 'p':
+            kputs("0x");
+            print_hex_padded((uint32_t)(uintptr_t)__builtin_va_arg(args, void *), 8);
+            break;
+        case '%':
+            kputc('%');
+            break;
+        default:
+            kputc('%');
+            kputc(*fmt);
+            break;
         }
         fmt++;
     }

@@ -18,19 +18,19 @@ void kputc(char c);
  * @brief 输出字符串
  * @param str 要输出的字符串
  */
-void kputs(const char* str);
+void kputs(const char *str);
 
 /**
  * @brief 内核日志输出
  * @param str 日志内容
  */
-void klog(const char* str);
+void klog(const char *str);
 
 /**
  * @brief 格式化输出
  * @param fmt 格式字符串（支持 %s %c %d %i %u %x %p %%）
  * @param ... 可变参数
  */
-void kprintf(const char* fmt, ...);
+void kprintf(const char *fmt, ...);
 
 #endif

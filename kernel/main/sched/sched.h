@@ -29,8 +29,8 @@ struct task_context {
  */
 struct task {
     struct task_context ctx;
-    uint8_t stack[TASK_STACK_SIZE];
-    uint8_t id;
+    uint8_t             stack[TASK_STACK_SIZE];
+    uint8_t             id;
 };
 
 /**

@@ -5,20 +5,23 @@
  * @date 2026-01-22
  */
 
-#include <xstd/stdio.h>
 #include <arch/console.h>
 #include <arch/cpu.h>
 #include <arch/gdt.h>
 #include <arch/idt.h>
 #include <arch/pic.h>
 #include <arch/pit.h>
+
+#include <xstd/stdio.h>
+
 #include "sched/sched.h"
 
 /* 测试任务 A */
 static void task_a(void) {
     while (1) {
         kprintf("A Running...\n");
-        for (volatile int i = 0; i < 100000000; i++);
+        for (volatile int i = 0; i < 100000000; i++)
+            ;
     }
 }
 
@@ -26,7 +29,8 @@ static void task_a(void) {
 static void task_b(void) {
     while (1) {
         kprintf("B Running...\n");
-        for (volatile int i = 0; i < 200000000; i++);
+        for (volatile int i = 0; i < 200000000; i++)
+            ;
     }
 }
 
@@ -54,7 +58,7 @@ void kernel_main(void) {
     sched_create(task_b);
 
     /* 初始化定时器并开启中断 */
-    pit_init(10);  /* 10 Hz */
+    pit_init(10); /* 10 Hz */
 
     kprintf("Enabling interrupts...\n");
     __asm__ volatile("sti");

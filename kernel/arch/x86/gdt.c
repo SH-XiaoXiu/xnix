@@ -21,7 +21,7 @@ struct gdt_ptr {
 } __attribute__((packed));
 
 static struct gdt_entry gdt[3];
-static struct gdt_ptr gdtr;
+static struct gdt_ptr   gdtr;
 
 extern void gdt_load(struct gdt_ptr *ptr);
 

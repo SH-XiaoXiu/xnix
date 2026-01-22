@@ -4,18 +4,17 @@
  * @author XiaoXiu
  */
 
-
 #ifndef ARCH_PIT_H
 #define ARCH_PIT_H
 
 #include <arch/types.h>
 
-#define PIT_CHANNEL0    0x40
-#define PIT_CHANNEL1    0x41
-#define PIT_CHANNEL2    0x42
-#define PIT_CMD         0x43
+#define PIT_CHANNEL0 0x40
+#define PIT_CHANNEL1 0x41
+#define PIT_CHANNEL2 0x42
+#define PIT_CMD      0x43
 
-#define PIT_FREQ        1193182  /* PIT 基础频率 Hz */
+#define PIT_FREQ 1193182 /* PIT 基础频率 Hz */
 
 /**
  * @brief 初始化 PIT

@@ -5,52 +5,52 @@
  */
 
 #include "isr.h"
+
 #include "pic.h"
+
 #include <xstd/stdio.h>
 
 static irq_handler_t irq_handlers[16] = {0};
 
-static const char *exception_names[] = {
-    "Division By Zero",
-    "Debug",
-    "Non Maskable Interrupt",
-    "Breakpoint",
-    "Overflow",
-    "Bound Range Exceeded",
-    "Invalid Opcode",
-    "Device Not Available",
-    "Double Fault",
-    "Coprocessor Segment Overrun",
-    "Invalid TSS",
-    "Segment Not Present",
-    "Stack Fault",
-    "General Protection Fault",
-    "Page Fault",
-    "Reserved",
-    "x87 Floating Point",
-    "Alignment Check",
-    "Machine Check",
-    "SIMD Floating Point",
-    "Virtualization",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Reserved",
-    "Security Exception",
-    "Reserved"
-};
+static const char *exception_names[] = {"Division By Zero",
+                                        "Debug",
+                                        "Non Maskable Interrupt",
+                                        "Breakpoint",
+                                        "Overflow",
+                                        "Bound Range Exceeded",
+                                        "Invalid Opcode",
+                                        "Device Not Available",
+                                        "Double Fault",
+                                        "Coprocessor Segment Overrun",
+                                        "Invalid TSS",
+                                        "Segment Not Present",
+                                        "Stack Fault",
+                                        "General Protection Fault",
+                                        "Page Fault",
+                                        "Reserved",
+                                        "x87 Floating Point",
+                                        "Alignment Check",
+                                        "Machine Check",
+                                        "SIMD Floating Point",
+                                        "Virtualization",
+                                        "Reserved",
+                                        "Reserved",
+                                        "Reserved",
+                                        "Reserved",
+                                        "Reserved",
+                                        "Reserved",
+                                        "Reserved",
+                                        "Reserved",
+                                        "Reserved",
+                                        "Security Exception",
+                                        "Reserved"};
 
 void isr_handler(struct interrupt_frame *frame) {
-    kprintf("\n!!! EXCEPTION: %s (int=%d, err=0x%x)\n",
-            exception_names[frame->int_no], frame->int_no, frame->err_code);
+    kprintf("\n!!! EXCEPTION: %s (int=%d, err=0x%x)\n", exception_names[frame->int_no],
+            frame->int_no, frame->err_code);
     kprintf("EIP=0x%x CS=0x%x EFLAGS=0x%x\n", frame->eip, frame->cs, frame->eflags);
-    kprintf("EAX=0x%x EBX=0x%x ECX=0x%x EDX=0x%x\n",
-            frame->eax, frame->ebx, frame->ecx, frame->edx);
+    kprintf("EAX=0x%x EBX=0x%x ECX=0x%x EDX=0x%x\n", frame->eax, frame->ebx, frame->ecx,
+            frame->edx);
 
     /* 停机 */
     while (1) {

@@ -5,11 +5,12 @@
  */
 
 #include "sched.h"
+
 #include <xstd/stdio.h>
 
 static struct task tasks[MAX_TASKS];
-static int task_count = 0;
-static int current_task = -1;  /* -1 表示还没开始调度 */
+static int         task_count   = 0;
+static int         current_task = -1; /* -1 表示还没开始调度 */
 
 static void task_exit(void) {
     kprintf("Task %d exited!\n", current_task);
@@ -22,13 +23,13 @@ static void task_exit(void) {
 static void (*task_entries[MAX_TASKS])(void);
 
 static void task_wrapper(void) {
-    __asm__ volatile("sti");  /* 开中断 */
+    __asm__ volatile("sti"); /* 开中断 */
     task_entries[current_task]();
 }
 
 void sched_init(void) {
-    task_count = 0;
-    current_task = -1;  /* 还没开始调度 */
+    task_count   = 0;
+    current_task = -1; /* 还没开始调度 */
     kprintf("Scheduler initialized\n");
 }
 
@@ -38,7 +39,7 @@ int sched_create(void (*entry)(void)) {
     }
 
     struct task *t = &tasks[task_count];
-    t->id = task_count;
+    t->id          = task_count;
 
     /* 保存真正的入口地址 */
     task_entries[task_count] = entry;
@@ -83,7 +84,7 @@ void sched_tick(void) {
         return;
     }
 
-    int prev = current_task;
+    int prev     = current_task;
     current_task = (current_task + 1) % task_count;
 
     if (prev != current_task) {

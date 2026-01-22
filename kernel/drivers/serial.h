@@ -11,10 +11,10 @@
 #include <xstd/stdint.h>
 
 /* 标准串口端口地址 */
-#define SERIAL_COM1  0x3F8
-#define SERIAL_COM2  0x2F8
-#define SERIAL_COM3  0x3E8
-#define SERIAL_COM4  0x2E8
+#define SERIAL_COM1 0x3F8
+#define SERIAL_COM2 0x2F8
+#define SERIAL_COM3 0x3E8
+#define SERIAL_COM4 0x2E8
 
 /**
  * @brief 初始化串口
@@ -34,6 +34,6 @@ void serial_putc(uint16_t port, char c);
  * @param port 端口基地址
  * @param str 要输出的字符串
  */
-void serial_puts(uint16_t port, const char* str);
+void serial_puts(uint16_t port, const char *str);
 
 #endif
