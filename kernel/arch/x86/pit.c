@@ -1,50 +1,49 @@
 /**
  * @file pit.c
- * @brief 8254 PIT 定时器实现
+ * @brief x86 8254 PIT 驱动
  * @author XiaoXiu
  */
 
-#include "pit.h"
+#include <arch/cpu.h>
 
-#include "isr.h"
-#include "pic.h"
+#include <drivers/irqchip.h>
+#include <drivers/timer.h>
 
-#include <arch/io.h>
+#define PIT_CHANNEL0 0x40
+#define PIT_CMD      0x43
+#define PIT_FREQ     1193182
 
-#include <xstd/stdio.h>
+static volatile uint64_t pit_ticks = 0;
 
-static volatile uint32_t ticks = 0;
-
-/* 前向声明调度器的 tick 处理 */
-extern void sched_tick(void);
-
-static void pit_handler(struct interrupt_frame *frame) {
+/* IRQ0 处理函数 */
+static void pit_irq_handler(struct irq_frame *frame) {
     (void)frame;
-    ticks++;
-    /* 先发 EOI，因为 sched_tick 可能不返回 */
-    pic_eoi(0);
-    sched_tick();
+    pit_ticks++;
+    timer_tick();
 }
 
-void pit_init(uint32_t freq) {
+static void pit_init(uint32_t freq) {
     uint32_t divisor = PIT_FREQ / freq;
 
-    /* 设置模式：通道0，先低后高，方波模式 */
-    arch_outb(PIT_CMD, 0x36);
+    outb(PIT_CMD, 0x36);
+    outb(PIT_CHANNEL0, divisor & 0xFF);
+    outb(PIT_CHANNEL0, (divisor >> 8) & 0xFF);
 
-    /* 设置分频值 */
-    arch_outb(PIT_CHANNEL0, divisor & 0xFF);
-    arch_outb(PIT_CHANNEL0, (divisor >> 8) & 0xFF);
-
-    /* 注册中断处理函数 */
-    irq_register(0, pit_handler);
-
-    /* 取消屏蔽 IRQ0 */
-    pic_unmask(0);
-
-    kprintf("PIT: initialized at %d Hz\n", freq);
+    /* 注册 IRQ0 并使能 */
+    irq_set_handler(0, pit_irq_handler);
+    irq_enable(0);
 }
 
-uint32_t pit_get_ticks(void) {
-    return ticks;
+static uint64_t pit_get_ticks(void) {
+    return pit_ticks;
+}
+
+static struct timer_driver pit_timer = {
+    .name      = "8254-pit",
+    .init      = pit_init,
+    .get_ticks = pit_get_ticks,
+};
+
+void pit_register(void) {
+    timer_register(&pit_timer);
 }

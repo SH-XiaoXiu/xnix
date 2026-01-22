@@ -6,7 +6,11 @@
 
 #include "sched.h"
 
+#include <arch/cpu.h>
+
 #include <xstd/stdio.h>
+
+#include <drivers/irqchip.h>
 
 static struct task tasks[MAX_TASKS];
 static int         task_count   = 0;
@@ -15,7 +19,7 @@ static int         current_task = -1; /* -1 表示还没开始调度 */
 static void task_exit(void) {
     kprintf("Task %d exited!\n", current_task);
     while (1) {
-        __asm__ volatile("hlt");
+        cpu_halt();
     }
 }
 
@@ -23,14 +27,13 @@ static void task_exit(void) {
 static void (*task_entries[MAX_TASKS])(void);
 
 static void task_wrapper(void) {
-    __asm__ volatile("sti"); /* 开中断 */
+    cpu_irq_enable();
     task_entries[current_task]();
 }
 
 void sched_init(void) {
     task_count   = 0;
-    current_task = -1; /* 还没开始调度 */
-    kprintf("Scheduler initialized\n");
+    current_task = -1;
 }
 
 int sched_create(void (*entry)(void)) {
@@ -76,6 +79,8 @@ void sched_tick(void) {
     /* 第一次调度：直接跳转到任务 0 */
     if (current_task < 0) {
         current_task = 0;
+        /* 由于 context_switch_first 不返回，需要先发送 EOI */
+        irq_eoi(0);
         context_switch_first(&tasks[0].ctx);
         return;
     }
@@ -88,6 +93,9 @@ void sched_tick(void) {
     current_task = (current_task + 1) % task_count;
 
     if (prev != current_task) {
+        /* 由于 context_switch 切换栈后不会返回到当前调用点，
+         * 需要先发送 EOI，否则 PIC 会屏蔽后续中断 */
+        irq_eoi(0);
         context_switch(&tasks[prev].ctx, &tasks[current_task].ctx);
     }
 }

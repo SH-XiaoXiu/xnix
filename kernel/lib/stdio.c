@@ -8,23 +8,15 @@
 #include <xstd/stdint.h>
 #include <xstd/stdio.h>
 
-/* weak 默认实现，架构层覆盖 */
-__attribute__((weak)) void arch_putc(char c) {
-    (void)c;
-}
-__attribute__((weak)) void arch_console_init(void) {
-}
-__attribute__((weak)) void arch_set_color(kcolor_t color) {
-    (void)color;
-}
-__attribute__((weak)) void arch_reset_color(void) {
-}
+#include <drivers/console.h>
+
+#include <xnix/types.h>
 
 void kputc(char c) {
     if (c == '\n') {
-        arch_putc('\r');
+        console_putc('\r');
     }
-    arch_putc(c);
+    console_putc(c);
 }
 
 void kputs(const char *str) {
@@ -116,31 +108,31 @@ void kprintf(const char *fmt, ...) {
             break;
         /* 颜色格式符 */
         case 'K':
-            arch_set_color(KCOLOR_BLACK);
+            console_set_color(KCOLOR_BLACK);
             break;
         case 'R':
-            arch_set_color(KCOLOR_RED);
+            console_set_color(KCOLOR_RED);
             break;
         case 'G':
-            arch_set_color(KCOLOR_GREEN);
+            console_set_color(KCOLOR_GREEN);
             break;
         case 'Y':
-            arch_set_color(KCOLOR_YELLOW);
+            console_set_color(KCOLOR_YELLOW);
             break;
         case 'B':
-            arch_set_color(KCOLOR_BLUE);
+            console_set_color(KCOLOR_BLUE);
             break;
         case 'M':
-            arch_set_color(KCOLOR_MAGENTA);
+            console_set_color(KCOLOR_MAGENTA);
             break;
         case 'C':
-            arch_set_color(KCOLOR_CYAN);
+            console_set_color(KCOLOR_CYAN);
             break;
         case 'W':
-            arch_set_color(KCOLOR_WHITE);
+            console_set_color(KCOLOR_WHITE);
             break;
         case 'N':
-            arch_reset_color();
+            console_reset_color();
             break;
         default:
             kputc('%');

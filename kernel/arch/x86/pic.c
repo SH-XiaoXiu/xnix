@@ -1,66 +1,68 @@
 /**
  * @file pic.c
- * @brief 8259 PIC 初始化
+ * @brief x86 8259 PIC 驱动
  * @author XiaoXiu
  */
 
-#include "pic.h"
+#include <arch/cpu.h>
 
-#include <arch/io.h>
+#include <drivers/irqchip.h>
 
-void pic_init(void) {
-    /* ICW1: 开始初始化序列 */
-    arch_outb(PIC1_CMD, 0x11);
-    arch_outb(PIC2_CMD, 0x11);
+#define PIC1_CMD  0x20
+#define PIC1_DATA 0x21
+#define PIC2_CMD  0xA0
+#define PIC2_DATA 0xA1
+#define PIC_EOI   0x20
 
-    /* ICW2: 设置中断向量偏移 */
-    arch_outb(PIC1_DATA, 0x20); /* IRQ 0-7  -> 中断 32-39 */
-    arch_outb(PIC2_DATA, 0x28); /* IRQ 8-15 -> 中断 40-47 */
-
-    /* ICW3: 设置级联 */
-    arch_outb(PIC1_DATA, 0x04); /* IRQ2 连接从片 */
-    arch_outb(PIC2_DATA, 0x02); /* 从片连接到 IRQ2 */
-
+static void pic_init(void) {
+    /* ICW1 */
+    outb(PIC1_CMD, 0x11);
+    outb(PIC2_CMD, 0x11);
+    /* ICW2: 重映射到 0x20-0x2F */
+    outb(PIC1_DATA, 0x20);
+    outb(PIC2_DATA, 0x28);
+    /* ICW3: 级联 */
+    outb(PIC1_DATA, 0x04);
+    outb(PIC2_DATA, 0x02);
     /* ICW4: 8086 模式 */
-    arch_outb(PIC1_DATA, 0x01);
-    arch_outb(PIC2_DATA, 0x01);
-
+    outb(PIC1_DATA, 0x01);
+    outb(PIC2_DATA, 0x01);
     /* 屏蔽所有中断 */
-    arch_outb(PIC1_DATA, 0xFF);
-    arch_outb(PIC2_DATA, 0xFF);
+    outb(PIC1_DATA, 0xFF);
+    outb(PIC2_DATA, 0xFF);
 }
 
-void pic_eoi(uint8_t irq) {
+static void pic_enable(uint8_t irq) {
+    uint16_t port = (irq < 8) ? PIC1_DATA : PIC2_DATA;
     if (irq >= 8) {
-        arch_outb(PIC2_CMD, PIC_EOI);
-    }
-    arch_outb(PIC1_CMD, PIC_EOI);
-}
-
-void pic_mask(uint8_t irq) {
-    uint16_t port;
-    uint8_t  mask;
-
-    if (irq < 8) {
-        port = PIC1_DATA;
-    } else {
-        port = PIC2_DATA;
         irq -= 8;
     }
-    mask = arch_inb(port) | (1 << irq);
-    arch_outb(port, mask);
+    outb(port, inb(port) & ~(1 << irq));
 }
 
-void pic_unmask(uint8_t irq) {
-    uint16_t port;
-    uint8_t  mask;
-
-    if (irq < 8) {
-        port = PIC1_DATA;
-    } else {
-        port = PIC2_DATA;
+static void pic_disable(uint8_t irq) {
+    uint16_t port = (irq < 8) ? PIC1_DATA : PIC2_DATA;
+    if (irq >= 8) {
         irq -= 8;
     }
-    mask = arch_inb(port) & ~(1 << irq);
-    arch_outb(port, mask);
+    outb(port, inb(port) | (1 << irq));
+}
+
+static void pic_eoi(uint8_t irq) {
+    if (irq >= 8) {
+        outb(PIC2_CMD, PIC_EOI);
+    }
+    outb(PIC1_CMD, PIC_EOI);
+}
+
+static struct irqchip_driver pic_chip = {
+    .name    = "8259-pic",
+    .init    = pic_init,
+    .enable  = pic_enable,
+    .disable = pic_disable,
+    .eoi     = pic_eoi,
+};
+
+void pic_register(void) {
+    irqchip_register(&pic_chip);
 }

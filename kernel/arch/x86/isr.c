@@ -1,73 +1,46 @@
 /**
  * @file isr.c
- * @brief 中断服务程序实现
+ * @brief x86 中断服务程序
  * @author XiaoXiu
  */
 
-#include "isr.h"
+#include <arch/cpu.h>
 
-#include "pic.h"
-
+#include <xstd/stdint.h>
 #include <xstd/stdio.h>
 
-static irq_handler_t irq_handlers[16] = {0};
+#include <drivers/irqchip.h>
 
-static const char *exception_names[] = {"Division By Zero",
-                                        "Debug",
-                                        "Non Maskable Interrupt",
-                                        "Breakpoint",
-                                        "Overflow",
-                                        "Bound Range Exceeded",
-                                        "Invalid Opcode",
-                                        "Device Not Available",
-                                        "Double Fault",
-                                        "Coprocessor Segment Overrun",
-                                        "Invalid TSS",
-                                        "Segment Not Present",
-                                        "Stack Fault",
-                                        "General Protection Fault",
-                                        "Page Fault",
-                                        "Reserved",
-                                        "x87 Floating Point",
-                                        "Alignment Check",
-                                        "Machine Check",
-                                        "SIMD Floating Point",
-                                        "Virtualization",
-                                        "Reserved",
-                                        "Reserved",
-                                        "Reserved",
-                                        "Reserved",
-                                        "Reserved",
-                                        "Reserved",
-                                        "Reserved",
-                                        "Reserved",
-                                        "Reserved",
-                                        "Security Exception",
-                                        "Reserved"};
+/* x86 中断帧定义 */
+struct irq_frame {
+    uint32_t ds;
+    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
+    uint32_t int_no, err_code;
+    uint32_t eip, cs, eflags, useresp, ss;
+};
 
-void isr_handler(struct interrupt_frame *frame) {
-    kprintf("\n!!! EXCEPTION: %s (int=%d, err=0x%x)\n", exception_names[frame->int_no],
+static const char *exception_names[] = {
+    "Division By Zero", "Debug",          "NMI",         "Breakpoint",    "Overflow",
+    "Bound Range",      "Invalid Opcode", "Device N/A",  "Double Fault",  "Coprocessor",
+    "Invalid TSS",      "Segment N/P",    "Stack Fault", "GPF",           "Page Fault",
+    "Reserved",         "x87 FP",         "Alignment",   "Machine Check", "SIMD FP",
+    "Virtualization",   "Reserved",       "Reserved",    "Reserved",      "Reserved",
+    "Reserved",         "Reserved",       "Reserved",    "Reserved",      "Reserved",
+    "Security",         "Reserved"};
+
+/* CPU 异常处理 */
+void isr_handler(struct irq_frame *frame) {
+    kprintf("\n%R!!! EXCEPTION%N: %s (int=%d, err=0x%x)\n", exception_names[frame->int_no],
             frame->int_no, frame->err_code);
     kprintf("EIP=0x%x CS=0x%x EFLAGS=0x%x\n", frame->eip, frame->cs, frame->eflags);
-    kprintf("EAX=0x%x EBX=0x%x ECX=0x%x EDX=0x%x\n", frame->eax, frame->ebx, frame->ecx,
-            frame->edx);
 
-    /* 停机 */
     while (1) {
-        __asm__ volatile("cli; hlt");
+        cpu_stop();
     }
 }
 
-void irq_handler(struct interrupt_frame *frame) {
+/* IRQ 处理 */
+void irq_handler(struct irq_frame *frame) {
     uint8_t irq = frame->int_no - 32;
-
-    if (irq_handlers[irq]) {
-        irq_handlers[irq](frame);
-    }
-
-    pic_eoi(irq);
-}
-
-void irq_register(uint8_t irq, irq_handler_t handler) {
-    irq_handlers[irq] = handler;
+    irq_dispatch(irq, frame);
 }

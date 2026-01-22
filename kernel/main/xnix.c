@@ -5,14 +5,13 @@
  * @date 2026-01-22
  */
 
-#include <arch/console.h>
 #include <arch/cpu.h>
-#include <arch/gdt.h>
-#include <arch/idt.h>
-#include <arch/pic.h>
-#include <arch/pit.h>
 
 #include <xstd/stdio.h>
+
+#include <drivers/console.h>
+#include <drivers/irqchip.h>
+#include <drivers/timer.h>
 
 #include "sched/sched.h"
 
@@ -33,7 +32,12 @@ static void task_b(void) {
 }
 
 void kernel_main(void) {
-    arch_console_init();
+    /* 注册所有驱动 */
+    arch_early_init();
+
+    /* 初始化控制台 */
+    console_init();
+    console_clear();
 
     kprintf("\n");
     kprintf("%C========================================%N\n");
@@ -41,28 +45,31 @@ void kernel_main(void) {
     kprintf("%C========================================%N\n");
     kprintf("\n");
 
-    /* 初始化 GDT */
-    gdt_init();
-    kprintf("%G[OK]%N GDT initialized\n");
+    /* 初始化架构（GDT/IDT） */
+    arch_init();
+    kprintf("%G[OK]%N GDT/IDT initialized\n");
 
-    /* 初始化中断 */
-    pic_init();
-    idt_init();
-    kprintf("%G[OK]%N IDT initialized\n");
+    /* 初始化中断控制器 */
+    irqchip_init();
+    kprintf("%G[OK]%N IRQ chip initialized\n");
 
     /* 初始化调度器 */
     sched_init();
     sched_create(task_a);
     sched_create(task_b);
+    kprintf("%G[OK]%N Scheduler initialized\n");
 
-    /* 初始化定时器并开启中断 */
-    pit_init(10); /* 10 Hz */
+    /* 设置定时器回调并初始化 */
+    timer_set_callback(sched_tick);
+    timer_init(10); /* 10 Hz */
+    kprintf("%G[OK]%N Timer initialized (10 Hz)\n");
 
+    /* 开启中断 */
     kprintf("%Y[INFO]%N Enabling interrupts...\n");
-    __asm__ volatile("sti");
+    cpu_irq_enable();
 
     /* 主循环 */
     while (1) {
-        arch_halt();
+        cpu_halt();
     }
 }

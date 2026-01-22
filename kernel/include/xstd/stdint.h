@@ -1,12 +1,12 @@
 /**
- * @file types.h
- * @brief x86 架构基础类型定义
+ * @file stdint.h
+ * @brief 标准整数类型定义
  * @author XiaoXiu
  * @date 2026-01-20
  */
 
-#ifndef ARCH_TYPES_H
-#define ARCH_TYPES_H
+#ifndef XNIX_STDINT_H
+#define XNIX_STDINT_H
 
 /* 有符号整数 */
 typedef signed char      int8_t;
@@ -20,7 +20,7 @@ typedef unsigned short     uint16_t;
 typedef unsigned int       uint32_t;
 typedef unsigned long long uint64_t;
 
-/* 指针相关（32位） */
+/* 指针相关（32位平台） */
 typedef uint32_t uintptr_t;
 typedef int32_t  intptr_t;
 typedef uint32_t size_t;
