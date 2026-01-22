@@ -7,11 +7,11 @@
 
 #include <arch/cpu.h>
 
-#include <xstd/stdio.h>
-
 #include <drivers/console.h>
 #include <drivers/irqchip.h>
 #include <drivers/timer.h>
+
+#include <xnix/stdio.h>
 
 #include "sched/sched.h"
 

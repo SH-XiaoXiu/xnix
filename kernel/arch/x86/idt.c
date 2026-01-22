@@ -4,7 +4,7 @@
  * @author XiaoXiu
  */
 
-#include <xstd/stdint.h>
+#include <xnix/types.h>
 
 #define IDT_ENTRIES        256
 #define IDT_GATE_INTERRUPT 0x8E

@@ -8,7 +8,7 @@
 #ifndef DRIVERS_IRQCHIP_H
 #define DRIVERS_IRQCHIP_H
 
-#include <xstd/stdint.h>
+#include <xnix/types.h>
 
 /**
  * @brief 中断帧（由架构层定义具体布局）

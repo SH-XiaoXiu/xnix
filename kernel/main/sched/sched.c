@@ -8,9 +8,9 @@
 
 #include <arch/cpu.h>
 
-#include <xstd/stdio.h>
-
 #include <drivers/irqchip.h>
+
+#include <xnix/stdio.h>
 
 static struct task tasks[MAX_TASKS];
 static int         task_count   = 0;

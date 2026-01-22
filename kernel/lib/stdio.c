@@ -5,11 +5,9 @@
  * @date 2026-01-20
  */
 
-#include <xstd/stdint.h>
-#include <xstd/stdio.h>
-
 #include <drivers/console.h>
 
+#include <xnix/stdio.h>
 #include <xnix/types.h>
 
 void kputc(char c) {

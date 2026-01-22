@@ -5,9 +5,9 @@
  * @date 2026-01-20
  */
 
-#include <xstd/stdint.h>
-
 #include <drivers/console.h>
+
+#include <xnix/types.h>
 
 #define VGA_BUFFER 0xB8000
 #define VGA_WIDTH  80

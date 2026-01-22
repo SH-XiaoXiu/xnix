@@ -4,7 +4,7 @@
  * @author XiaoXiu
  */
 
-#include <xstd/stdint.h>
+#include <xnix/types.h>
 
 struct gdt_entry {
     uint16_t limit_low;

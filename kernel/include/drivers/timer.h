@@ -8,7 +8,7 @@
 #ifndef DRIVERS_TIMER_H
 #define DRIVERS_TIMER_H
 
-#include <xstd/stdint.h>
+#include <xnix/types.h>
 
 /**
  * @brief 定时器驱动操作接口

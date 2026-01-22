@@ -7,7 +7,7 @@
 #ifndef SCHED_H
 #define SCHED_H
 
-#include <xstd/stdint.h>
+#include <xnix/types.h>
 
 #define TASK_STACK_SIZE 4096
 #define MAX_TASKS       2

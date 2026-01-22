@@ -7,7 +7,7 @@
 #ifndef X86_ASM_CPU_H
 #define X86_ASM_CPU_H
 
-#include <xstd/stdint.h>
+#include <xnix/types.h>
 
 /* ============================================
  * 中断控制

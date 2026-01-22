@@ -6,10 +6,10 @@
 
 #include <arch/cpu.h>
 
-#include <xstd/stdint.h>
-#include <xstd/stdio.h>
-
 #include <drivers/irqchip.h>
+
+#include <xnix/stdio.h>
+#include <xnix/types.h>
 
 /* x86 中断帧定义 */
 struct irq_frame {
