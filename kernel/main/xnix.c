@@ -2,10 +2,10 @@
  * @file xnix.c
  * @brief Xnix 内核入口
  * @author XiaoXiu
- * @date 2026-01-29
+ * @date 2026-01-22
  */
 
-#include <xstd/stdout.h>
+#include <xstd/stdio.h>
 #include <arch/console.h>
 #include <arch/cpu.h>
 

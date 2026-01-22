@@ -1,11 +1,11 @@
 /**
- * @file stdout.c
+ * @file stdio.c
  * @brief 内核标准输出实现
  * @author XiaoXiu
  * @date 2026-01-20
  */
 
-#include <xstd/stdout.h>
+#include <xstd/stdio.h>
 #include <xstd/stdint.h>
 
 /* weak 默认实现，架构层覆盖 */

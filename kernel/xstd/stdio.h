@@ -1,6 +1,6 @@
 /**
- * @file stdout.h
- * @brief 内核标准输出接口
+ * @file stdio.h
+ * @brief 内核标准输入输出接口
  * @author XiaoXiu
  * @date 2026-01-20
  */
