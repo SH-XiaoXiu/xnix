@@ -19,7 +19,7 @@
 /* 测试任务 A */
 static void task_a(void) {
     while (1) {
-        kprintf("A Running...\n");
+        kprintf("%R[A]%N Running...\n");
         for (volatile int i = 0; i < 100000000; i++);
     }
 }
@@ -27,9 +27,8 @@ static void task_a(void) {
 /* 测试任务 B */
 static void task_b(void) {
     while (1) {
-        kprintf("B Running...\n");
-        for (volatile int i = 0; i < 200000000; i++)
-            ;
+        kprintf("%B[B]%N Running...\n");
+        for (volatile int i = 0; i < 200000000; i++);
     }
 }
 
@@ -37,19 +36,19 @@ void kernel_main(void) {
     arch_console_init();
 
     kprintf("\n");
-    kprintf("========================================\n");
-    kprintf("        Xnix Kernel Loaded!\n");
-    kprintf("========================================\n");
+    kprintf("%C========================================%N\n");
+    kprintf("%C        Xnix Kernel Loaded!%N\n");
+    kprintf("%C========================================%N\n");
     kprintf("\n");
 
     /* 初始化 GDT */
     gdt_init();
-    kprintf("GDT initialized\n");
+    kprintf("%G[OK]%N GDT initialized\n");
 
     /* 初始化中断 */
     pic_init();
     idt_init();
-    kprintf("IDT initialized\n");
+    kprintf("%G[OK]%N IDT initialized\n");
 
     /* 初始化调度器 */
     sched_init();
@@ -59,7 +58,7 @@ void kernel_main(void) {
     /* 初始化定时器并开启中断 */
     pit_init(10); /* 10 Hz */
 
-    kprintf("Enabling interrupts...\n");
+    kprintf("%Y[INFO]%N Enabling interrupts...\n");
     __asm__ volatile("sti");
 
     /* 主循环 */

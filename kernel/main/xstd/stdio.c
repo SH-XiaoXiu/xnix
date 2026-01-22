@@ -14,6 +14,11 @@ __attribute__((weak)) void arch_putc(char c) {
 }
 __attribute__((weak)) void arch_console_init(void) {
 }
+__attribute__((weak)) void arch_set_color(kcolor_t color) {
+    (void)color;
+}
+__attribute__((weak)) void arch_reset_color(void) {
+}
 
 void kputc(char c) {
     if (c == '\n') {
@@ -108,6 +113,34 @@ void kprintf(const char *fmt, ...) {
             break;
         case '%':
             kputc('%');
+            break;
+        /* 颜色格式符 */
+        case 'K':
+            arch_set_color(KCOLOR_BLACK);
+            break;
+        case 'R':
+            arch_set_color(KCOLOR_RED);
+            break;
+        case 'G':
+            arch_set_color(KCOLOR_GREEN);
+            break;
+        case 'Y':
+            arch_set_color(KCOLOR_YELLOW);
+            break;
+        case 'B':
+            arch_set_color(KCOLOR_BLUE);
+            break;
+        case 'M':
+            arch_set_color(KCOLOR_MAGENTA);
+            break;
+        case 'C':
+            arch_set_color(KCOLOR_CYAN);
+            break;
+        case 'W':
+            arch_set_color(KCOLOR_WHITE);
+            break;
+        case 'N':
+            arch_reset_color();
             break;
         default:
             kputc('%');
