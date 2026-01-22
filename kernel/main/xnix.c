@@ -8,10 +8,10 @@
 #include <xstd/stdio.h>
 #include <arch/console.h>
 #include <arch/cpu.h>
-#include "arch/gdt.h"
-#include "arch/idt.h"
-#include "arch/pic.h"
-#include "arch/pit.h"
+#include <arch/gdt.h>
+#include <arch/idt.h>
+#include <arch/pic.h>
+#include <arch/pit.h>
 #include "sched/sched.h"
 
 /* 测试任务 A */
