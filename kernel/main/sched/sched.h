@@ -1,58 +1,84 @@
 /**
  * @file sched.h
- * @brief 简单调度器（验证用）
- * @author XiaoXiu
+ * @brief 调度器内部头文件（私有）
  */
 
-#ifndef SCHED_H
-#define SCHED_H
+#ifndef KERNEL_SCHED_PRIVATE_H
+#define KERNEL_SCHED_PRIVATE_H
 
+#include <arch/smp.h>
+
+#include <xnix/thread.h>
 #include <xnix/types.h>
 
-#define TASK_STACK_SIZE 4096
-#define MAX_TASKS       2
-
-/**
- * @brief 任务上下文（callee-saved 寄存器）
+/*
+ * 调度策略接口
+ * 机制与策略分离：
+ *   机制 (scheduler)：何时调度、如何切换上下文
+ *   策略 (policy)：选哪个线程、如何管理队列
  */
-struct task_context {
-    uint32_t esp;
-    uint32_t ebp;
-    uint32_t ebx;
-    uint32_t esi;
-    uint32_t edi;
-    uint32_t eip;
+struct sched_policy {
+    const char *name;
+
+    /* 初始化策略 */
+    void (*init)(void);
+
+    /* 线程就绪，加入运行队列 */
+    void (*enqueue)(struct thread *t, cpu_id_t cpu);
+
+    /* 线程移出运行队列 */
+    void (*dequeue)(struct thread *t);
+
+    /* 选择下一个要运行的线程（当前 CPU） */
+    struct thread *(*pick_next)(void);
+
+    /* 时钟中断处理，返回是否需要重新调度 */
+    bool (*tick)(struct thread *current);
+
+    /* 选择最适合的 CPU（负载均衡） */
+    cpu_id_t (*select_cpu)(struct thread *t);
 };
 
-/**
- * @brief 任务控制块
- */
-struct task {
-    struct task_context ctx;
-    uint8_t             stack[TASK_STACK_SIZE];
-    uint8_t             id;
+/*
+ * Per-CPU 运行队列
+ **/
+
+struct runqueue {
+    struct thread *head;       /* 就绪队列头 */
+    struct thread *tail;       /* 就绪队列尾 */
+    struct thread *current;    /* 当前运行线程 */
+    uint32_t       nr_running; /* 运行队列长度（负载） */
 };
 
-/**
- * @brief 初始化调度器
- */
-void sched_init(void);
+/*
+ * 内部函数
+ **/
 
 /**
- * @brief 创建任务
- * @param entry 任务入口函数
- * @return 任务 ID，失败返回 -1
+ * 获取当前 CPU 的运行队列
  */
-int sched_create(void (*entry)(void));
+struct runqueue *sched_get_runqueue(cpu_id_t cpu);
 
 /**
- * @brief 定时器 tick 处理（由定时器中断调用）
+ * 设置调度策略
  */
-void sched_tick(void);
+void sched_set_policy(struct sched_policy *policy);
 
 /**
- * @brief 上下文切换（汇编实现）
+ * 创建线程并加入调度（内部使用）
  */
-extern void context_switch(struct task_context *old, struct task_context *new);
+struct thread *sched_spawn(const char *name, void (*entry)(void *), void *arg);
+
+/**
+ * 执行调度（切换到下一个线程）
+ */
+void schedule(void);
+
+/*
+ * 内置策略声明
+ **/
+
+/* Round-Robin 轮转调度 */
+extern struct sched_policy sched_policy_rr;
 
 #endif
