@@ -11,9 +11,10 @@
 #define XNIX_THREAD_H
 
 #include <xnix/types.h>
+#include <arch/smp.h>
 
 typedef uint32_t tid_t;
-#define TID_INVALID ((tid_t) - 1)
+#define TID_INVALID ((tid_t)-1)
 
 /**
  * 线程状态
@@ -49,20 +50,37 @@ struct thread {
     const char *name;
 
     thread_state_t state;
-    int            priority; /* 小 = 高优先级 */
+    int            priority;    /* 小 = 高优先级 */
+    uint32_t       time_slice;  /* 剩余时间片（tick 数） */
 
-    struct thread_context ctx;   /*上下文  */
+    struct thread_context ctx;
     void                 *stack; /* 栈底 */
     size_t                stack_size;
 
-    struct process *owner; /* 所属进程，内核线程为 NULL 目前暂时不支持,后续构建到Process抽象的时候再完善*/
+    struct process *owner; /* 所属进程，内核线程为 NULL */
+
+    /* 多核相关 */
+    uint32_t cpus_workable; /* 位图：bit N = 1 表示可在 CPU N 运行（全 1 = 任意核） */
+    cpu_id_t running_on;    /* 当前运行在哪个核上（-1 表示未运行） */
+
+    /* 调度策略 */
+    struct sched_policy *policy; /* 线程专属策略（NULL 则用默认策略） */
+
     struct thread *next; /* 队列链接 */
 
-    void *wait_chan; /* 阻塞事件列表 阻塞在什么上 */
+    void *wait_chan; /* 阻塞在什么上 */
     int   exit_code;
 };
 
-struct process; /* 前向声明 */
+struct process;      /* 前向声明 */
+struct sched_policy; /* 前向声明 */
+
+/* CPU 位图操作 */
+#define CPUS_ALL         0xFFFFFFFF                  /* 任意核 */
+#define CPUS_SET(mask, cpu)   ((mask) | (1U << (cpu)))
+#define CPUS_CLEAR(mask, cpu) ((mask) & ~(1U << (cpu)))
+#define CPUS_TEST(mask, cpu)  ((mask) & (1U << (cpu)))
+#define CPUS_ONLY(cpu)        (1U << (cpu))          /* 仅绑定单核 */
 
 /* 线程操作 */
 struct thread *thread_create(const char *name, void (*entry)(void *), void *arg);
