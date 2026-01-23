@@ -6,17 +6,16 @@
  */
 
 #include <arch/cpu.h>
-
 #include <drivers/console.h>
 #include <drivers/irqchip.h>
 #include <drivers/timer.h>
-
+#include <xnix/sched.h>
+#include <xnix/thread.h>
 #include <xnix/stdio.h>
 
-#include "sched/sched.h"
-
 /* 测试任务 A */
-static void task_a(void) {
+static void task_a(void *arg) {
+    (void)arg;
     while (1) {
         kprintf("%R[A]%N Running...\n");
         for (volatile int i = 0; i < 100000000; i++);
@@ -24,7 +23,8 @@ static void task_a(void) {
 }
 
 /* 测试任务 B */
-static void task_b(void) {
+static void task_b(void *arg) {
+    (void)arg;
     while (1) {
         kprintf("%B[B]%N Running...\n");
         for (volatile int i = 0; i < 200000000; i++);
@@ -55,9 +55,9 @@ void kernel_main(void) {
 
     /* 初始化调度器 */
     sched_init();
-    sched_create(task_a);
-    sched_create(task_b);
-    kprintf("%G[OK]%N Scheduler initialized\n");
+    thread_create("task_a", task_a, NULL);
+    thread_create("task_b", task_b, NULL);
+    kprintf("%G[OK]%N Threads created\n");
 
     /* 设置定时器回调并初始化 */
     timer_set_callback(sched_tick);
