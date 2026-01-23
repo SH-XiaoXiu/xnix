@@ -9,11 +9,29 @@
 #include <drivers/console.h>
 #include <drivers/irqchip.h>
 #include <drivers/timer.h>
+#include <xnix/config.h>
 #include <xnix/mm.h>
 #include <xnix/sched.h>
 #include <xnix/thread.h>
 #include <xnix/stdio.h>
 
+/* 测试任务 A */
+static void task_a(void *arg) {
+  (void)arg;
+  while (1) {
+    kprintf("%R[A]%N Running...\n");
+    sleep_ms(1000);
+  }
+}
+
+/* 测试任务 B */
+static void task_b(void *arg) {
+  (void)arg;
+  while (1) {
+    kprintf("%B[B]%N Running...\n");
+    sleep_ms(5000);
+  }
+}
 
 /* 内存测试任务：分配和释放内存 */
 static void task_memtest(void *arg) {
@@ -37,7 +55,7 @@ static void task_memtest(void *arg) {
         kprintf("%Y[MemTest]%N freed, ");
         mm_dump_stats();
 
-        for (volatile int i = 0; i < 200000000; i++);
+        sleep_ms(1000);
     }
 }
 
@@ -70,12 +88,14 @@ void kernel_main(void) {
     /* 初始化调度器 */
     sched_init();
     thread_create("memtest", task_memtest, NULL);
+    thread_create("task_a", task_a, NULL);
+    thread_create("task_b", task_b, NULL);
     kprintf("%G[OK]%N Threads created\n");
 
     /* 设置定时器回调并初始化 */
     timer_set_callback(sched_tick);
-    timer_init(10); /* 10 Hz */
-    kprintf("%G[OK]%N Timer initialized (10 Hz)\n");
+    timer_init(CFG_SCHED_HZ); /* 使用配置的频率 */
+    kprintf("%G[OK]%N Timer initialized (%d Hz)\n", CFG_SCHED_HZ);
 
     /* 开启中断 */
     kprintf("%Y[INFO]%N Enabling interrupts...\n");
