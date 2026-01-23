@@ -17,6 +17,19 @@ set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_ASM_FLAGS "-m32 -g")
 set(CMAKE_EXE_LINKER_FLAGS "-m32 -T${ARCH_DIR}/boot/kernel.ld -nostdlib -no-pie")
 
+# 内核配置
+set(CFG_SCHED_HZ 100)
+set(CFG_THREAD_STACK_SIZE 4096)
+set(CFG_MAX_CONSOLES 4)
+set(CFG_MAX_IRQS 16)
+option(CFG_DEBUG_MM "Debug memory manager" OFF)
+option(CFG_DEBUG_SCHED "Debug scheduler" OFF)
+
+configure_file(
+    ${CMAKE_SOURCE_DIR}/kernel/include/xnix/config.h.in
+    ${CMAKE_BINARY_DIR}/include/xnix/config.h
+)
+
 # ============================================
 # 源文件收集
 # ============================================
@@ -37,6 +50,7 @@ add_executable(xnix.elf ${KERNEL_SOURCES})
 # ============================================
 target_include_directories(xnix.elf PRIVATE
     ${CMAKE_SOURCE_DIR}/kernel/include
+    ${CMAKE_BINARY_DIR}/include
     ${ARCH_DIR}/include
 )
 

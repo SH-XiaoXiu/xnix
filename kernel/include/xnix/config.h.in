@@ -1,0 +1,21 @@
+/**
+ * @file config.h
+ * @brief 内核配置（由 CMake 自动生成，勿手动修改）
+ */
+
+#ifndef XNIX_CONFIG_H
+#define XNIX_CONFIG_H
+
+/* 调度器 */
+#define CFG_SCHED_HZ          @CFG_SCHED_HZ@
+#define CFG_THREAD_STACK_SIZE @CFG_THREAD_STACK_SIZE@
+
+/* 驱动 */
+#define CFG_MAX_CONSOLES      @CFG_MAX_CONSOLES@
+#define CFG_MAX_IRQS          @CFG_MAX_IRQS@
+
+/* 调试开关 */
+#cmakedefine CFG_DEBUG_MM
+#cmakedefine CFG_DEBUG_SCHED
+
+#endif
