@@ -19,6 +19,7 @@ void thread_exit(int code) {
         current->state     = THREAD_EXITED;
         current->exit_code = code;
         kprintf("Thread %d '%s' exited with code %d\n", current->tid, current->name, code);
+        sched_destroy_current();
     }
     schedule();
     /* 不应该返回 */

@@ -9,6 +9,8 @@
 
 #include <drivers/irqchip.h>
 
+#include <xnix/config.h>
+#include <xnix/mm.h>
 #include <xnix/sched.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
@@ -33,15 +35,8 @@ static tid_t next_tid = 1;
 /* 标记是否在中断上下文 */
 static bool in_interrupt = false;
 
-/* 静态线程池（临时方案，等有内存管理后改用 malloc） */
-#define MAX_THREADS       16
-#define THREAD_STACK_SIZE 4096
-struct thread_slot {
-    struct thread tcb;
-    uint8_t       stack[THREAD_STACK_SIZE];
-    bool          used;
-};
-static struct thread_slot thread_pool[MAX_THREADS];
+/* 待清理的已退出线程（切换后释放） */
+static struct thread *zombie_thread = NULL;
 
 /*
  * 内部辅助函数
@@ -100,43 +95,34 @@ struct thread *sched_spawn(const char *name, void (*entry)(void *), void *arg) {
         return NULL;
     }
 
-    /* 从线程池分配 */
-    struct thread_slot *slot = NULL;
-    for (int i = 0; i < MAX_THREADS; i++) {
-        if (!thread_pool[i].used) {
-            slot       = &thread_pool[i];
-            slot->used = true;
-            break;
-        }
-    }
-
-    if (!slot) {
-        kprintf("ERROR: Thread pool exhausted!\n");
+    struct thread *t = kzalloc(sizeof(struct thread));
+    if (!t) {
+        kprintf("ERROR: Failed to allocate thread\n");
         return NULL;
     }
 
-    struct thread *t = &slot->tcb;
+    t->stack = kmalloc(CFG_THREAD_STACK_SIZE);
+    if (!t->stack) {
+        kprintf("ERROR: Failed to allocate stack\n");
+        kfree(t);
+        return NULL;
+    }
 
-    /* 初始化 TCB */
-    memset(t, 0, sizeof(struct thread));
     t->tid           = alloc_tid();
     t->name          = name;
     t->state         = THREAD_READY;
     t->priority      = 0;
-    t->time_slice    = 0; /* 策略会在 enqueue 时设置 */
+    t->time_slice    = 0;
     t->cpus_workable = CPUS_ALL;
     t->running_on    = CPU_ID_INVALID;
     t->policy        = NULL;
-    t->stack         = slot->stack;
-    t->stack_size    = THREAD_STACK_SIZE;
+    t->stack_size    = CFG_THREAD_STACK_SIZE;
     t->next          = NULL;
     t->wait_chan     = NULL;
     t->exit_code     = 0;
 
-    /* 初始化栈 */
     thread_init_stack(t, entry, arg);
 
-    /* 选择 CPU 并加入就绪队列 */
     cpu_id_t cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
     current_policy->enqueue(t, cpu);
 
@@ -151,6 +137,13 @@ struct thread *sched_spawn(const char *name, void (*entry)(void *), void *arg) {
 void schedule(void) {
     if (!current_policy) {
         return;
+    }
+
+    /* 清理上次退出的线程 */
+    if (zombie_thread) {
+        kfree(zombie_thread->stack);
+        kfree(zombie_thread);
+        zombie_thread = NULL;
     }
 
     cpu_id_t         cpu  = cpu_current_id();
@@ -196,11 +189,6 @@ void schedule(void) {
  **/
 
 void sched_init(void) {
-    /* 初始化线程池 */
-    for (int i = 0; i < MAX_THREADS; i++) {
-        thread_pool[i].used = false;
-    }
-
     /* 初始化运行队列 */
     for (int i = 0; i < 1; i++) {
         runqueues[i].head       = NULL;
@@ -209,9 +197,7 @@ void sched_init(void) {
         runqueues[i].nr_running = 0;
     }
 
-    /* 设置默认策略 */
     sched_set_policy(&sched_policy_rr);
-
     kprintf("Scheduler initialized\n");
 }
 
@@ -254,6 +240,13 @@ void sched_block(void *wait_chan) {
 void sched_wakeup(void *wait_chan) {
     /* TODO: 遍历阻塞线程，唤醒匹配的 */
     (void)wait_chan;
+}
+
+void sched_destroy_current(void) {
+    struct thread *t = sched_current();
+    if (t) {
+        zombie_thread = t;
+    }
 }
 
 void sched_tick(void) {

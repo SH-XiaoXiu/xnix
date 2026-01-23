@@ -49,4 +49,9 @@ struct thread *sched_current(void);
  */
 void sched_migrate(struct thread *t, cpu_id_t target_cpu);
 
+/**
+ * 标记当前线程待销毁（下次调度时释放内存）
+ */
+void sched_destroy_current(void);
+
 #endif
