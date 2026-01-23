@@ -68,8 +68,9 @@ struct thread {
 
     struct thread *next; /* 队列链接 */
 
-    void *wait_chan; /* 阻塞在什么上 */
-    int   exit_code;
+    void    *wait_chan;   /* 阻塞在什么上 */
+    uint64_t wakeup_tick; /* 睡眠唤醒时间（0 表示不在睡眠） */
+    int      exit_code;
 };
 
 struct process;      /* 前向声明 */
@@ -87,5 +88,9 @@ struct thread *thread_create(const char *name, void (*entry)(void *), void *arg)
 void           thread_exit(int code) __attribute__((noreturn));
 void           thread_yield(void);
 struct thread *thread_current(void);
+
+/* 线程睡眠 */
+void sleep_ms(uint32_t ms);        /* 睡眠指定毫秒数 */
+void sleep_ticks(uint32_t ticks);  /* 睡眠指定 tick 数 */
 
 #endif

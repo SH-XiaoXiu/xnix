@@ -74,11 +74,40 @@ struct thread *sched_spawn(const char *name, void (*entry)(void *), void *arg);
  */
 void schedule(void);
 
+/**
+ * 获取当前调度策略
+ */
+struct sched_policy *sched_get_policy(void);
+
+/**
+ * 将线程加入阻塞链表
+ */
+void sched_blocked_list_add(struct thread *t);
+
+/**
+ * 从阻塞链表移除线程
+ */
+void sched_blocked_list_remove(struct thread *t);
+
+/**
+ * 获取阻塞链表头指针（用于遍历）
+ */
+struct thread **sched_get_blocked_list(void);
+
 /*
  * 内置策略声明
  **/
 
 /* Round-Robin 轮转调度 */
 extern struct sched_policy sched_policy_rr;
+
+/*
+ * 睡眠模块（sleep.c）
+ **/
+
+/**
+ * 检查并唤醒睡眠到期的线程（由 sched_tick 调用）
+ */
+void sleep_check_wakeup(void);
 
 #endif

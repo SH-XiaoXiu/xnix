@@ -38,12 +38,42 @@ static bool in_interrupt = false;
 /* 待清理的已退出线程（切换后释放） */
 static struct thread *zombie_thread = NULL;
 
+/* 阻塞线程链表（等待唤醒） */
+static struct thread *blocked_list = NULL;
+
 /*
  * 内部辅助函数
  **/
 
 static tid_t alloc_tid(void) {
     return next_tid++;
+}
+
+/* 阻塞链表操作（导出给 sleep.c 使用） */
+
+void sched_blocked_list_add(struct thread *t) {
+    t->next      = blocked_list;
+    blocked_list = t;
+}
+
+void sched_blocked_list_remove(struct thread *t) {
+    struct thread **pp = &blocked_list;
+    while (*pp) {
+        if (*pp == t) {
+            *pp     = t->next;
+            t->next = NULL;
+            return;
+        }
+        pp = &(*pp)->next;
+    }
+}
+
+struct thread **sched_get_blocked_list(void) {
+    return &blocked_list;
+}
+
+struct sched_policy *sched_get_policy(void) {
+    return current_policy;
 }
 
 struct runqueue *sched_get_runqueue(cpu_id_t cpu) {
@@ -234,12 +264,34 @@ void sched_block(void *wait_chan) {
         current_policy->dequeue(current);
     }
 
+    /* 加入阻塞链表，等待唤醒 */
+    sched_blocked_list_add(current);
+
     schedule();
 }
 
 void sched_wakeup(void *wait_chan) {
-    /* TODO: 遍历阻塞线程，唤醒匹配的 */
-    (void)wait_chan;
+    if (!current_policy) {
+        return;
+    }
+
+    /* 遍历阻塞链表，唤醒所有 wait_chan 匹配的线程 */
+    struct thread **pp = &blocked_list;
+    while (*pp) {
+        struct thread *t = *pp;
+        if (t->wait_chan == wait_chan) {
+            /* 从阻塞链表移除 */
+            *pp          = t->next;
+            t->next      = NULL;
+            t->wait_chan = NULL;
+
+            /* 重新加入运行队列 */
+            cpu_id_t cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
+            current_policy->enqueue(t, cpu);
+        } else {
+            pp = &(*pp)->next;
+        }
+    }
 }
 
 void sched_destroy_current(void) {
@@ -253,6 +305,9 @@ void sched_tick(void) {
     struct thread *current = sched_current();
 
     in_interrupt = true; /* 标记进入中断 */
+
+    /* 检查睡眠线程（sleep.c） */
+    sleep_check_wakeup();
 
     /* 首次启动：没有 current 但有就绪线程 */
     if (!current && current_policy) {
