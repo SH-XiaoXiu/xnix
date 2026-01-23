@@ -27,6 +27,11 @@ _start:
     pushl $0
     popf
 
+    # 保存 Multiboot 信息指针到全局变量
+    # EAX = 魔数 0x2BADB002
+    # EBX = multiboot_info 结构体指针
+    mov %ebx, multiboot_info_ptr
+
     # 调用C内核入口
     call kernel_main
 
@@ -42,6 +47,11 @@ _start:
 stack_bottom:
 .skip 16384                     # 16KB 栈
 stack_top:
+
+# Multiboot 信息指针（供 C 代码读取）
+.global multiboot_info_ptr
+multiboot_info_ptr:
+.skip 4
 
 # 消除executable stack警告
 .section .note.GNU-stack, "", @progbits
