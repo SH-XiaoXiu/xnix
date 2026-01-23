@@ -30,4 +30,8 @@ SECTIONS
         *(COMMON)
         *(.bss)
     }
+
+    /* 内核结束地址，内存分配从这里开始 */
+    . = ALIGN(4K);
+    _kernel_end = .;
 }
