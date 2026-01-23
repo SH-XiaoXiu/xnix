@@ -9,9 +9,9 @@
 
 #include <xnix/types.h>
 
-/* ============================================
+/*
  * 中断控制
- * ============================================ */
+ */
 
 static inline void cpu_irq_enable(void) {
     __asm__ volatile("sti" ::: "memory");
@@ -31,9 +31,9 @@ static inline void cpu_irq_restore(uint32_t flags) {
     __asm__ volatile("push %0; popf" ::"r"(flags) : "memory");
 }
 
-/* ============================================
+/*
  * CPU 控制
- * ============================================ */
+ */
 
 static inline void cpu_halt(void) {
     __asm__ volatile("hlt");
@@ -47,9 +47,9 @@ static inline void cpu_stop(void) {
     __asm__ volatile("cli; hlt");
 }
 
-/* ============================================
+/*
  * I/O 端口操作
- * ============================================ */
+ */
 
 static inline void outb(uint16_t port, uint8_t val) {
     __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -75,9 +75,9 @@ static inline void io_wait(void) {
     outb(0x80, 0);
 }
 
-/* ============================================
+/*
  * 内存屏障
- * ============================================ */
+ */
 
 static inline void barrier(void) {
     __asm__ volatile("" ::: "memory");
