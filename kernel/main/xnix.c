@@ -9,24 +9,34 @@
 #include <drivers/console.h>
 #include <drivers/irqchip.h>
 #include <drivers/timer.h>
+#include <xnix/mm.h>
 #include <xnix/sched.h>
 #include <xnix/thread.h>
 #include <xnix/stdio.h>
 
-/* 测试任务 A */
-static void task_a(void *arg) {
-    (void)arg;
-    while (1) {
-        kprintf("%R[A]%N Running...\n");
-        for (volatile int i = 0; i < 100000000; i++);
-    }
-}
 
-/* 测试任务 B */
-static void task_b(void *arg) {
+/* 内存测试任务：分配和释放内存 */
+static void task_memtest(void *arg) {
     (void)arg;
+    int round = 0;
     while (1) {
-        kprintf("%B[B]%N Running...\n");
+        kprintf("%Y[MemTest]%N Round %d: ", round++);
+
+        /* 分配几个页 */
+        void *p1 = alloc_page();
+        void *p2 = alloc_page();
+        void *p3 = alloc_pages(2);
+        kprintf("alloc p1=%p p2=%p p3=%p, ", p1, p2, p3);
+
+        mm_dump_stats();
+
+        /* 释放 */
+        free_page(p1);
+        free_page(p2);
+        free_pages(p3, 2);
+        kprintf("%Y[MemTest]%N freed, ");
+        mm_dump_stats();
+
         for (volatile int i = 0; i < 200000000; i++);
     }
 }
@@ -49,14 +59,17 @@ void kernel_main(void) {
     arch_init();
     kprintf("%G[OK]%N GDT/IDT initialized\n");
 
+    /* 初始化内存管理 */
+    mm_init();
+    kprintf("%G[OK]%N Memory manager initialized\n");
+
     /* 初始化中断控制器 */
     irqchip_init();
     kprintf("%G[OK]%N IRQ chip initialized\n");
 
     /* 初始化调度器 */
     sched_init();
-    thread_create("task_a", task_a, NULL);
-    thread_create("task_b", task_b, NULL);
+    thread_create("memtest", task_memtest, NULL);
     kprintf("%G[OK]%N Threads created\n");
 
     /* 设置定时器回调并初始化 */
