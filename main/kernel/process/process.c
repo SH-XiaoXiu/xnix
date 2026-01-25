@@ -328,3 +328,40 @@ process_state_t process_get_state(process_t proc) {
 void process_init(void) {
     process_subsystem_init();
 }
+
+/* 声明内部函数 */
+extern thread_t thread_create_with_owner(const char *name, void (*entry)(void *), void *arg,
+                                         struct process *owner);
+
+pid_t process_spawn_init(void) {
+    /* 创建进程结构 */
+    struct process *proc = (struct process *)process_create("init");
+    if (!proc) {
+        pr_err("Failed to create init process");
+        return PID_INVALID;
+    }
+
+    /* 加载用户程序 */
+    if (process_load_user(proc, "init") < 0) {
+        pr_err("Failed to load init program");
+        process_destroy((process_t)proc);
+        return PID_INVALID;
+    }
+
+    /* 创建主线程 */
+    /* 线程创建后默认是 READY 状态,会被调度器调度 */
+    /* entry 指向 user_thread_entry,它会负责跳转到用户态 */
+    /* 使用内部函数指定 owner */
+    thread_t t = thread_create_with_owner("init_main", user_thread_entry, proc, proc);
+    if (!t) {
+        pr_err("Failed to create init thread");
+        process_destroy((process_t)proc);
+        return PID_INVALID;
+    }
+
+    /*将线程关联到进程 */
+    process_add_thread(proc, (struct thread *)t);
+
+    pr_ok("Spawned init process (PID %d)", proc->pid);
+    return proc->pid;
+}

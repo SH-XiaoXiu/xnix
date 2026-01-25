@@ -17,7 +17,7 @@
 static volatile uint64_t pit_ticks = 0;
 
 /* IRQ0 处理函数 */
-static void pit_irq_handler(struct irq_frame *frame) {
+static void pit_irq_handler(irq_frame_t *frame) {
     (void)frame;
     pit_ticks++;
     timer_tick();

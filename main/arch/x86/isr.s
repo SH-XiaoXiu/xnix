@@ -148,3 +148,27 @@ irq_common:
     popa
     add $8, %esp
     iret
+
+/* 系统调用入口 (int 0x80) */
+.global isr_syscall
+isr_syscall:
+    push $0             /* 假错误码 */
+    push $0x80          /* 中断号 */
+    
+    pusha               /* 保存通用寄存器 */
+    push %ds
+
+    mov $0x10, %ax      /* 内核数据段 */
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+
+    push %esp           /* 传递栈帧指针 */
+    call syscall_handler
+    add $4, %esp
+
+    pop %ds
+    popa
+    add $8, %esp        /* 跳过中断号和错误码 */
+    iret

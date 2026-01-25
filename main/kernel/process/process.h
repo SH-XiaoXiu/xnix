@@ -89,4 +89,22 @@ void process_remove_thread(struct process *proc, struct thread *t);
  */
 struct process *process_get_current(void);
 
+/**
+ * 加载用户程序到进程
+ * @param proc 目标进程
+ * @param path 程序路径 (目前未使用)
+ * @return 0 成功, <0 失败
+ */
+int process_load_user(struct process *proc, const char *path);
+
+/**
+ * 用户线程入口 (用于 thread_create)
+ */
+void user_thread_entry(void *arg);
+
+/**
+ * 创建并启动用户进程
+ */
+pid_t process_spawn_init(void);
+
 #endif

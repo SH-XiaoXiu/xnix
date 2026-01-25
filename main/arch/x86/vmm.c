@@ -199,24 +199,8 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
             return -ENOMEM;
         }
 
-        /* 清零新页表 - 使用窗口 2 (如果是当前 PD,则需要通过递归映射清零? 不行,还没映射)
-           无论是否当前 PD,我们都需要一个能访问 new_pt_phys 的虚拟地址.
-           如果 is_current,我们其实可以用递归映射访问吗?
-           如果 PDE 还没设置,递归映射还不能用.
 
-           为了统一,我们总是使用临时窗口 2 来清零新页表.
-           注意:如果是 is_current,我们需要先加锁!
-           哎呀,is_current 时没加锁.
-
-           修正:vmm_map_page 总是加锁使用临时窗口 2 来清零新页表是安全的吗?
-           如果是 is_current,我们没有持有 temp_map_lock.
-
-           为了简化逻辑和安全,建议:如果是 is_current,也获取锁来使用临时窗口清零.
-           或者:vmm_init 已经建立了 1:1 映射,如果 alloc_page 返回低端内存,可以直接访问?
-           不,我们不能依赖 1:1 映射.
-
-           方案:总是获取锁.
-        */
+        /* 清零新页表 - 使用窗口 2 */
 
         uint32_t temp_irq_flags = 0;
         if (is_current) {

@@ -213,7 +213,8 @@ static void thread_init_stack(struct thread *t, void (*entry)(void *), void *arg
     t->ctx.edi = 0;
 }
 
-static struct thread *sched_spawn(const char *name, void (*entry)(void *), void *arg) {
+static struct thread *sched_spawn(const char *name, void (*entry)(void *), void *arg,
+                                  struct process *owner) {
     if (!current_policy) {
         return NULL;
     }
@@ -250,6 +251,7 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
     t->next          = NULL;
     t->wait_chan     = NULL;
     t->exit_code     = 0;
+    t->owner         = owner;
 
     thread_init_stack(t, entry, arg);
 
@@ -320,6 +322,9 @@ void schedule(void) {
         next->running_on = cpu;
     }
     rq->current = next;
+
+    /* 架构特定的线程切换 (VMM, TSS 等) */
+    arch_thread_switch(next);
 
     /*
      * 上下文切换
@@ -592,11 +597,16 @@ void sched_migrate(struct thread *t, cpu_id_t target_cpu) {
 }
 
 /*
- * 线程 API 实现(原 thread.c)
- **/
-
+ * 线程 API 实现
+ */
 thread_t thread_create(const char *name, void (*entry)(void *), void *arg) {
-    return sched_spawn(name, entry, arg);
+    return sched_spawn(name, entry, arg, NULL);
+}
+
+/* 内部版本,允许指定 owner */
+thread_t thread_create_with_owner(const char *name, void (*entry)(void *), void *arg,
+                                  struct process *owner) {
+    return sched_spawn(name, entry, arg, owner);
 }
 
 void thread_exit(int code) {

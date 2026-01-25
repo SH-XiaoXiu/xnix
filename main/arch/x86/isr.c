@@ -4,18 +4,14 @@
  * @author XiaoXiu
  */
 
+#include <asm/irq_defs.h>
 #include <kernel/irq/irq.h>
 #include <xnix/debug.h>
 #include <xnix/stdio.h>
 #include <xnix/types.h>
 
-/* x86 中断帧定义 */
-struct irq_frame {
-    uint32_t ds;
-    uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
-    uint32_t int_no, err_code;
-    uint32_t eip, cs, eflags, useresp, ss;
-};
+/* x86 中断帧定义 (使用 asm/irq_defs.h 中的定义) */
+#define irq_frame irq_regs
 
 static const char *exception_names[] = {
     "Division By Zero", "Debug",          "NMI",         "Breakpoint",    "Overflow",

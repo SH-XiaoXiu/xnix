@@ -11,12 +11,12 @@
 #include <drivers/timer.h>
 
 #include <kernel/irq/irq.h>
+#include <kernel/process/process.h>
+#include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
-#include <xnix/process.h>
 #include <xnix/stdio.h>
-#include <xnix/thread.h>
 
 /* 测试任务 A */
 static void task_a(void *arg) {
@@ -159,6 +159,9 @@ void kernel_main(void) {
     timer_set_callback(sched_tick);
     timer_init(CFG_SCHED_HZ); /* 使用配置的频率 */
     pr_ok("Timer initialized (%d Hz)", CFG_SCHED_HZ);
+
+    /* 启动 init 进程 */
+    process_spawn_init();
 
     /* 开启中断 */
     pr_info("Enabling interrupts...");

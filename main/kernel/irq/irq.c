@@ -45,7 +45,7 @@ void irq_set_handler(uint8_t irq, irq_handler_t handler) {
     }
 }
 
-void irq_dispatch(uint8_t irq, struct irq_frame *frame) {
+void irq_dispatch(uint8_t irq, irq_frame_t *frame) {
     if (irq < ARCH_NR_IRQS && irq_handlers[irq]) {
         irq_handlers[irq](frame);
     }

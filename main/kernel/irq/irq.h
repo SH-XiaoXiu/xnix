@@ -18,12 +18,13 @@
 /**
  * @brief 中断帧(由架构层定义具体布局)
  */
-struct irq_frame;
+struct irq_regs;
+typedef struct irq_regs irq_frame_t;
 
 /**
  * @brief IRQ 处理函数类型
  */
-typedef void (*irq_handler_t)(struct irq_frame *frame);
+typedef void (*irq_handler_t)(irq_frame_t *frame);
 
 /**
  * @brief 中断控制器硬件抽象接口
@@ -83,6 +84,6 @@ void irq_set_handler(uint8_t irq, irq_handler_t handler);
  * @param irq IRQ 编号
  * @param frame 中断帧
  */
-void irq_dispatch(uint8_t irq, struct irq_frame *frame);
+void irq_dispatch(uint8_t irq, irq_frame_t *frame);
 
 #endif

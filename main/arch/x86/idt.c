@@ -76,6 +76,8 @@ extern void irq13(void);
 extern void irq14(void);
 extern void irq15(void);
 
+extern void isr_syscall(void);
+
 extern void idt_load(struct idt_ptr *ptr);
 
 static void idt_set_gate(uint8_t num, uint32_t base, uint16_t selector, uint8_t flags) {
@@ -145,6 +147,10 @@ void idt_init(void) {
     idt_set_gate(45, (uint32_t)irq13, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(46, (uint32_t)irq14, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(47, (uint32_t)irq15, 0x08, IDT_GATE_INTERRUPT);
+
+    /* 系统调用 (0x80) - DPL 3 (User) */
+    /* 0xEE = Present(1) | DPL(11) | Storage(0) | Type(1110 = 32-bit Interrupt Gate) */
+    idt_set_gate(0x80, (uint32_t)isr_syscall, 0x08, 0xEE);
 
     idt_load(&idtr);
 }
