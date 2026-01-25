@@ -6,6 +6,7 @@
 #include <xnix/types.h>
 
 struct thread;
+struct ipc_kmsg;
 
 /* 异步消息队列大小 */
 #define IPC_ASYNC_QUEUE_SIZE 64 //TODO 将换成动态实现
@@ -27,10 +28,16 @@ struct ipc_endpoint {
     struct thread *recv_queue; /* 等待接收的线程 */
     uint32_t       refcount;
 
-    /* 异步消息队列（环形缓冲区） */
+    /* 异步消息队列(环形缓冲区) */
+#if CFG_IPC_MSG_POOL
+    struct ipc_kmsg *async_head;
+    struct ipc_kmsg *async_tail;
+    uint32_t         async_len;
+#else
     struct ipc_async_msg async_queue[IPC_ASYNC_QUEUE_SIZE];
     uint32_t             async_head; /* 读指针 */
     uint32_t             async_tail; /* 写指针 */
+#endif
 };
 
 /**

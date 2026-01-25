@@ -5,6 +5,7 @@
 
 #include <kernel/capability/capability.h>
 #include <kernel/ipc/endpoint.h>
+#include <kernel/ipc/msg_pool.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/sched/sched.h>
 #include <xnix/ipc.h>
@@ -74,8 +75,14 @@ cap_handle_t endpoint_create(void) {
     ep->send_queue = NULL;
     ep->recv_queue = NULL;
     ep->refcount   = 0; /* cap_alloc 会增加引用计数 */
+#if CFG_IPC_MSG_POOL
+    ep->async_head = NULL;
+    ep->async_tail = NULL;
+    ep->async_len  = 0;
+#else
     ep->async_head = 0;
     ep->async_tail = 0;
+#endif
 
     /* 分配句柄: 默认给予读写和管理权限 */
     cap_rights_t rights = CAP_READ | CAP_WRITE | CAP_GRANT | CAP_MANAGE;
@@ -227,8 +234,26 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
     spin_lock(&ep->lock);
 
     /* 优先检查异步消息队列 */
+#if CFG_IPC_MSG_POOL
+    if (ep->async_head) {
+        struct ipc_kmsg *km = ep->async_head;
+        ep->async_head      = km->next;
+        if (!ep->async_head) {
+            ep->async_tail = NULL;
+        }
+        if (ep->async_len) {
+            ep->async_len--;
+        }
+        spin_unlock(&ep->lock);
+
+        memcpy(&msg->regs, &km->regs, sizeof(struct ipc_msg_regs));
+        ipc_kmsg_put(km);
+        current->ipc_peer = TID_INVALID;
+        return IPC_OK;
+    }
+#else
     if (ep->async_head != ep->async_tail) {
-        /* 有缓存的异步消息，直接取出 */
+        /* 有缓存的异步消息,直接取出 */
         memcpy(&msg->regs, &ep->async_queue[ep->async_head].regs, sizeof(struct ipc_msg_regs));
         ep->async_head = (ep->async_head + 1) % IPC_ASYNC_QUEUE_SIZE;
         spin_unlock(&ep->lock);
@@ -236,8 +261,9 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
         current->ipc_peer = TID_INVALID; /* 异步消息无需回复 */
         return IPC_OK;
     }
+#endif
 
-    /* 检查发送队列（同步发送者） */
+    /* 检查发送队列(同步发送者) */
     if (ep->send_queue) {
         sender            = ep->send_queue;
         ep->send_queue    = sender->wait_next;
@@ -311,7 +337,33 @@ int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
         return IPC_OK;
     }
 
-    /* 没有接收者，尝试入队 */
+    /* 没有接收者,尝试入队 */
+#if CFG_IPC_MSG_POOL
+    if (ep->async_len >= IPC_ASYNC_QUEUE_SIZE) {
+        spin_unlock(&ep->lock);
+        return IPC_ERR_TIMEOUT;
+    }
+
+    struct ipc_kmsg *km = ipc_kmsg_alloc();
+    if (!km) {
+        spin_unlock(&ep->lock);
+        return IPC_ERR_NOMEM;
+    }
+
+    memcpy(&km->regs, &msg->regs, sizeof(struct ipc_msg_regs));
+    km->next = NULL;
+
+    if (ep->async_tail) {
+        ep->async_tail->next = km;
+    } else {
+        ep->async_head = km;
+    }
+    ep->async_tail = km;
+    ep->async_len++;
+
+    spin_unlock(&ep->lock);
+    return IPC_OK;
+#else
     uint32_t next_tail = (ep->async_tail + 1) % IPC_ASYNC_QUEUE_SIZE;
     if (next_tail == ep->async_head) {
         /* 队列满 */
@@ -325,6 +377,7 @@ int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
 
     spin_unlock(&ep->lock);
     return IPC_OK;
+#endif
 }
 
 cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
@@ -368,6 +421,7 @@ int ipc_reply(struct ipc_message *reply) {
 }
 
 void ipc_init(void) {
+    ipc_kmsg_pool_init();
     /* 注册 Endpoint 类型的能力操作 */
     cap_register_type(CAP_TYPE_ENDPOINT, endpoint_ref, endpoint_unref);
     /* 注册 Notification 类型的能力操作 */
