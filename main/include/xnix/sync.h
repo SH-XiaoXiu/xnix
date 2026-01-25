@@ -2,9 +2,9 @@
  * @file sync.h
  * @brief 同步原语
  *
- * spinlock 临界区短，不睡眠
- * mutex    临界区长，会睡眠
- * semaphore 计数型，用于资源池
+ * spinlock 临界区短,不睡眠
+ * mutex    临界区长,会睡眠
+ * semaphore 计数型,用于资源池
  * condvar   等待条件成立
  *
  * 完整定义见 <sync/sync_def.h>
@@ -20,7 +20,7 @@
 /**
  * 自旋锁
  *
- * 获取不到就循环等待。临界区必须短，不能睡眠。
+ * 获取不到就循环等待.临界区必须短,不能睡眠.
  */
 typedef struct {
     atomic_t locked;
@@ -38,7 +38,7 @@ void     spin_unlock_irqrestore(spinlock_t *lock, uint32_t flags);
 /**
  * 互斥锁
  *
- * 获取不到就睡眠让出 CPU。临界区可以长，可以有阻塞操作。
+ * 获取不到就睡眠让出 CPU.临界区可以长,可以有阻塞操作.
  */
 typedef struct mutex mutex_t;
 
@@ -51,8 +51,8 @@ void     mutex_unlock(mutex_t *m);
 /**
  * 信号量
  *
- * 计数器，down 时 count--（为 0 则等待），up 时 count++。
- * count=1 就是二元信号量，count=N 可以限制并发数。
+ * 计数器,down 时 count--(为 0 则等待),up 时 count++.
+ * count=1 就是二元信号量,count=N 可以限制并发数.
  */
 typedef struct semaphore semaphore_t;
 
@@ -65,8 +65,8 @@ void         semaphore_up(semaphore_t *s);
 /**
  * 条件变量
  *
- * 等待某个条件成立，必须配合 mutex 用。
- * wait 会原子地释放锁并睡眠，被唤醒后重新拿锁。
+ * 等待某个条件成立,必须配合 mutex 用.
+ * wait 会原子地释放锁并睡眠,被唤醒后重新拿锁.
  */
 typedef struct condvar condvar_t;
 

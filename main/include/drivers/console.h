@@ -26,7 +26,7 @@ struct console_driver {
 /**
  * @brief 注册控制台驱动
  * @param drv 驱动结构指针
- * @return 0 成功，-1 失败
+ * @return 0 成功,-1 失败
  */
 int console_register(struct console_driver *drv);
 

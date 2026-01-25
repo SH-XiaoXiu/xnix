@@ -6,33 +6,35 @@
  */
 
 #include <arch/cpu.h>
+
 #include <drivers/console.h>
 #include <drivers/irqchip.h>
 #include <drivers/timer.h>
+
 #include <xnix/config.h>
 #include <xnix/mm.h>
-#include <xnix/thread.h>
 #include <xnix/stdio.h>
+#include <xnix/thread.h>
 
 /* 测试任务 A */
 static void task_a(void *arg) {
-  (void)arg;
-  while (1) {
-    kprintf("%R[A]%N Running...\n");
-    sleep_ms(1000);
-  }
+    (void)arg;
+    while (1) {
+        kprintf("%R[A]%N Running...\n");
+        sleep_ms(1000);
+    }
 }
 
 /* 测试任务 B */
 static void task_b(void *arg) {
-  (void)arg;
-  while (1) {
-    kprintf("%B[B]%N Running...\n");
-    sleep_ms(5000);
-  }
+    (void)arg;
+    while (1) {
+        kprintf("%B[B]%N Running...\n");
+        sleep_ms(5000);
+    }
 }
 
-/* 内存测试任务：分配和释放内存 */
+/* 内存测试任务:分配和释放内存 */
 static void task_memtest(void *arg) {
     (void)arg;
     int round = 0;
@@ -72,7 +74,7 @@ void kernel_main(void) {
     kprintf("%C========================================%N\n");
     kprintf("\n");
 
-    /* 初始化架构（GDT/IDT） */
+    /* 初始化架构(GDT/IDT) */
     arch_init();
     kprintf("%G[OK]%N GDT/IDT initialized\n");
 

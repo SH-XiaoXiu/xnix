@@ -2,10 +2,10 @@
  * @file spinlock.c
  * @brief 自旋锁实现
  *
- * 单核：关中断即可
- * 多核：关中断 + 原子操作
+ * 单核:关中断即可
+ * 多核:关中断 + 原子操作
  *
- * 当前实现是多核安全的，单核也能用（只是多了原子操作开销）
+ * 当前实现是多核安全的,单核也能用(只是多了原子操作开销)
  */
 
 #include <arch/atomic.h>
@@ -20,11 +20,11 @@ void spin_init(spinlock_t *lock) {
 /*
  * spin_lock - 获取自旋锁
  *
- * 用 atomic_xchg 尝试将 locked 设为 1：
- *   - 返回 0：之前未锁定，获取成功
- *   - 返回 1：之前已锁定，继续自旋
+ * 用 atomic_xchg 尝试将 locked 设为 1:
+ *   - 返回 0:之前未锁定,获取成功
+ *   - 返回 1:之前已锁定,继续自旋
  *
- * pause 指令：告诉 CPU 正在自旋等待，降低功耗
+ * pause 指令:告诉 CPU 正在自旋等待,降低功耗
  */
 void spin_lock(spinlock_t *lock) {
     while (atomic_xchg(&lock->locked, 1) != 0) {
@@ -38,7 +38,7 @@ void spin_unlock(spinlock_t *lock) {
 
 /*
  * spin_trylock - 尝试获取锁
- * 返回 true 表示成功获取，false 表示锁已被占用
+ * 返回 true 表示成功获取,false 表示锁已被占用
  */
 bool spin_trylock(spinlock_t *lock) {
     return atomic_xchg(&lock->locked, 1) == 0;
@@ -46,8 +46,8 @@ bool spin_trylock(spinlock_t *lock) {
 
 /*
  * spin_lock_irqsave - 关中断 + 获取锁
- *   关中断后，中断处理程序不会抢占当前代码
- * 返回保存的 flags，用于之后恢复中断状态
+ *   关中断后,中断处理程序不会抢占当前代码
+ * 返回保存的 flags,用于之后恢复中断状态
  */
 uint32_t spin_lock_irqsave(spinlock_t *lock) {
     uint32_t flags = cpu_irq_save(); /* 保存并关中断 */

@@ -4,15 +4,14 @@
  *
  * 信号量 = 计数器 + 等待队列
  *   count > 0: 可用资源数
- *   count = 0: 无可用资源，down 操作需要等待
+ *   count = 0: 无可用资源,down 操作需要等待
  *
- * 典型用途：
- *   - count=1: 二元信号量，等价于 mutex
- *   - count=N: 限制并发数（连接池、缓冲区槽位）
+ * 典型用途:
+ *   - count=1: 二元信号量,等价于 mutex
+ *   - count=N: 限制并发数(连接池,缓冲区槽位)
  */
 
 #include <sync/sync_def.h>
-
 #include <xnix/mm.h>
 #include <xnix/thread.h>
 
@@ -40,7 +39,7 @@ void semaphore_down(semaphore_t *s) {
     uint32_t flags = spin_lock_irqsave(&s->guard);
 
     while (s->count <= 0) {
-        /* 无可用资源，等待 */
+        /* 无可用资源,等待 */
         spin_unlock_irqrestore(&s->guard, flags);
 
         sched_block(s);

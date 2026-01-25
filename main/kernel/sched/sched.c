@@ -3,19 +3,18 @@
  * @brief 调度器核心实现
  */
 
-#include <kernel/sched/sched.h>
-
 #include <arch/cpu.h>
 
 #include <drivers/irqchip.h>
 
+#include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
 
-/* 上下文切换函数（汇编实现） */
+/* 上下文切换函数(汇编实现) */
 extern void context_switch(struct thread_context *old, struct thread_context *new);
 extern void context_switch_first(struct thread_context *new);
 
@@ -23,7 +22,7 @@ extern void context_switch_first(struct thread_context *new);
  * 全局变量
  **/
 
-/* Per-CPU 运行队列（当前单核，数组大小为 1） */
+/* Per-CPU 运行队列(当前单核,数组大小为 1) */
 static struct runqueue runqueues[1];
 
 /* 当前调度策略 */
@@ -35,31 +34,31 @@ static tid_t next_tid = 1;
 /* 标记是否在中断上下文 */
 static volatile bool in_interrupt = false;
 
-/* 待清理的已退出线程（切换后释放） */
+/* 待清理的已退出线程(切换后释放) */
 static struct thread *zombie_thread = NULL;
 
-/* 阻塞线程链表（等待唤醒） */
+/* 阻塞线程链表(等待唤醒) */
 static struct thread *blocked_list = NULL;
 
-/* 调度器锁，保护运行队列和阻塞链表 */
+/* 调度器锁,保护运行队列和阻塞链表 */
 static spinlock_t sched_lock = SPINLOCK_INIT;
 
 static tid_t alloc_tid(void) {
     return next_tid++;
 }
 
-/* 阻塞链表操作（导出给 sleep.c 使用） */
+/* 阻塞链表操作(导出给 sleep.c 使用) */
 
 void sched_blocked_list_add(struct thread *t) {
     uint32_t flags = spin_lock_irqsave(&sched_lock);
-    t->next      = blocked_list;
-    blocked_list = t;
+    t->next        = blocked_list;
+    blocked_list   = t;
     spin_unlock_irqrestore(&sched_lock, flags);
 }
 
 void sched_blocked_list_remove(struct thread *t) {
-    uint32_t flags = spin_lock_irqsave(&sched_lock);
-    struct thread **pp = &blocked_list;
+    uint32_t        flags = spin_lock_irqsave(&sched_lock);
+    struct thread **pp    = &blocked_list;
     while (*pp) {
         if (*pp == t) {
             *pp     = t->next;
@@ -91,7 +90,7 @@ struct runqueue *sched_get_runqueue(cpu_id_t cpu) {
 
 /**
  * 线程入口包装器
- * 从寄存器读取 entry 和 arg（ebx=entry, esi=arg）
+ * 从寄存器读取 entry 和 arg(ebx=entry, esi=arg)
  */
 static void thread_entry_wrapper(void) {
     void (*entry)(void *);
@@ -108,19 +107,19 @@ static void thread_entry_wrapper(void) {
 
 /**
  * 初始化线程栈
- * 使用 callee-saved 寄存器传参：ebx=entry, esi=arg
+ * 使用 callee-saved 寄存器传参:ebx=entry, esi=arg
  */
 static void thread_init_stack(struct thread *t, void (*entry)(void *), void *arg) {
     uint32_t *stack_top = (uint32_t *)((char *)t->stack + t->stack_size);
 
-    /* 压入返回地址：thread_entry_wrapper */
+    /* 压入返回地址:thread_entry_wrapper */
     *(--stack_top) = (uint32_t)thread_entry_wrapper;
 
     /* 设置 esp 和寄存器 */
     t->ctx.esp = (uint32_t)stack_top;
     t->ctx.ebp = 0;
-    t->ctx.ebx = (uint32_t)entry;  /* 传递 entry */
-    t->ctx.esi = (uint32_t)arg;    /* 传递 arg */
+    t->ctx.ebx = (uint32_t)entry; /* 传递 entry */
+    t->ctx.esi = (uint32_t)arg;   /* 传递 arg */
     t->ctx.edi = 0;
 }
 
@@ -213,7 +212,7 @@ void schedule(void) {
      * 上下文切换
      * 必须在切换前释放锁
      * context_switch_first 不会返回
-     * 新线程从 thread_entry_wrapper 开始，不会回到这里
+     * 新线程从 thread_entry_wrapper 开始,不会回到这里
      * 只有被切换出去过的线程才会从 context_switch 返回
      */
     spin_unlock(&sched_lock);
@@ -224,7 +223,7 @@ void schedule(void) {
         context_switch_first(&next->ctx);
     }
 
-    /* 恢复中断状态（只有从 context_switch 返回的线程会到这里） */
+    /* 恢复中断状态(只有从 context_switch 返回的线程会到这里) */
     cpu_irq_restore(flags);
 }
 
@@ -278,7 +277,7 @@ void sched_block(void *wait_chan) {
         current_policy->dequeue(current);
     }
 
-    /* 加入阻塞链表，等待唤醒 */
+    /* 加入阻塞链表,等待唤醒 */
     sched_blocked_list_add(current);
 
     schedule();
@@ -291,7 +290,7 @@ void sched_wakeup(void *wait_chan) {
 
     uint32_t flags = spin_lock_irqsave(&sched_lock);
 
-    /* 遍历阻塞链表，唤醒所有 wait_chan 匹配的线程 */
+    /* 遍历阻塞链表,唤醒所有 wait_chan 匹配的线程 */
     struct thread **pp = &blocked_list;
     while (*pp) {
         struct thread *t = *pp;
@@ -324,19 +323,19 @@ void sched_tick(void) {
 
     in_interrupt = true; /* 标记进入中断 */
 
-    /* 检查睡眠线程（sleep.c） */
+    /* 检查睡眠线程(sleep.c) */
     sleep_check_wakeup();
 
-    /* 首次启动：没有 current 但有就绪线程 */
+    /* 首次启动:没有 current 但有就绪线程 */
     if (!current && current_policy) {
         struct thread *first = current_policy->pick_next();
         if (first) {
-            cpu_id_t cpu = cpu_current_id();
-            struct runqueue *rq = sched_get_runqueue(cpu);
+            cpu_id_t         cpu = cpu_current_id();
+            struct runqueue *rq  = sched_get_runqueue(cpu);
 
-            first->state = THREAD_RUNNING;
+            first->state      = THREAD_RUNNING;
             first->running_on = cpu;
-            rq->current = first;
+            rq->current       = first;
 
             irq_eoi(0);
             context_switch_first(&first->ctx);
@@ -371,7 +370,7 @@ void sched_migrate(struct thread *t, cpu_id_t target_cpu) {
 }
 
 /*
- * 线程 API 实现（原 thread.c）
+ * 线程 API 实现(原 thread.c)
  **/
 
 thread_t thread_create(const char *name, void (*entry)(void *), void *arg) {

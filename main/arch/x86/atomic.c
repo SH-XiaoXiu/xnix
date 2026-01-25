@@ -2,15 +2,15 @@
  * @file atomic.c
  * @brief x86 原子操作实现
  *
- * 参考文档：
+ * 参考文档:
  *   Intel SDM Vol.2 指令参考:
- *     - LOCK 前缀: 锁定总线，保证原子性
- *     - XCHG: 交换，隐式 LOCK（不需要加前缀）
- *     - CMPXCHG: 比较交换，需要 LOCK 前缀
- *     - XADD: 交换并相加，需要 LOCK 前缀
+ *     - LOCK 前缀: 锁定总线,保证原子性
+ *     - XCHG: 交换,隐式 LOCK(不需要加前缀)
+ *     - CMPXCHG: 比较交换,需要 LOCK 前缀
+ *     - XADD: 交换并相加,需要 LOCK 前缀
  *   Intel SDM Vol.3A Ch.8 "Multiple-Processor Management":
  *     - 8.1 Locked Atomic Operations
- *     - 8.2 Memory Ordering (x86 是强内存序，大部分操作自带顺序保证)
+ *     - 8.2 Memory Ordering (x86 是强内存序,大部分操作自带顺序保证)
  *   下载: https://www.intel.com/sdm
  *   OSDev: https://wiki.osdev.org/Spinlock
  */
@@ -19,7 +19,7 @@
 
 /*
  * 基本读写
- * x86 对齐的 32 位读写本身是原子的，volatile 防止编译器优化
+ * x86 对齐的 32 位读写本身是原子的,volatile 防止编译器优化
  */
 int32_t atomic_read(const atomic_t *v) {
     return v->value;
@@ -32,7 +32,7 @@ void atomic_set(atomic_t *v, int32_t val) {
 /*
  * atomic_load_acquire - 带 acquire 语义的读取
  * 保证此读之后的操作不会被重排到此读之前
- * x86 的 load 自带 acquire 语义，只需编译器屏障
+ * x86 的 load 自带 acquire 语义,只需编译器屏障
  */
 int32_t atomic_load_acquire(const atomic_t *v) {
     int32_t val = v->value;
@@ -43,7 +43,7 @@ int32_t atomic_load_acquire(const atomic_t *v) {
 /*
  * atomic_store_release - 带 release 语义的写入
  * 保证此写之前的操作不会被重排到此写之后
- * x86 的 store 自带 release 语义，只需编译器屏障
+ * x86 的 store 自带 release 语义,只需编译器屏障
  */
 void atomic_store_release(atomic_t *v, int32_t val) {
     __asm__ volatile("" ::: "memory");
@@ -52,8 +52,8 @@ void atomic_store_release(atomic_t *v, int32_t val) {
 
 /*
  * atomic_add - 原子加法
- * 使用 LOCK XADD: 交换 delta 和 *v，然后 *v += 原 delta
- * XADD 返回旧值，所以要 +delta 得到新值
+ * 使用 LOCK XADD: 交换 delta 和 *v,然后 *v += 原 delta
+ * XADD 返回旧值,所以要 +delta 得到新值
  */
 int32_t atomic_add(atomic_t *v, int32_t delta) {
     int32_t old = delta;
@@ -75,7 +75,7 @@ int32_t atomic_dec(atomic_t *v) {
 
 /*
  * atomic_xchg - 原子交换
- * XCHG 指令隐式带 LOCK 语义，无需加前缀
+ * XCHG 指令隐式带 LOCK 语义,无需加前缀
  */
 int32_t atomic_xchg(atomic_t *v, int32_t new) {
     int32_t old = new;
@@ -100,14 +100,14 @@ bool atomic_cmpxchg(atomic_t *v, int32_t old, int32_t new) {
 
 /*
  * 内存屏障
- * x86 是强内存序，大部分情况不需要显式屏障
+ * x86 是强内存序,大部分情况不需要显式屏障
  * 但多核场景下仍需要保证可见性
  *
- * MFENCE: 全屏障，序列化所有 load/store
- * LFENCE: 读屏障，序列化 load
- * SFENCE: 写屏障，序列化 store
+ * MFENCE: 全屏障,序列化所有 load/store
+ * LFENCE: 读屏障,序列化 load
+ * SFENCE: 写屏障,序列化 store
  *
- * 注: 486 没有这些指令，用 lock 前缀的空操作代替
+ * 注: 486 没有这些指令,用 lock 前缀的空操作代替
  */
 void barrier_full(void) {
     __asm__ volatile("mfence" ::: "memory");

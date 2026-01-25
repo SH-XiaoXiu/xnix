@@ -3,7 +3,7 @@
  * @brief x86 SMP 实现
  *
  * 当前 单核实现
- * TODO: LAPIC 初始化、AP 核启动、IPI 发送
+ * TODO: LAPIC 初始化,AP 核启动,IPI 发送
  */
 
 #include <arch/smp.h>

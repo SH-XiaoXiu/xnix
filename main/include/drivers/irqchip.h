@@ -11,7 +11,7 @@
 #include <xnix/types.h>
 
 /**
- * @brief 中断帧（由架构层定义具体布局）
+ * @brief 中断帧(由架构层定义具体布局)
  */
 struct irq_frame;
 
@@ -62,7 +62,7 @@ void irq_eoi(uint8_t irq);
 void irq_set_handler(uint8_t irq, irq_handler_t handler);
 
 /**
- * @brief IRQ 分发（由架构层中断入口调用）
+ * @brief IRQ 分发(由架构层中断入口调用)
  */
 void irq_dispatch(uint8_t irq, struct irq_frame *frame);
 

@@ -2,19 +2,20 @@
  * @file policy_rr.c
  * @brief Round-Robin 轮转调度策略
  *
- * 简单的时间片轮转：
+ * 简单的时间片轮转:
  * - 每个线程固定时间片
- * - 用完时间片或主动 yield 后，移到队尾
- * - FIFO 队列，公平轮转
+ * - 用完时间片或主动 yield 后,移到队尾
+ * - FIFO 队列,公平轮转
  */
 
-#include <kernel/sched/sched.h>
 #include <arch/smp.h>
 
-/* 时间片长度（tick 数） */
+#include <kernel/sched/sched.h>
+
+/* 时间片长度(tick 数) */
 #define RR_TIMESLICE 10
 
-/* 获取运行队列（单核简化版） */
+/* 获取运行队列(单核简化版) */
 extern struct runqueue *sched_get_runqueue(cpu_id_t cpu);
 
 /*
@@ -24,9 +25,9 @@ extern struct runqueue *sched_get_runqueue(cpu_id_t cpu);
 static void rr_enqueue(struct thread *t, cpu_id_t cpu) {
     struct runqueue *rq = sched_get_runqueue(cpu);
 
-    t->next = NULL;
-    t->state = THREAD_READY;
-    t->time_slice = RR_TIMESLICE;  /* 重置时间片 */
+    t->next       = NULL;
+    t->state      = THREAD_READY;
+    t->time_slice = RR_TIMESLICE; /* 重置时间片 */
 
     if (!rq->head) {
         /* 队列为空 */
@@ -35,7 +36,7 @@ static void rr_enqueue(struct thread *t, cpu_id_t cpu) {
     } else {
         /* 加入队尾 */
         rq->tail->next = t;
-        rq->tail = t;
+        rq->tail       = t;
     }
 
     rq->nr_running++;
@@ -48,9 +49,9 @@ static void rr_dequeue(struct thread *t) {
         cpu = 0; /* 默认 CPU */
     }
 
-    struct runqueue *rq = sched_get_runqueue(cpu);
-    struct thread *prev = NULL;
-    struct thread *curr = rq->head;
+    struct runqueue *rq   = sched_get_runqueue(cpu);
+    struct thread   *prev = NULL;
+    struct thread   *curr = rq->head;
 
     while (curr) {
         if (curr == t) {
@@ -74,14 +75,14 @@ static void rr_dequeue(struct thread *t) {
 }
 
 static struct thread *rr_pick_next(void) {
-    cpu_id_t cpu = cpu_current_id();
-    struct runqueue *rq = sched_get_runqueue(cpu);
+    cpu_id_t         cpu = cpu_current_id();
+    struct runqueue *rq  = sched_get_runqueue(cpu);
 
     if (!rq->head) {
         return NULL;
     }
 
-    /* 如果队列头的线程时间片为 0，轮转到队尾 */
+    /* 如果队列头的线程时间片为 0,轮转到队尾 */
     if (rq->head->time_slice == 0) {
         struct thread *t = rq->head;
 
@@ -91,11 +92,11 @@ static struct thread *rr_pick_next(void) {
             rq->tail = NULL;
         }
 
-        /* 加到队尾（会在 enqueue 中重置时间片） */
+        /* 加到队尾(会在 enqueue 中重置时间片) */
         t->next = NULL;
         if (rq->tail) {
             rq->tail->next = t;
-            rq->tail = t;
+            rq->tail       = t;
         } else {
             rq->head = t;
             rq->tail = t;
@@ -115,7 +116,7 @@ static bool rr_tick(struct thread *current) {
 
     current->time_slice--;
 
-    /* 时间片用完，触发调度 */
+    /* 时间片用完,触发调度 */
     if (current->time_slice == 0) {
         return true;
     }
@@ -124,7 +125,7 @@ static bool rr_tick(struct thread *current) {
 }
 
 static cpu_id_t rr_select_cpu(struct thread *t) {
-    /* 简单负载均衡：选负载最低的 CPU */
+    /* 简单负载均衡:选负载最低的 CPU */
     cpu_id_t best_cpu = 0;
     uint32_t min_load = sched_get_runqueue(0)->nr_running;
 

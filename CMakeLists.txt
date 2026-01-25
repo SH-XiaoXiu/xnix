@@ -26,18 +26,18 @@ option(CFG_DEBUG_MM "Debug memory manager" OFF)
 option(CFG_DEBUG_SCHED "Debug scheduler" OFF)
 
 configure_file(
-    ${CMAKE_SOURCE_DIR}/main/include/xnix/config.h.in
-    ${CMAKE_BINARY_DIR}/include/xnix/config.h
+        ${CMAKE_SOURCE_DIR}/main/include/xnix/config.h.in
+        ${CMAKE_BINARY_DIR}/include/xnix/config.h
 )
 
 # ============================================
 # 源文件收集
 # ============================================
-file(GLOB_RECURSE KERNEL_C  "${CMAKE_SOURCE_DIR}/main/kernel/*.c")
-file(GLOB_RECURSE LIB_C     "${CMAKE_SOURCE_DIR}/main/lib/*.c")
+file(GLOB_RECURSE KERNEL_C "${CMAKE_SOURCE_DIR}/main/kernel/*.c")
+file(GLOB_RECURSE LIB_C "${CMAKE_SOURCE_DIR}/main/lib/*.c")
 file(GLOB_RECURSE DRIVERS_C "${CMAKE_SOURCE_DIR}/main/drivers/*.c")
-file(GLOB_RECURSE ARCH_C    "${ARCH_DIR}/*.c")
-file(GLOB_RECURSE ARCH_ASM  "${ARCH_DIR}/*.s")
+file(GLOB_RECURSE ARCH_C "${ARCH_DIR}/*.c")
+file(GLOB_RECURSE ARCH_ASM "${ARCH_DIR}/*.s")
 set(KERNEL_SOURCES ${KERNEL_C} ${LIB_C} ${DRIVERS_C} ${ARCH_C} ${ARCH_ASM})
 
 # ============================================
@@ -49,11 +49,11 @@ add_executable(xnix.elf ${KERNEL_SOURCES})
 # 头文件搜索路径
 # ============================================
 target_include_directories(xnix.elf PRIVATE
-    ${CMAKE_SOURCE_DIR}/main/include    # <xnix/xxx>, <arch/xxx>, <drivers/xxx>
-    ${CMAKE_SOURCE_DIR}/main            # <kernel/xxx>
-    ${CMAKE_SOURCE_DIR}/main/lib        # <sync/xxx>
-    ${CMAKE_BINARY_DIR}/include
-    ${ARCH_DIR}/include
+        ${CMAKE_SOURCE_DIR}/main/include    # <xnix/xxx>, <arch/xxx>, <drivers/xxx>
+        ${CMAKE_SOURCE_DIR}/main            # <kernel/xxx>
+        ${CMAKE_SOURCE_DIR}/main/lib        # <sync/xxx>
+        ${CMAKE_BINARY_DIR}/include
+        ${ARCH_DIR}/include
 )
 
 # 为 CLion 索引添加头文件
@@ -65,15 +65,15 @@ target_sources(xnix.elf PRIVATE ${ALL_HEADERS})
 # ============================================
 set(ISO_DIR "${CMAKE_BINARY_DIR}/isodir")
 add_custom_command(
-    OUTPUT ${CMAKE_BINARY_DIR}/xnix.iso
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${ISO_DIR}/boot/grub
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:xnix.elf> ${ISO_DIR}/boot/xnix.elf
-    COMMAND ${CMAKE_COMMAND} -E echo "set timeout=0" > ${ISO_DIR}/boot/grub/grub.cfg
-    COMMAND ${CMAKE_COMMAND} -E echo "set default=0" >> ${ISO_DIR}/boot/grub/grub.cfg
-    COMMAND ${CMAKE_COMMAND} -E echo "menuentry \"Xnix\" { multiboot /boot/xnix.elf }" >> ${ISO_DIR}/boot/grub/grub.cfg
-    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/xnix.iso ${ISO_DIR} 2>/dev/null || true
-    DEPENDS xnix.elf
-    COMMENT "创建可引导 ISO..."
+        OUTPUT ${CMAKE_BINARY_DIR}/xnix.iso
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ISO_DIR}/boot/grub
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:xnix.elf> ${ISO_DIR}/boot/xnix.elf
+        COMMAND ${CMAKE_COMMAND} -E echo "set timeout=0" > ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND ${CMAKE_COMMAND} -E echo "set default=0" >> ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND ${CMAKE_COMMAND} -E echo "menuentry \"Xnix\" { multiboot /boot/xnix.elf }" >> ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/xnix.iso ${ISO_DIR} 2>/dev/null || true
+        DEPENDS xnix.elf
+        COMMENT "创建可引导 ISO..."
 )
 add_custom_target(iso DEPENDS ${CMAKE_BINARY_DIR}/xnix.iso)
 
@@ -81,15 +81,15 @@ add_custom_target(iso DEPENDS ${CMAKE_BINARY_DIR}/xnix.iso)
 # QEMU 运行/调试
 # ============================================
 add_custom_target(run
-    COMMAND qemu-system-i386 -cdrom ${CMAKE_BINARY_DIR}/xnix.iso
-    DEPENDS iso
-    COMMENT "在 QEMU 中运行 Xnix..."
-    VERBATIM
+        COMMAND qemu-system-i386 -cdrom ${CMAKE_BINARY_DIR}/xnix.iso
+        DEPENDS iso
+        COMMENT "在 QEMU 中运行 Xnix..."
+        VERBATIM
 )
 
 add_custom_target(debug
-    COMMAND qemu-system-i386 -kernel ${CMAKE_BINARY_DIR}/xnix.elf -s -S
-    DEPENDS xnix.elf
-    COMMENT "在 QEMU 调试模式下运行 Xnix (等待 GDB 连接端口1234)..."
-    VERBATIM
+        COMMAND qemu-system-i386 -kernel ${CMAKE_BINARY_DIR}/xnix.elf -s -S
+        DEPENDS xnix.elf
+        COMMENT "在 QEMU 调试模式下运行 Xnix (等待 GDB 连接端口1234)..."
+        VERBATIM
 )

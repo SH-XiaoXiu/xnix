@@ -12,7 +12,7 @@
 
 typedef uint32_t cpu_id_t;
 
-#define CPU_ID_INVALID ((cpu_id_t)-1)
+#define CPU_ID_INVALID ((cpu_id_t) - 1)
 
 /**
  * 获取当前 CPU ID
@@ -33,7 +33,7 @@ bool cpu_is_online(cpu_id_t cpu);
 
 /**
  * 发送核间中断 (IPI - Inter-Processor Interrupt)
- * 用于通知其他核执行调度、刷新 TLB 等
+ * 用于通知其他核执行调度,刷新 TLB 等
  *
  * @param cpu 目标 CPU ID
  * @param vector 中断向量号

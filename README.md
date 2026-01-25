@@ -1,6 +1,7 @@
 # Xnix
 
-在完成 [MyRTOS-Demo](https://github.com/SH-XiaoXiu/MyRTOS-Demo) (基于 ARM32 的 RTOS)后, 准备入手学习并实践现代操作系统的开发,引入现代操作系统的特性和设计.
+在完成 [MyRTOS-Demo](https://github.com/SH-XiaoXiu/MyRTOS-Demo) (基于 ARM32 的 RTOS)后,
+准备入手学习并实践现代操作系统的开发,引入现代操作系统的特性和设计.
 
 以 x86 架构为示例开发, 但是系统内核最终将是平台无关的.
 
@@ -35,25 +36,28 @@ void arch_putc(char c) {
 
 ### 头文件引用规范
 
-| 前缀 | 用途 | 示例 |
-|------|------|------|
-| `<arch/...>` | 架构抽象接口 | `<arch/console.h>` |
-| `<drivers/...>` | 驱动接口 | `<drivers/vga.h>` |
-| `<xstd/...>` | 内核标准库 | `<xstd/stdout.h>` |
+| 前缀              | 用途     | 示例                 |
+|-----------------|--------|--------------------|
+| `<arch/...>`    | 架构抽象接口 | `<arch/console.h>` |
+| `<drivers/...>` | 驱动接口   | `<drivers/vga.h>`  |
+| `<xstd/...>`    | 内核标准库  | `<xstd/stdout.h>`  |
 
 ## 构建 & 运行
 
 **依赖** (Ubuntu/WSL):
+
 ```bash
 sudo apt install gcc gcc-multilib grub-pc-bin xorriso qemu-system-x86
 ```
 
 **运行**:
+
 ```bash
 ./scripts/run.sh
 ```
 
 **调试** (GDB):
+
 ```bash
 # 终端1
 ./scripts/debug.sh

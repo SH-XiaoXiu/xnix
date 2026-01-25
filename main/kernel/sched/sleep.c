@@ -6,18 +6,17 @@
  *   - sleep_ticks(n): 睡眠 n 个 tick
  *   - sleep_ms(ms): 睡眠 ms 毫秒
  *
- * 实现：
+ * 实现:
  *   1. 设置 wakeup_tick = 当前时间 + 睡眠时间
  *   2. 加入阻塞链表
  *   3. 每次 tick 检查是否有线程该醒来
  */
 
-#include <kernel/sched/sched.h>
-
 #include <arch/cpu.h>
 
 #include <drivers/timer.h>
 
+#include <kernel/sched/sched.h>
 #include <xnix/config.h>
 
 /**
@@ -79,13 +78,13 @@ void sleep_ticks(uint32_t ticks) {
         policy->dequeue(current);
     }
 
-    /* 加入阻塞链表（会被 sleep_check_wakeup 处理） */
+    /* 加入阻塞链表(会被 sleep_check_wakeup 处理) */
     sched_blocked_list_add(current);
 
     /*
-     * 循环直到被唤醒。
-     * 如果没有其他可运行线程，schedule() 会返回到这里，
-     * 此时通过 cpu_halt() 等待下一个中断（tick）来检查唤醒条件。
+     * 循环直到被唤醒.
+     * 如果没有其他可运行线程,schedule() 会返回到这里,
+     * 此时通过 cpu_halt() 等待下一个中断(tick)来检查唤醒条件.
      */
     while (current->state == THREAD_BLOCKED) {
         schedule();

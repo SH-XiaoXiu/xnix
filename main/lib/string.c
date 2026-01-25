@@ -32,7 +32,7 @@ void *memmove(void *dest, const void *src, size_t n) {
             *d++ = *s++;
         }
     } else {
-        /* 从后向前复制（防止重叠覆盖） */
+        /* 从后向前复制(防止重叠覆盖) */
         d += n;
         s += n;
         while (n--) {
@@ -65,8 +65,7 @@ size_t strlen(const char *s) {
 
 char *strcpy(char *dest, const char *src) {
     char *d = dest;
-    while ((*d++ = *src++))
-        ;
+    while ((*d++ = *src++));
     return dest;
 }
 

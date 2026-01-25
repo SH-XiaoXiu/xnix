@@ -2,7 +2,7 @@
  * @file sched.h
  * @brief 调度器完整定义
  *
- * 包含线程完整定义、调度策略、运行队列等结构。
+ * 包含线程完整定义,调度策略,运行队列等结构.
  * 公共 API 见 <xnix/thread.h>
  */
 
@@ -15,10 +15,10 @@
 #include <xnix/types.h>
 
 /*
- * 线程上下文只保存 callee-saved 寄存器和栈指针，因为线程切换时调度器只关心恢复现场。
- * eax/ecx/edx 等 caller-saved 寄存器不需要调度器保存，它们的保存由函数调用约定管理，
- * 完全是编译器生成指令维护函数调用返回逻辑，无需内核干预。无论是内核函数还是用户函数，
- * 只要存在函数调用概念，这套寄存器保存和栈管理规则都是统一的，和线程调度本身无关。
+ * 线程上下文只保存 callee-saved 寄存器和栈指针,因为线程切换时调度器只关心恢复现场.
+ * eax/ecx/edx 等 caller-saved 寄存器不需要调度器保存,它们的保存由函数调用约定管理,
+ * 完全是编译器生成指令维护函数调用返回逻辑,无需内核干预.无论是内核函数还是用户函数,
+ * 只要存在函数调用概念,这套寄存器保存和栈管理规则都是统一的,和线程调度本身无关.
  */
 
 struct thread_context {
@@ -40,41 +40,41 @@ struct thread {
     const char *name;
 
     thread_state_t state;
-    int            priority;    /* 小 = 高优先级 */
-    uint32_t       time_slice;  /* 剩余时间片（tick 数） */
+    int            priority;   /* 小 = 高优先级 */
+    uint32_t       time_slice; /* 剩余时间片(tick 数) */
 
     struct thread_context ctx;
     void                 *stack; /* 栈底 */
     size_t                stack_size;
 
-    struct process *owner; /* 所属进程，内核线程为 NULL */
+    struct process *owner; /* 所属进程,内核线程为 NULL */
 
     /* 多核相关 */
-    uint32_t cpus_workable; /* 位图：bit N = 1 表示可在 CPU N 运行（全 1 = 任意核） */
-    cpu_id_t running_on;    /* 当前运行在哪个核上（-1 表示未运行） */
+    uint32_t cpus_workable; /* 位图:bit N = 1 表示可在 CPU N 运行(全 1 = 任意核) */
+    cpu_id_t running_on;    /* 当前运行在哪个核上(-1 表示未运行) */
 
     /* 调度策略 */
-    struct sched_policy *policy; /* 线程专属策略（NULL 则用默认策略） */
+    struct sched_policy *policy; /* 线程专属策略(NULL 则用默认策略) */
 
     struct thread *next; /* 队列链接 */
 
     void    *wait_chan;   /* 阻塞在什么上 */
-    uint64_t wakeup_tick; /* 睡眠唤醒时间（0 表示不在睡眠） */
+    uint64_t wakeup_tick; /* 睡眠唤醒时间(0 表示不在睡眠) */
     int      exit_code;
 };
 
 /* CPU 位图操作 */
-#define CPUS_ALL              0xFFFFFFFF             /* 任意核 */
+#define CPUS_ALL              0xFFFFFFFF /* 任意核 */
 #define CPUS_SET(mask, cpu)   ((mask) | (1U << (cpu)))
 #define CPUS_CLEAR(mask, cpu) ((mask) & ~(1U << (cpu)))
 #define CPUS_TEST(mask, cpu)  ((mask) & (1U << (cpu)))
-#define CPUS_ONLY(cpu)        (1U << (cpu))          /* 仅绑定单核 */
+#define CPUS_ONLY(cpu)        (1U << (cpu)) /* 仅绑定单核 */
 
 /*
  * 调度策略接口
- * 机制与策略分离：
- *   机制 (scheduler)：何时调度、如何切换上下文
- *   策略 (policy)：选哪个线程、如何管理队列
+ * 机制与策略分离:
+ *   机制 (scheduler):何时调度,如何切换上下文
+ *   策略 (policy):选哪个线程,如何管理队列
  */
 struct sched_policy {
     const char *name;
@@ -82,19 +82,19 @@ struct sched_policy {
     /* 初始化策略 */
     void (*init)(void);
 
-    /* 线程就绪，加入运行队列 */
+    /* 线程就绪,加入运行队列 */
     void (*enqueue)(struct thread *t, cpu_id_t cpu);
 
     /* 线程移出运行队列 */
     void (*dequeue)(struct thread *t);
 
-    /* 选择下一个要运行的线程（当前 CPU） */
+    /* 选择下一个要运行的线程(当前 CPU) */
     struct thread *(*pick_next)(void);
 
-    /* 时钟中断处理，返回是否需要重新调度 */
+    /* 时钟中断处理,返回是否需要重新调度 */
     bool (*tick)(struct thread *current);
 
-    /* 选择最适合的 CPU（负载均衡） */
+    /* 选择最适合的 CPU(负载均衡) */
     cpu_id_t (*select_cpu)(struct thread *t);
 };
 
@@ -106,7 +106,7 @@ struct runqueue {
     struct thread *head;       /* 就绪队列头 */
     struct thread *tail;       /* 就绪队列尾 */
     struct thread *current;    /* 当前运行线程 */
-    uint32_t       nr_running; /* 运行队列长度（负载） */
+    uint32_t       nr_running; /* 运行队列长度(负载) */
 };
 
 /**
@@ -125,18 +125,18 @@ void sched_set_policy(struct sched_policy *policy);
 struct sched_policy *sched_get_policy(void);
 
 /**
- * 执行调度（切换到下一个线程）
+ * 执行调度(切换到下一个线程)
  */
 void schedule(void);
 
 /**
- * 获取当前线程（返回 struct thread *）
+ * 获取当前线程(返回 struct thread *)
  * 公共 API: thread_current() 返回 opaque thread_t
  */
 struct thread *sched_current(void);
 
 /**
- * 标记当前线程待销毁（下次调度时释放内存）
+ * 标记当前线程待销毁(下次调度时释放内存)
  */
 void sched_destroy_current(void);
 
@@ -151,7 +151,7 @@ void sched_blocked_list_add(struct thread *t);
 void sched_blocked_list_remove(struct thread *t);
 
 /**
- * 获取阻塞链表头指针（用于遍历）
+ * 获取阻塞链表头指针(用于遍历)
  */
 struct thread **sched_get_blocked_list(void);
 
@@ -163,11 +163,11 @@ struct thread **sched_get_blocked_list(void);
 extern struct sched_policy sched_policy_rr;
 
 /*
- * 睡眠模块（sleep.c）
+ * 睡眠模块(sleep.c)
  **/
 
 /**
- * 检查并唤醒睡眠到期的线程（由 sched_tick 调用）
+ * 检查并唤醒睡眠到期的线程(由 sched_tick 调用)
  */
 void sleep_check_wakeup(void);
 

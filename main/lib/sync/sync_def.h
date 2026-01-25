@@ -17,7 +17,7 @@ struct thread; /* 前向声明 */
  */
 struct mutex {
     volatile uint32_t locked;
-    struct thread    *owner;   /* 持有者，用于调试和递归检测 */
+    struct thread    *owner;   /* 持有者,用于调试和递归检测 */
     struct thread    *waiters; /* 等待队列 */
     spinlock_t        guard;   /* 保护 waiters 队列的自旋锁 因为waiters的操作也需要原子操作 */
 };
