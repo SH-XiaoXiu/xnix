@@ -172,8 +172,11 @@ void vmm_init(void) {
         /* 填充页表项 */
         for (uint32_t j = 0; j < 1024; j++) {
             uint32_t paddr = (i * 1024 * 4096) + (j * 4096);
-            /* 内核空间: 存在, 可读写, 管理员 */
-            pt[j] = paddr | PTE_PRESENT | PTE_RW;
+            if (paddr < end) {
+                pt[j] = paddr | PTE_PRESENT | PTE_RW;
+            } else {
+                pt[j] = 0;
+            }
         }
         /* 写入页目录: Present, RW, Supervisor */
         kernel_pd[i] = ((uint32_t)pt) | PDE_PRESENT | PDE_RW;
@@ -195,7 +198,8 @@ void vmm_init(void) {
     /* 启用分页 */
     load_cr3((uint32_t)kernel_pd);
     enable_paging();
-    pr_ok("VMM initialized, Paging enabled, mapped %u MB", map_end / 1024 / 1024);
+    pr_ok("VMM initialized, Paging enabled, mapped %u MB (RAM %u MB)", map_end / 1024 / 1024,
+          end / 1024 / 1024);
 }
 
 int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
