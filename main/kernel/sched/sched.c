@@ -13,6 +13,7 @@
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
+#include <xnix/sync.h>
 
 /* 上下文切换函数（汇编实现） */
 extern void context_switch(struct thread_context *old, struct thread_context *new);
@@ -32,13 +33,16 @@ static struct sched_policy *current_policy = NULL;
 static tid_t next_tid = 1;
 
 /* 标记是否在中断上下文 */
-static bool in_interrupt = false;
+static volatile bool in_interrupt = false;
 
 /* 待清理的已退出线程（切换后释放） */
 static struct thread *zombie_thread = NULL;
 
 /* 阻塞线程链表（等待唤醒） */
 static struct thread *blocked_list = NULL;
+
+/* 调度器锁，保护运行队列和阻塞链表 */
+static spinlock_t sched_lock = SPINLOCK_INIT;
 
 static tid_t alloc_tid(void) {
     return next_tid++;
@@ -47,20 +51,25 @@ static tid_t alloc_tid(void) {
 /* 阻塞链表操作（导出给 sleep.c 使用） */
 
 void sched_blocked_list_add(struct thread *t) {
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
     t->next      = blocked_list;
     blocked_list = t;
+    spin_unlock_irqrestore(&sched_lock, flags);
 }
 
 void sched_blocked_list_remove(struct thread *t) {
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
     struct thread **pp = &blocked_list;
     while (*pp) {
         if (*pp == t) {
             *pp     = t->next;
             t->next = NULL;
+            spin_unlock_irqrestore(&sched_lock, flags);
             return;
         }
         pp = &(*pp)->next;
     }
+    spin_unlock_irqrestore(&sched_lock, flags);
 }
 
 struct thread **sched_get_blocked_list(void) {
@@ -164,6 +173,8 @@ void schedule(void) {
         return;
     }
 
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
     /* 清理上次退出的线程 */
     if (zombie_thread) {
         kfree(zombie_thread->stack);
@@ -177,10 +188,12 @@ void schedule(void) {
     struct thread   *next = current_policy->pick_next();
 
     if (!next) {
+        spin_unlock_irqrestore(&sched_lock, flags);
         return; /* 无可运行线程 */
     }
 
     if (next == prev) {
+        spin_unlock_irqrestore(&sched_lock, flags);
         return; /* 仍然是当前线程 */
     }
 
@@ -196,17 +209,23 @@ void schedule(void) {
     next->running_on = cpu;
     rq->current      = next;
 
-    /* 如果在中断中，需要先发送 EOI */
-    if (in_interrupt) {
-        irq_eoi(0); /* PIT 中断是 IRQ 0 */
-    }
+    /*
+     * 上下文切换
+     * 必须在切换前释放锁
+     * context_switch_first 不会返回
+     * 新线程从 thread_entry_wrapper 开始，不会回到这里
+     * 只有被切换出去过的线程才会从 context_switch 返回
+     */
+    spin_unlock(&sched_lock);
 
-    /* 上下文切换 */
     if (prev) {
         context_switch(&prev->ctx, &next->ctx);
     } else {
         context_switch_first(&next->ctx);
     }
+
+    /* 恢复中断状态（只有从 context_switch 返回的线程会到这里） */
+    cpu_irq_restore(flags);
 }
 
 /*
@@ -270,6 +289,8 @@ void sched_wakeup(void *wait_chan) {
         return;
     }
 
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
     /* 遍历阻塞链表，唤醒所有 wait_chan 匹配的线程 */
     struct thread **pp = &blocked_list;
     while (*pp) {
@@ -287,6 +308,8 @@ void sched_wakeup(void *wait_chan) {
             pp = &(*pp)->next;
         }
     }
+
+    spin_unlock_irqrestore(&sched_lock, flags);
 }
 
 void sched_destroy_current(void) {
@@ -315,22 +338,27 @@ void sched_tick(void) {
             first->running_on = cpu;
             rq->current = first;
 
-            irq_eoi(0); /* 先发 EOI */
+            irq_eoi(0);
             context_switch_first(&first->ctx);
             /* 不会返回 */
         }
         in_interrupt = false;
+        irq_eoi(0);
         return;
     }
 
     if (!current || !current_policy || !current_policy->tick) {
         in_interrupt = false;
+        irq_eoi(0);
         return;
     }
 
     bool need_resched = current_policy->tick(current);
     if (need_resched) {
-        schedule(); /* 会在内部发送 EOI */
+        irq_eoi(0); /* 切换前发送 EOI */
+        schedule();
+    } else {
+        irq_eoi(0);
     }
 
     in_interrupt = false;

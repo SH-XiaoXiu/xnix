@@ -14,7 +14,7 @@
 #include <xnix/sync.h>
 
 void spin_init(spinlock_t *lock) {
-    lock->locked = 0;
+    atomic_set(&lock->locked, 0);
 }
 
 /*
@@ -27,13 +27,13 @@ void spin_init(spinlock_t *lock) {
  * pause 指令：告诉 CPU 正在自旋等待，降低功耗
  */
 void spin_lock(spinlock_t *lock) {
-    while (atomic_xchg((atomic_t *)&lock->locked, 1) != 0) {
+    while (atomic_xchg(&lock->locked, 1) != 0) {
         cpu_pause();
     }
 }
 
 void spin_unlock(spinlock_t *lock) {
-    lock->locked = 0;
+    atomic_store_release(&lock->locked, 0);
 }
 
 /*
@@ -41,7 +41,7 @@ void spin_unlock(spinlock_t *lock) {
  * 返回 true 表示成功获取，false 表示锁已被占用
  */
 bool spin_trylock(spinlock_t *lock) {
-    return atomic_xchg((atomic_t *)&lock->locked, 1) == 0;
+    return atomic_xchg(&lock->locked, 1) == 0;
 }
 
 /*
