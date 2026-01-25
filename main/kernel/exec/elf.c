@@ -108,9 +108,9 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
     }
 
     /*
-     * elf_data 是物理地址。
-     * 由于 vmm_init() 已经建立了物理内存的恒等映射，
-     * 我们可以直接访问该地址。
+     * elf_data 是物理地址.
+     * 由于 vmm_init() 已经建立了物理内存的恒等映射,
+     * 可以直接访问该地址.
      */
 
     /* 确保数据足够读取头部 */
@@ -182,14 +182,14 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
             }
 
             /* 直接拷贝物理内存 */
-            /* 使用 kmap 访问目标物理页，以防目标页在 HighMem */
+            /* 使用 kmap 访问目标物理页,以防目标页在 HighMem */
             void *dest_page = vmm_kmap(paddr);
             void *dest      = (void *)((uint32_t)dest_page + page_offset);
 
             /*
-             * 源数据访问：
-             * elf_data 是物理地址。目前内核已恒等映射了所有探测到的物理内存，
-             * 因此可以直接将其作为虚拟地址访问。
+             * 源数据访问:
+             * elf_data 是物理地址.目前内核已恒等映射了所有探测到的物理内存,
+             * 因此可以直接将其作为虚拟地址访问.
              */
             const void *src = (const void *)((uint32_t)elf_data + file_offset + copied);
 

@@ -19,6 +19,8 @@
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 
+#include "arch/hal/feature.h"
+
 /* 测试任务 bg */
 static void task_bg(void *arg) {
     (void)arg;
@@ -36,10 +38,19 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     console_init();
     console_clear();
 
+    /* 硬件特性探测 */
+    struct hal_features features;
+    hal_probe_features(&features);
+
     kprintf("\n");
     kprintf("%C========================================%N\n");
     kprintf("%C        Xnix Kernel Loaded!%N\n");
     kprintf("%C========================================%N\n");
+    kprintf("Detected CPU: %s (%d cores)\n", features.cpu_vendor, features.cpu_count);
+    kprintf("Features: [MMU:%s] [FPU:%s] [SMP:%s]\n",
+            (features.flags & HAL_FEATURE_MMU) ? "Yes" : "No",
+            (features.flags & HAL_FEATURE_FPU) ? "Yes" : "No",
+            (features.flags & HAL_FEATURE_SMP) ? "Yes" : "No");
     kprintf("\n");
 
     /* 检查 Multiboot 魔数 */

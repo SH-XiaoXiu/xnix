@@ -27,6 +27,17 @@ set(CFG_MAX_CONSOLES 4)
 
 # CPU 配置
 set(CFG_MAX_CPUS 1)
+option(ENABLE_SMP "Enable SMP support" OFF)
+if(ENABLE_SMP)
+    set(CFG_MAX_CPUS 8)
+    add_definitions(-DENABLE_SMP)
+endif()
+
+# VMM 调试
+option(ENABLE_VMM_DEBUG "Enable VMM debug logging" OFF)
+if(ENABLE_VMM_DEBUG)
+    add_definitions(-DENABLE_VMM_DEBUG)
+endif()
 
 # IPC 配置
 set(CFG_CAP_TABLE_SIZE 256)      # 每个进程最多句柄数
@@ -63,6 +74,7 @@ add_executable(xnix.elf ${KERNEL_SOURCES})
 # ============================================
 target_include_directories(xnix.elf PRIVATE
         ${CMAKE_SOURCE_DIR}/main/include    # <xnix/xxx>, <arch/xxx>, <drivers/xxx>
+        ${CMAKE_SOURCE_DIR}/main/include/arch # <hal/xxx>
         ${CMAKE_SOURCE_DIR}/main            # <kernel/xxx>
         ${CMAKE_SOURCE_DIR}/main/lib        # <sync/xxx>
         ${CMAKE_BINARY_DIR}/include
