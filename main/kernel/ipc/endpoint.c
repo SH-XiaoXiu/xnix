@@ -5,6 +5,7 @@
 
 #include <kernel/capability/capability.h>
 #include <kernel/ipc/endpoint.h>
+#include <kernel/ipc/notification.h>
 #include <kernel/sched/sched.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
@@ -260,6 +261,61 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
     return IPC_OK;
 }
 
+int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
+    struct process      *proc = process_current();
+    struct thread       *current;
+    struct ipc_endpoint *ep;
+    struct thread       *receiver;
+
+    if (!proc) {
+        return IPC_ERR_INVALID;
+    }
+
+    /* 查找 Endpoint */
+    ep = cap_lookup(proc, ep_handle, CAP_TYPE_ENDPOINT, CAP_WRITE);
+    if (!ep) {
+        return IPC_ERR_INVALID;
+    }
+
+    current = sched_current();
+
+    spin_lock(&ep->lock);
+
+    /* 检查是否有等待接收的线程 */
+    if (ep->recv_queue) {
+        receiver       = ep->recv_queue;
+        ep->recv_queue = receiver->next;
+        receiver->next = NULL;
+        spin_unlock(&ep->lock);
+
+        /* 拷贝消息: Current -> Receiver */
+        ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
+
+        /* 异步发送不需要 Reply, 也不阻塞发送者 */
+        receiver->ipc_peer = TID_INVALID; /* 标记为无 Reply */
+
+        /* 唤醒接收者 */
+        sched_wakeup(receiver);
+
+        return IPC_OK;
+    }
+
+    spin_unlock(&ep->lock);
+
+    /* 暂时不支持消息队列缓存, 如果没人接收则返回失败 */
+    /* 真正的异步发送需要内核分配 buffer 并入队, 稍后由接收者处理 */
+    /* 这里为了简化, 暂时作为非阻塞发送处理 */
+
+    return IPC_ERR_TIMEOUT; /* 相当于 EAGAIN */
+}
+
+cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
+    /* TODO: 实现NIO */
+    (void)set;
+    (void)timeout_ms;
+    return CAP_HANDLE_INVALID;
+}
+
 int ipc_reply(struct ipc_message *reply) {
     struct thread *current = sched_current();
     struct thread *sender;
@@ -296,5 +352,7 @@ int ipc_reply(struct ipc_message *reply) {
 void ipc_init(void) {
     /* 注册 Endpoint 类型的能力操作 */
     cap_register_type(CAP_TYPE_ENDPOINT, endpoint_ref, endpoint_unref);
+    /* 注册 Notification 类型的能力操作 */
+    cap_register_type(CAP_TYPE_NOTIFICATION, notification_ref, notification_unref);
     kprintf("ipc: initialized\n");
 }

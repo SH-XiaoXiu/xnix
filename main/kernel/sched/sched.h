@@ -67,10 +67,10 @@ struct thread {
      * ipc_req_msg   - 当前线程正在发送的消息(send/call),内核保证一次 IPC 操作完成前不会覆盖
      * ipc_reply_msg - 当前线程等待接收的回复(call/receive),内核保证在消息处理完成前不会被覆盖
      */
-    struct ipc_message *ipc_req_msg;   /* 发送消息缓冲区(send/call) */
-    struct ipc_message *ipc_reply_msg; /* 接收回复缓冲区(call/receive) */
-
-    tid_t ipc_peer; /* 通信对端 TID 主要是用来支持小消息同步 IPC(同步 RPC / call 模式) */
+    struct ipc_message *ipc_req_msg;   /* 请求消息 buffer (Send/Call) */
+    struct ipc_message *ipc_reply_msg; /* 回复消息 buffer (Receive/Call) */
+    uint32_t            notified_bits; /* Notification 接收到的位图 */
+    tid_t               ipc_peer;      /* 通信对端 TID */
 };
 
 /* CPU 位图操作 */
