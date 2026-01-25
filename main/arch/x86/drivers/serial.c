@@ -111,7 +111,7 @@ static void serial_udm_putc(char c) {
     msg.regs.data[0] = CONSOLE_UDM_OP_PUTC;
     msg.regs.data[1] = (uint32_t)(uint8_t)c;
 
-    /* 发送到消息队列，如果队列满则回退到直接输出 */
+    /* 发送到消息队列,如果队列满则回退到直接输出 */
     if (ipc_send_async(serial_udm_ep, &msg) != IPC_OK) {
         serial_putc(c);
     }
