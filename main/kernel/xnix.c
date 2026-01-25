@@ -62,6 +62,45 @@ static void task_memtest(void *arg) {
     }
 }
 
+/*
+ * IPC 广播测试
+ */
+static cap_handle_t g_test_notif;
+
+static void task_ipc_worker(void *arg) {
+    int id = (int)(long)arg;
+    kprintf("%C[Worker %d]%N Started, waiting for notification...\n", id);
+
+    while (1) {
+        uint32_t bits = notification_wait(g_test_notif);
+        kprintf("%C[Worker %d]%N Woke up! Received bits: 0x%x\n", id, bits);
+
+        if (bits & 0x80) {
+            kprintf("%C[Worker %d]%N Received exit signal, bye!\n", id);
+            break;
+        }
+    }
+}
+
+static void task_ipc_master(void *arg) {
+    (void)arg;
+    kprintf("%M[Master]%N Started. Will signal workers in 3 seconds...\n");
+    sleep_ms(3000);
+
+    kprintf("%M[Master]%N Broadcasting signal 0x01...\n");
+    notification_signal(g_test_notif, 0x01);
+    sleep_ms(2000);
+
+    kprintf("%M[Master]%N Broadcasting signal 0x02...\n");
+    notification_signal(g_test_notif, 0x02);
+    sleep_ms(2000);
+
+    kprintf("%M[Master]%N Broadcasting signal 0xFF (Exit)...\n");
+    notification_signal(g_test_notif, 0xFF);
+
+    kprintf("%M[Master]%N Test finished.\n");
+}
+
 void kernel_main(void) {
     /* 注册所有驱动 */
     arch_early_init();
@@ -98,7 +137,19 @@ void kernel_main(void) {
 
     /* 初始化调度器 */
     sched_init();
-    thread_create("memtest", task_memtest, NULL);
+
+    /* 创建 IPC 测试对象 */
+    g_test_notif = notification_create();
+    if (g_test_notif != CAP_HANDLE_INVALID) {
+        thread_create("ipc_worker_1", task_ipc_worker, (void *)1);
+        thread_create("ipc_worker_2", task_ipc_worker, (void *)2);
+        thread_create("ipc_worker_3", task_ipc_worker, (void *)3);
+        thread_create("ipc_master", task_ipc_master, NULL);
+    } else {
+        kprintf("%R[Error]%N Failed to create notification object!\n");
+    }
+
+    // thread_create("memtest", task_memtest, NULL);
     thread_create("task_a", task_a, NULL);
     thread_create("task_b", task_b, NULL);
     kprintf("%G[OK]%N Threads created\n");

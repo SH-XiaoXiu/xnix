@@ -41,6 +41,7 @@ void sleep_check_wakeup(void) {
             t->next        = NULL;
             t->wakeup_tick = 0;
             t->wait_chan   = NULL;
+            t->state       = THREAD_READY; /* 设置状态为就绪 */
 
             /* 重新加入运行队列 */
             cpu_id_t cpu = policy->select_cpu ? policy->select_cpu(t) : 0;

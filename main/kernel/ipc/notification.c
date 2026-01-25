@@ -12,6 +12,7 @@
 #include <xnix/sync.h>
 
 #include "arch/cpu.h"
+#include "xnix/stdio.h"
 
 /*
  * Notification 对象管理
@@ -116,14 +117,13 @@ void notification_signal(cap_handle_t notif_handle, uint32_t bits) {
 
         /* 遍历链表唤醒所有线程 */
         while (waiter_list) {
-            waiter       = waiter_list;
-            waiter_list  = waiter->next;
-            waiter->next = NULL;
+            waiter            = waiter_list;
+            waiter_list       = waiter->wait_next; /* 使用 wait_next */
+            waiter->wait_next = NULL;
 
             /* 将事件 bits 传递给线程 */
             waiter->notified_bits = delivery_bits;
-
-            sched_wakeup(waiter);
+            sched_wakeup_thread(waiter); /* 使用 sched_wakeup_thread */
         }
         return;
     }
@@ -160,14 +160,14 @@ uint32_t notification_wait(cap_handle_t notif_handle) {
     }
 
     /* 没有事件, 加入等待队列 */
-    current->next     = notif->wait_queue;
-    notif->wait_queue = current;
+    current->wait_next = notif->wait_queue; /* 使用 wait_next 链接 */
+    notif->wait_queue  = current;
 
     spin_unlock(&notif->lock);
 
     /* 阻塞等待 */
-    /* 我们使用 notif 作为 wait_chan */
-    sched_block(current);
+    /* 使用 notif 作为 wait_chan */
+    sched_block(notif);
 
     /* 被唤醒, 检查接收到的 bits */
     /* 此时 bits 应该已经存储在 current->notified_bits 中 (由 signal 设置) */

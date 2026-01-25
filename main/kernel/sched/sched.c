@@ -11,7 +11,6 @@
 #include <xnix/config.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
-#include <xnix/string.h>
 #include <xnix/sync.h>
 
 /* 上下文切换函数(汇编实现) */
@@ -37,6 +36,9 @@ static volatile bool in_interrupt = false;
 /* 待清理的已退出线程(切换后释放) */
 static struct thread *zombie_thread = NULL;
 
+/* Idle 线程 */
+static struct thread *idle_thread = NULL;
+
 /* 阻塞线程链表(等待唤醒) */
 static struct thread *blocked_list = NULL;
 
@@ -44,6 +46,7 @@ static struct thread *blocked_list = NULL;
 static spinlock_t sched_lock = SPINLOCK_INIT;
 
 static tid_t alloc_tid(void) {
+    // TODO 原子保护 回收
     return next_tid++;
 }
 
@@ -178,6 +181,17 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
 }
 
 /*
+ * Idle 线程
+ * 永远在运行队列之外(特殊处理),用于 CPU 空闲时运行
+ */
+static void idle_task(void *arg) {
+    (void)arg;
+    while (1) {
+        cpu_halt();
+    }
+}
+
+/*
  * 核心调度函数
  **/
 
@@ -201,8 +215,16 @@ void schedule(void) {
     struct thread   *next = current_policy->pick_next();
 
     if (!next) {
-        spin_unlock_irqrestore(&sched_lock, flags);
-        return; /* 无可运行线程 */
+        /* 如果运行队列为空, 切换到 idle 线程 */
+        if (!idle_thread) {
+            /* 尚未初始化 idle 线程, 这是一个严重错误, 但我们尝试死循环等待 */
+            kprintf("ERROR: idle_thread not initialized!\n");
+            spin_unlock_irqrestore(&sched_lock, flags);
+            while (1) {
+                cpu_halt();
+            }
+        }
+        next = idle_thread;
     }
 
     if (next == prev) {
@@ -212,15 +234,21 @@ void schedule(void) {
 
     /* 更新状态 */
     if (prev) {
-        if (prev->state == THREAD_RUNNING) {
-            prev->state = THREAD_READY;
+        /* 如果上一个线程是 idle 线程, 不要修改它的状态 (它永远是 READY) */
+        if (prev != idle_thread) {
+            if (prev->state == THREAD_RUNNING) {
+                prev->state = THREAD_READY;
+            }
+            prev->running_on = CPU_ID_INVALID;
         }
-        prev->running_on = CPU_ID_INVALID;
     }
 
-    next->state      = THREAD_RUNNING;
-    next->running_on = cpu;
-    rq->current      = next;
+    /* 如果下一个线程是 idle 线程, 保持其状态为 READY (或者是特殊的 IDLE 状态) */
+    if (next != idle_thread) {
+        next->state      = THREAD_RUNNING;
+        next->running_on = cpu;
+    }
+    rq->current = next;
 
     /*
      * 上下文切换
@@ -256,6 +284,28 @@ void sched_init(void) {
 
     sched_set_policy(&sched_policy_rr);
     kprintf("Scheduler initialized\n");
+
+    /* 创建 idle 线程 */
+    /* 注意: idle 线程不加入运行队列, 也不需要策略 */
+    idle_thread = kzalloc(sizeof(struct thread));
+    if (idle_thread) {
+        idle_thread->tid           = 0; /* TID 0 保留给 idle */
+        idle_thread->name          = "idle";
+        idle_thread->state         = THREAD_READY;
+        idle_thread->priority      = 255;
+        idle_thread->stack_size    = CFG_THREAD_STACK_SIZE;
+        idle_thread->stack         = kmalloc(CFG_THREAD_STACK_SIZE);
+        idle_thread->cpus_workable = CPUS_ALL;
+        idle_thread->running_on    = CPU_ID_INVALID;
+
+        if (idle_thread->stack) {
+            thread_init_stack(idle_thread, idle_task, NULL);
+        } else {
+            kprintf("ERROR: Failed to allocate idle stack\n");
+        }
+    } else {
+        kprintf("ERROR: Failed to allocate idle thread\n");
+    }
 }
 
 void sched_set_policy(struct sched_policy *policy) {
@@ -284,6 +334,15 @@ void sched_block(void *wait_chan) {
         return;
     }
 
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
+    /* 检查是否有挂起的唤醒 */
+    if (current->pending_wakeup) {
+        current->pending_wakeup = false;
+        spin_unlock_irqrestore(&sched_lock, flags);
+        return; /* 不阻塞, 直接返回 */
+    }
+
     current->state     = THREAD_BLOCKED;
     current->wait_chan = wait_chan;
 
@@ -292,9 +351,20 @@ void sched_block(void *wait_chan) {
     }
 
     /* 加入阻塞链表,等待唤醒 */
-    sched_blocked_list_add(current);
+    current->next = blocked_list;
+    blocked_list  = current;
 
+    spin_unlock_irqrestore(&sched_lock, flags);
+
+    /*
+     * 调用 schedule() 切换到其他线程
+     * schedule() 会自己管理中断状态,不需要我们额外处理
+     */
     schedule();
+
+    /* 被唤醒后从这里继续执行 */
+    /* 清除 pending_wakeup 标志，防止下次 block 误判 */
+    current->pending_wakeup = false;
 }
 
 void sched_wakeup(void *wait_chan) {
@@ -320,6 +390,42 @@ void sched_wakeup(void *wait_chan) {
         } else {
             pp = &(*pp)->next;
         }
+    }
+
+    spin_unlock_irqrestore(&sched_lock, flags);
+}
+
+void sched_wakeup_thread(struct thread *t) {
+    if (!current_policy || !t) {
+        return;
+    }
+
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
+    /* 尝试从阻塞链表移除该线程 */
+    struct thread **pp      = &blocked_list;
+    bool            removed = false;
+    while (*pp) {
+        if (*pp == t) {
+            *pp     = t->next;
+            t->next = NULL;
+            removed = true;
+            break;
+        }
+        pp = &(*pp)->next;
+    }
+
+    t->wait_chan      = NULL;
+    t->pending_wakeup = true; /* 标记有挂起的唤醒 */
+
+    /* 只有当线程真正处于阻塞状态(成功从阻塞链表移除)时, 才将其加入运行队列 */
+    /* 如果线程还在运行(RUNNING)或就绪(READY), 则不需要再次加入, 否则会导致运行队列损坏(double
+     * enqueue) */
+    if (removed || t->state == THREAD_BLOCKED) {
+        t->state = THREAD_READY; /* 修正状态 */
+        /* 重新加入运行队列 */
+        cpu_id_t cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
+        current_policy->enqueue(t, cpu);
     }
 
     spin_unlock_irqrestore(&sched_lock, flags);
@@ -360,12 +466,33 @@ void sched_tick(void) {
         return;
     }
 
+    /* 特殊处理 idle 线程 */
+    if (current == idle_thread) {
+        /* 检查是否有可运行线程 */
+        if (current_policy) {
+            struct thread *next = current_policy->pick_next();
+            if (next) {
+                /* 有可运行线程，切换过去 */
+                irq_eoi(0);
+                schedule();
+                in_interrupt = false;
+                return;
+            }
+        }
+        /* 没有可运行线程，idle 继续运行 */
+        in_interrupt = false;
+        irq_eoi(0);
+        return;
+    }
+
+    /* 普通线程处理 */
     if (!current || !current_policy || !current_policy->tick) {
         in_interrupt = false;
         irq_eoi(0);
         return;
     }
 
+    /* 调用策略的 tick 函数 */
     bool need_resched = current_policy->tick(current);
     if (need_resched) {
         irq_eoi(0); /* 切换前发送 EOI */

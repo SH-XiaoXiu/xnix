@@ -56,7 +56,8 @@ struct thread {
     /* 调度策略 */
     struct sched_policy *policy; /* 线程专属策略(NULL 则用默认策略) */
 
-    struct thread *next; /* 队列链接 */
+    struct thread *next;      /* 运行队列/阻塞队列链接 */
+    struct thread *wait_next; /* 特定等待队列链接 (如 Notification, Mutex) */
 
     void    *wait_chan;   /* 阻塞在什么上 */
     uint64_t wakeup_tick; /* 睡眠唤醒时间(0 表示不在睡眠) */
@@ -67,10 +68,11 @@ struct thread {
      * ipc_req_msg   - 当前线程正在发送的消息(send/call),内核保证一次 IPC 操作完成前不会覆盖
      * ipc_reply_msg - 当前线程等待接收的回复(call/receive),内核保证在消息处理完成前不会被覆盖
      */
-    struct ipc_message *ipc_req_msg;   /* 请求消息 buffer (Send/Call) */
-    struct ipc_message *ipc_reply_msg; /* 回复消息 buffer (Receive/Call) */
-    uint32_t            notified_bits; /* Notification 接收到的位图 */
-    tid_t               ipc_peer;      /* 通信对端 TID */
+    struct ipc_message *ipc_req_msg;    /* 请求消息 buffer (Send/Call) */
+    struct ipc_message *ipc_reply_msg;  /* 回复消息 buffer (Receive/Call) */
+    uint32_t            notified_bits;  /* Notification 接收到的位图 */
+    bool                pending_wakeup; /* 是否有挂起的唤醒信号 */
+    tid_t               ipc_peer;       /* 通信对端 TID */
 };
 
 /* CPU 位图操作 */
@@ -164,6 +166,12 @@ void sched_blocked_list_remove(struct thread *t);
  * 获取阻塞链表头指针(用于遍历)
  */
 struct thread **sched_get_blocked_list(void);
+
+/**
+ * 唤醒指定线程 (特定等待队列使用)
+ * 将线程从阻塞链表移除并加入运行队列
+ */
+void sched_wakeup_thread(struct thread *t);
 
 /**
  * 查找阻塞的线程(用于 IPC reply)
