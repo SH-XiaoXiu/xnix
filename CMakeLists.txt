@@ -43,6 +43,7 @@ endif()
 set(CFG_CAP_TABLE_SIZE 256)      # 每个进程最多句柄数
 set(CFG_IPC_MSG_REGS 8)          # 短消息寄存器数量
 set(CFG_IPC_MSG_CAPS_MAX 4)      # 消息中最多能力句柄数
+option(CFG_IPC_MSG_POOL "Enable IPC global message pool for async buffering" ON)
 
 option(CFG_DEBUG_MM "Debug memory manager" OFF)
 option(CFG_DEBUG_SCHED "Debug scheduler" OFF)
