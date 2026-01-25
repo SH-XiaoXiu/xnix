@@ -1,10 +1,19 @@
 #ifndef KERNEL_IPC_ENDPOINT_H
 #define KERNEL_IPC_ENDPOINT_H
 
+#include <xnix/ipc.h>
 #include <xnix/sync.h>
 #include <xnix/types.h>
 
 struct thread;
+
+/* 异步消息队列大小 */
+#define IPC_ASYNC_QUEUE_SIZE 64 //TODO 将换成动态实现
+
+/* 异步消息队列节点 */
+struct ipc_async_msg {
+    struct ipc_msg_regs regs; /* 只缓存寄存器部分 */
+};
 
 /**
  * IPC Endpoint 对象
@@ -17,6 +26,11 @@ struct ipc_endpoint {
     struct thread *send_queue; /* 等待发送的线程 */
     struct thread *recv_queue; /* 等待接收的线程 */
     uint32_t       refcount;
+
+    /* 异步消息队列（环形缓冲区） */
+    struct ipc_async_msg async_queue[IPC_ASYNC_QUEUE_SIZE];
+    uint32_t             async_head; /* 读指针 */
+    uint32_t             async_tail; /* 写指针 */
 };
 
 /**

@@ -7,11 +7,9 @@
 #include <kernel/ipc/endpoint.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/sched/sched.h>
-#include <xnix/debug.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/process.h>
-#include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
 
@@ -76,6 +74,8 @@ cap_handle_t endpoint_create(void) {
     ep->send_queue = NULL;
     ep->recv_queue = NULL;
     ep->refcount   = 0; /* cap_alloc 会增加引用计数 */
+    ep->async_head = 0;
+    ep->async_tail = 0;
 
     /* 分配句柄: 默认给予读写和管理权限 */
     cap_rights_t rights = CAP_READ | CAP_WRITE | CAP_GRANT | CAP_MANAGE;
@@ -145,22 +145,21 @@ static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
 
     /* 检查是否有等待接收的线程 */
     if (ep->recv_queue) {
-        receiver       = ep->recv_queue;
-        ep->recv_queue = receiver->next; /* 移出队列 */
-        receiver->next = NULL;
+        receiver            = ep->recv_queue;
+        ep->recv_queue      = receiver->wait_next; /* 移出队列 */
+        receiver->wait_next = NULL;
         spin_unlock(&ep->lock);
 
         // 拷贝消息: 当前发送者 -> 接收者
         // 接收者正在 ipc_receive 中等待, 其 ipc_reply_msg 指向接收缓冲区
         // 注意: ipc_receive 会复用 ipc_reply_msg 字段来存储接收缓冲区指针
         ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
-        ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
 
         /* 记录发送者 TID,以便 Receiver 回复 */
         receiver->ipc_peer = current->tid;
 
         /* 唤醒接收者 */
-        sched_wakeup(receiver);
+        sched_wakeup_thread(receiver);
 
         /* 发送者进入等待回复状态 */
         /* 注: Rendezvous 模型 Send/Call 阻塞发送者,直到接收者回复*/
@@ -175,8 +174,8 @@ static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
     }
 
     /* 没有接收者,加入发送队列 */
-    current->next  = ep->send_queue;
-    ep->send_queue = current;
+    current->wait_next = ep->send_queue;
+    ep->send_queue     = current;
     spin_unlock(&ep->lock);
 
     /* 保存状态 */
@@ -227,11 +226,22 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
 
     spin_lock(&ep->lock);
 
-    /* 检查发送队列 */
+    /* 优先检查异步消息队列 */
+    if (ep->async_head != ep->async_tail) {
+        /* 有缓存的异步消息，直接取出 */
+        memcpy(&msg->regs, &ep->async_queue[ep->async_head].regs, sizeof(struct ipc_msg_regs));
+        ep->async_head = (ep->async_head + 1) % IPC_ASYNC_QUEUE_SIZE;
+        spin_unlock(&ep->lock);
+
+        current->ipc_peer = TID_INVALID; /* 异步消息无需回复 */
+        return IPC_OK;
+    }
+
+    /* 检查发送队列（同步发送者） */
     if (ep->send_queue) {
-        sender         = ep->send_queue;
-        ep->send_queue = sender->next;
-        sender->next   = NULL;
+        sender            = ep->send_queue;
+        ep->send_queue    = sender->wait_next;
+        sender->wait_next = NULL;
         spin_unlock(&ep->lock);
 
         /* 拷贝消息: Sender -> Current(Receiver) */
@@ -246,8 +256,8 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
     }
 
     /* 没有发送者,加入接收队列 */
-    current->next  = ep->recv_queue;
-    ep->recv_queue = current;
+    current->wait_next = ep->recv_queue;
+    ep->recv_queue     = current;
     spin_unlock(&ep->lock);
 
     /* 保存接收 buffer 指针到 ipc_reply_msg (复用字段) */
@@ -284,9 +294,9 @@ int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
 
     /* 检查是否有等待接收的线程 */
     if (ep->recv_queue) {
-        receiver       = ep->recv_queue;
-        ep->recv_queue = receiver->next;
-        receiver->next = NULL;
+        receiver            = ep->recv_queue;
+        ep->recv_queue      = receiver->wait_next;
+        receiver->wait_next = NULL;
         spin_unlock(&ep->lock);
 
         /* 拷贝消息: Current -> Receiver */
@@ -296,18 +306,25 @@ int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
         receiver->ipc_peer = TID_INVALID; /* 标记为无 Reply */
 
         /* 唤醒接收者 */
-        sched_wakeup(receiver);
+        sched_wakeup_thread(receiver);
 
         return IPC_OK;
     }
 
+    /* 没有接收者，尝试入队 */
+    uint32_t next_tail = (ep->async_tail + 1) % IPC_ASYNC_QUEUE_SIZE;
+    if (next_tail == ep->async_head) {
+        /* 队列满 */
+        spin_unlock(&ep->lock);
+        return IPC_ERR_TIMEOUT;
+    }
+
+    /* 拷贝消息到队列 */
+    memcpy(&ep->async_queue[ep->async_tail].regs, &msg->regs, sizeof(struct ipc_msg_regs));
+    ep->async_tail = next_tail;
+
     spin_unlock(&ep->lock);
-
-    /* 暂时不支持消息队列缓存, 如果没人接收则返回失败 */
-    /* 真正的异步发送需要内核分配 buffer 并入队, 稍后由接收者处理 */
-    /* 这里为了简化, 暂时作为非阻塞发送处理 */
-
-    return IPC_ERR_TIMEOUT; /* 相当于 EAGAIN */
+    return IPC_OK;
 }
 
 cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
@@ -345,7 +362,7 @@ int ipc_reply(struct ipc_message *reply) {
     }
 
     /* 唤醒发送者 */
-    sched_wakeup(sender);
+    sched_wakeup_thread(sender);
 
     return IPC_OK;
 }
