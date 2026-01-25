@@ -329,11 +329,32 @@ void process_init(void) {
     process_subsystem_init();
 }
 
+/* 声明架构相关的用户态跳转函数 */
+extern void enter_user_mode(uint32_t eip, uint32_t esp);
+
 /* 声明内部函数 */
 extern thread_t thread_create_with_owner(const char *name, void (*entry)(void *), void *arg,
                                          struct process *owner);
 
-pid_t process_spawn_init(void) {
+/* 用户栈配置 */
+#define USER_STACK_TOP 0xBFFFF000
+
+/*
+ * 用户线程入口
+ * 当线程第一次被调度时,会从这里开始执行
+ */
+void user_thread_entry(void *arg) {
+    /*
+     * 此时已经处于内核态,并且 CR3 已经切换到了目标进程的页表
+     * 只需要构造栈帧并跳转到用户态
+     */
+    enter_user_mode((uint32_t)arg, USER_STACK_TOP);
+
+    /* 永远不会返回 */
+    panic("Returned from user mode!");
+}
+
+pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
     /* 创建进程结构 */
     struct process *proc = (struct process *)process_create("init");
     if (!proc) {
@@ -342,24 +363,44 @@ pid_t process_spawn_init(void) {
     }
 
     /* 加载用户程序 */
-    if (process_load_user(proc, "init") < 0) {
-        pr_err("Failed to load init program");
+    int ret;
+    if (elf_data) {
+        ret = process_load_elf(proc, elf_data, elf_size);
+    } else {
+        pr_err("No init module provided");
+        process_destroy((process_t)proc);
+        return PID_INVALID;
+    }
+
+    if (ret < 0) {
+        pr_err("Failed to load init program: %d", ret);
         process_destroy((process_t)proc);
         return PID_INVALID;
     }
 
     /* 创建主线程 */
     /* 线程创建后默认是 READY 状态,会被调度器调度 */
-    /* entry 指向 user_thread_entry,它会负责跳转到用户态 */
-    /* 使用内部函数指定 owner */
-    thread_t t = thread_create_with_owner("init_main", user_thread_entry, proc, proc);
+
+    uint32_t entry_point;
+
+    /* process_load_elf 返回入口点 */
+    if (ret > 0) {
+        entry_point = (uint32_t)ret;
+    } else {
+        pr_err("Invalid entry point returned by loader");
+        process_destroy((process_t)proc);
+        return PID_INVALID;
+    }
+
+    thread_t t =
+        thread_create_with_owner("bootstrap", user_thread_entry, (void *)entry_point, proc);
     if (!t) {
         pr_err("Failed to create init thread");
         process_destroy((process_t)proc);
         return PID_INVALID;
     }
 
-    /*将线程关联到进程 */
+    /* 将线程关联到进程 */
     process_add_thread(proc, (struct thread *)t);
 
     pr_ok("Spawned init process (PID %d)", proc->pid);

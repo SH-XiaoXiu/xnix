@@ -104,7 +104,14 @@ void user_thread_entry(void *arg);
 
 /**
  * 创建并启动用户进程
+ * @param elf_data ELF 文件数据指针 (NULL 表示使用内置加载器)
+ * @param elf_size ELF 文件大小
  */
-pid_t process_spawn_init(void);
+pid_t process_spawn_init(void *elf_data, uint32_t elf_size);
+
+/**
+ * 加载 ELF 文件到进程
+ */
+int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size);
 
 #endif

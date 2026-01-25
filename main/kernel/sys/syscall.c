@@ -1,3 +1,4 @@
+#include <asm-generic/errno.h>
 #include <asm/irq_defs.h>
 #include <xnix/stdio.h>
 #include <xnix/syscall.h>
@@ -14,22 +15,22 @@
  *
  * 返回值通过 eax 返回
  */
+/* 声明 thread_exit */
+extern void thread_exit(int code);
+
 void syscall_handler(struct irq_regs *regs) {
     uint32_t syscall_num = regs->eax;
-    int32_t  ret         = -1;
-
+    int      ret         = -ENOSYS;
     switch (syscall_num) {
-    case SYS_PUTC:
-        kputc((char)(regs->ebx & 0xFF));
-        ret = 0;
-        break;
-
     case SYS_EXIT:
         /* sys_exit(int code) */
-        // TODO: implement thread_exit or process_exit
-        pr_info("Syscall exit called with code %d", regs->ebx);
-        // thread_exit(regs->ebx);
-        while (1); /* Hang for now */
+        thread_exit((int)regs->ebx);
+        break;
+
+    case SYS_PUTC:
+        /* sys_putc(char c) */
+        kputc((char)(regs->ebx & 0xFF));
+        ret = 0;
         break;
 
     default:

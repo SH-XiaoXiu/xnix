@@ -74,18 +74,28 @@ file(GLOB_RECURSE ALL_HEADERS "${CMAKE_SOURCE_DIR}/main/*.h")
 target_sources(xnix.elf PRIVATE ${ALL_HEADERS})
 
 # ============================================
-# 创建可引导 ISO
+# 子目录
 # ============================================
-set(ISO_DIR "${CMAKE_BINARY_DIR}/isodir")
+add_subdirectory(user) # 添加用户态构建
+
+# ============================================
+# ISO 生成
+# ============================================
+set(ISO_DIR ${CMAKE_BINARY_DIR}/iso)
+
 add_custom_command(
         OUTPUT ${CMAKE_BINARY_DIR}/xnix.iso
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ISO_DIR}/boot/grub
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:xnix.elf> ${ISO_DIR}/boot/xnix.elf
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/init.elf ${ISO_DIR}/boot/init.elf
         COMMAND ${CMAKE_COMMAND} -E echo "set timeout=0" > ${ISO_DIR}/boot/grub/grub.cfg
         COMMAND ${CMAKE_COMMAND} -E echo "set default=0" >> ${ISO_DIR}/boot/grub/grub.cfg
-        COMMAND ${CMAKE_COMMAND} -E echo "menuentry \"Xnix\" { multiboot /boot/xnix.elf }" >> ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND ${CMAKE_COMMAND} -E echo "menuentry \"Xnix\" { " >> ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND ${CMAKE_COMMAND} -E echo "  multiboot /boot/xnix.elf" >> ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND ${CMAKE_COMMAND} -E echo "  module /boot/init.elf" >> ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND ${CMAKE_COMMAND} -E echo "}" >> ${ISO_DIR}/boot/grub/grub.cfg
         COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/xnix.iso ${ISO_DIR} 2>/dev/null || true
-        DEPENDS xnix.elf
+        DEPENDS xnix.elf init.elf
         COMMENT "创建可引导 ISO..."
 )
 add_custom_target(iso DEPENDS ${CMAKE_BINARY_DIR}/xnix.iso)

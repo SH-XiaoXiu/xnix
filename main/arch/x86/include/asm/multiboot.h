@@ -39,6 +39,14 @@ struct multiboot_mmap_entry {
 
 #define MB_MMAP_TYPE_AVAILABLE 1
 
+/* 模块列表条目 */
+struct multiboot_mod_list {
+    uint32_t mod_start; /* 模块起始物理地址 */
+    uint32_t mod_end;   /* 模块结束物理地址 */
+    uint32_t cmdline;   /* 模块命令行 */
+    uint32_t pad;       /* 填充 (必须为 0) */
+} __attribute__((packed));
+
 /* 启动时保存的 Multiboot info 指针 */
 extern uint32_t multiboot_info_ptr;
 

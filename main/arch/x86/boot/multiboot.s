@@ -31,6 +31,10 @@ _start:
     # EAX = 魔数 0x2BADB002
     # EBX = multiboot_info 结构体指针
     mov %ebx, multiboot_info_ptr
+    
+    # 传递参数给 kernel_main (压栈)
+    pushl %ebx
+    pushl %eax
 
     # 调用C内核入口
     call kernel_main

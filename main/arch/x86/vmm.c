@@ -105,6 +105,31 @@ static void unmap_temp_page(int window_id) {
     invlpg(vaddr);
 }
 
+/*
+ * 临时映射 (HighMem access)
+ *
+ * 借用 TEMP_WINDOW_2 (窗口2) 来映射任意物理页,以便内核访问.
+ * 注意:这只是一个简单的实现,每次只能映射一页,且必须在临界区内使用.
+ */
+void *vmm_kmap(paddr_t paddr) {
+    /* 获取锁,必须配对使用 vmm_kunmap 来释放锁 */
+    /* 注意:这是一个自旋锁,持有期间不能睡眠 */
+    /* 这里我们复用 map_temp_page(2, ...) */
+    /* map_temp_page 假设已经持有锁,所以我们需要手动加锁 */
+
+    /* 手动获取锁以复用 map_temp_page 逻辑 */
+
+    spin_lock(&temp_map_lock); // TODO: irq save? map_temp_page callers use irqsave
+
+    return map_temp_page(2, paddr);
+}
+
+void vmm_kunmap(void *vaddr) {
+    (void)vaddr; /* 我们总是 unmap 窗口 2 */
+    unmap_temp_page(2);
+    spin_unlock(&temp_map_lock);
+}
+
 void vmm_init(void) {
     /* 分配内核页目录 */
     kernel_pd = (uint32_t *)alloc_page();
@@ -118,11 +143,22 @@ void vmm_init(void) {
     arch_get_memory_range(&start, &end);
 
     /* 对齐到 4MB 边界 (每个页表 4MB) */
-    uint32_t map_end  = (end + 0x3FFFFF) & ~0x3FFFFF;
+    uint32_t map_end = (end + 0x3FFFFF) & ~0x3FFFFF;
+
+    /*
+     * 映射所有探测到的物理内存
+     */
+
     uint32_t pt_count = map_end >> 22;
 
     if (pt_count == 0) {
         pt_count = 1; /* 至少映射 4MB */
+    }
+
+    /* 确保映射范围在内核页目录限制内 (假设内核空间足够大) */
+    if (pt_count > 768) { /* 3GB */
+        pt_count = 768;
+        pr_warn("Physical memory too large, truncating mapping to 3GB");
     }
 
     for (uint32_t i = 0; i < pt_count; i++) {
@@ -198,7 +234,6 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
             }
             return -ENOMEM;
         }
-
 
         /* 清零新页表 - 使用窗口 2 */
 
