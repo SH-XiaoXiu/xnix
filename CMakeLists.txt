@@ -22,8 +22,15 @@ set(CFG_SCHED_HZ 100)
 set(CFG_THREAD_STACK_SIZE 4096)
 set(CFG_MAX_CONSOLES 4)
 set(CFG_MAX_IRQS 16)
+
+# IPC 配置
+set(CFG_CAP_TABLE_SIZE 256)      # 每个进程最多句柄数
+set(CFG_IPC_MSG_REGS 8)          # 短消息寄存器数量
+set(CFG_IPC_MSG_CAPS_MAX 4)      # 消息中最多能力句柄数
+
 option(CFG_DEBUG_MM "Debug memory manager" OFF)
 option(CFG_DEBUG_SCHED "Debug scheduler" OFF)
+option(CFG_DEBUG_IPC "Debug IPC" OFF)
 
 configure_file(
         ${CMAKE_SOURCE_DIR}/main/include/xnix/config.h.in
