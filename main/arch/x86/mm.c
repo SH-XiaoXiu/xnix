@@ -23,7 +23,7 @@ void arch_get_memory_range(paddr_t *start, paddr_t *end) {
     }
 
     /* 没有内存信息,保守估计 4MB */
-    kprintf("Warning: No memory info from bootloader, assuming 4MB\n");
+    pr_warn("No memory info from bootloader, assuming 4MB");
     *end = 4 * 1024 * 1024;
 }
 

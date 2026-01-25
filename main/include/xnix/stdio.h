@@ -22,9 +22,34 @@ void kputs(const char *str);
 
 /**
  * @brief 内核日志输出
- * @param str 日志内容
+ * @param level 日志级别 (LOG_*)
+ * @param fmt 格式化字符串
  */
-void klog(const char *str);
+void klog(int level, const char *fmt, ...);
+
+/* 日志级别定义 */
+#define LOG_NONE 0
+#define LOG_ERR  1 /* 错误条件 */
+#define LOG_WARN 2 /* 警告条件 */
+#define LOG_INFO 3 /* 信息性消息 */
+#define LOG_DBG  4 /* 调试级消息 */
+#define LOG_OK   5 /* 成功消息 */
+
+#include <xnix/config.h>
+
+/* 便捷日志宏 */
+#define pr_err(fmt, ...)  klog(LOG_ERR, fmt, ##__VA_ARGS__)
+#define pr_warn(fmt, ...) klog(LOG_WARN, fmt, ##__VA_ARGS__)
+#define pr_info(fmt, ...) klog(LOG_INFO, fmt, ##__VA_ARGS__)
+#define pr_ok(fmt, ...)   klog(LOG_OK, fmt, ##__VA_ARGS__)
+
+#ifdef CFG_DEBUG
+#define pr_debug(fmt, ...) klog(LOG_DBG, fmt, ##__VA_ARGS__)
+#else
+#define pr_debug(fmt, ...) \
+    do {                   \
+    } while (0)
+#endif
 
 /**
  * @brief 格式化输出
@@ -37,5 +62,12 @@ void klog(const char *str);
  * @param ... 可变参数
  */
 void kprintf(const char *fmt, ...);
+
+/**
+ * @brief 核心格式化输出 (va_list版本)
+ * @param fmt 格式化字符串
+ * @param args 参数列表
+ */
+void vkprintf(const char *fmt, __builtin_va_list args);
 
 #endif

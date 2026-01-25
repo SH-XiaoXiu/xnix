@@ -117,26 +117,27 @@ void kernel_main(void) {
 
     /* 初始化架构(GDT/IDT) */
     arch_init();
-    kprintf("%G[OK]%N GDT/IDT initialized\n");
+    pr_ok("GDT/IDT initialized");
 
     /* 初始化内存管理 */
     mm_init();
-    kprintf("%G[OK]%N Memory manager initialized\n");
+    pr_ok("Memory manager initialized");
 
     /* 初始化中断控制器 */
     irqchip_init();
-    kprintf("%G[OK]%N IRQ chip initialized\n");
+    pr_ok("IRQ chip initialized");
 
     /* 初始化进程管理 */
     process_init();
-    kprintf("%G[OK]%N Process manager initialized\n");
+    pr_ok("Process manager initialized");
 
     /* 初始化 IPC 子系统 */
     ipc_init();
-    kprintf("%G[OK]%N IPC subsystem initialized\n");
+    pr_ok("IPC subsystem initialized");
 
     /* 初始化调度器 */
     sched_init();
+    pr_ok("Scheduler initialized");
 
     /* 创建 IPC 测试对象 */
     g_test_notif = notification_create();
@@ -146,21 +147,21 @@ void kernel_main(void) {
         thread_create("ipc_worker_3", task_ipc_worker, (void *)3);
         thread_create("ipc_master", task_ipc_master, NULL);
     } else {
-        kprintf("%R[Error]%N Failed to create notification object!\n");
+        pr_err("Failed to create notification object!");
     }
 
     // thread_create("memtest", task_memtest, NULL);
     thread_create("task_a", task_a, NULL);
     thread_create("task_b", task_b, NULL);
-    kprintf("%G[OK]%N Threads created\n");
+    pr_info("Threads created");
 
     /* 设置定时器回调并初始化 */
     timer_set_callback(sched_tick);
     timer_init(CFG_SCHED_HZ); /* 使用配置的频率 */
-    kprintf("%G[OK]%N Timer initialized (%d Hz)\n", CFG_SCHED_HZ);
+    pr_ok("Timer initialized (%d Hz)", CFG_SCHED_HZ);
 
     /* 开启中断 */
-    kprintf("%Y[INFO]%N Enabling interrupts...\n");
+    pr_info("Enabling interrupts...");
     cpu_irq_enable();
 
     /* 主循环 */

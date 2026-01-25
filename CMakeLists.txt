@@ -34,6 +34,7 @@ set(CFG_IPC_MSG_CAPS_MAX 4)      # 消息中最多能力句柄数
 option(CFG_DEBUG_MM "Debug memory manager" OFF)
 option(CFG_DEBUG_SCHED "Debug scheduler" OFF)
 option(CFG_DEBUG_IPC "Debug IPC" OFF)
+option(CFG_DEBUG "Enable kernel debug logging" ON)
 
 configure_file(
         ${CMAKE_SOURCE_DIR}/main/include/xnix/config.h.in

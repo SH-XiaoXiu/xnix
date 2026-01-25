@@ -29,4 +29,7 @@
 #cmakedefine CFG_DEBUG_SCHED
 #cmakedefine CFG_DEBUG_IPC
 
+/* 全局调试开关 */
+#cmakedefine CFG_DEBUG
+
 #endif

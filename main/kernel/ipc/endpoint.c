@@ -7,6 +7,7 @@
 #include <kernel/ipc/endpoint.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/sched/sched.h>
+#include <xnix/debug.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/process.h>
@@ -354,5 +355,4 @@ void ipc_init(void) {
     cap_register_type(CAP_TYPE_ENDPOINT, endpoint_ref, endpoint_unref);
     /* 注册 Notification 类型的能力操作 */
     cap_register_type(CAP_TYPE_NOTIFICATION, notification_ref, notification_unref);
-    kprintf("ipc: initialized\n");
 }

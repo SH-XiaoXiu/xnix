@@ -8,6 +8,7 @@
 
 #include <arch/mmu.h>
 
+#include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
@@ -62,7 +63,7 @@ void page_alloc_init(void) {
     /* 清零 bitmap */
     memset(page_bitmap, 0, bitmap_bytes);
 
-    kprintf("Page allocator: %u pages (%u KB), bitmap %u pages at 0x%x\n", total_pages,
+    pr_info("Page allocator: %u pages (%u KB), bitmap %u pages at 0x%x", total_pages,
             total_pages * 4, bitmap_pages, (uint32_t)page_bitmap);
 }
 
@@ -124,11 +125,11 @@ void free_page(void *page) {
 
     paddr_t addr = (paddr_t)page;
     if (addr < memory_start || addr >= memory_end) {
-        kprintf("free_page: invalid address 0x%x\n", addr);
+        pr_err("free_page: invalid address 0x%x", addr);
         return;
     }
     if (addr % PAGE_SIZE != 0) {
-        kprintf("free_page: unaligned address 0x%x\n", addr);
+        pr_err("free_page: unaligned address 0x%x", addr);
         return;
     }
 
@@ -137,7 +138,7 @@ void free_page(void *page) {
 
     if (!bitmap_test(pfn)) {
         spin_unlock_irqrestore(&page_lock, flags);
-        kprintf("free_page: double free at 0x%x\n", addr);
+        pr_err("free_page: double free at 0x%x", addr);
         return;
     }
 

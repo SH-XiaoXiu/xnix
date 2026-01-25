@@ -9,6 +9,7 @@
 
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
+#include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 #include <xnix/sync.h>
@@ -147,13 +148,13 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
 
     struct thread *t = kzalloc(sizeof(struct thread));
     if (!t) {
-        kprintf("ERROR: Failed to allocate thread\n");
+        pr_err("Failed to allocate thread");
         return NULL;
     }
 
     t->stack = kmalloc(CFG_THREAD_STACK_SIZE);
     if (!t->stack) {
-        kprintf("ERROR: Failed to allocate stack\n");
+        pr_err("Failed to allocate stack");
         kfree(t);
         return NULL;
     }
@@ -176,7 +177,7 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
     cpu_id_t cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
     current_policy->enqueue(t, cpu);
 
-    kprintf("Thread %d '%s' created\n", t->tid, t->name);
+    pr_info("Thread %d '%s' created", t->tid, t->name);
     return t;
 }
 
@@ -217,12 +218,8 @@ void schedule(void) {
     if (!next) {
         /* 如果运行队列为空, 切换到 idle 线程 */
         if (!idle_thread) {
-            /* 尚未初始化 idle 线程, 这是一个严重错误, 但我们尝试死循环等待 */
-            kprintf("ERROR: idle_thread not initialized!\n");
-            spin_unlock_irqrestore(&sched_lock, flags);
-            while (1) {
-                cpu_halt();
-            }
+            /* 尚未初始化 idle 线程, 这是一个严重错误 */
+            panic("idle_thread not initialized!");
         }
         next = idle_thread;
     }
@@ -283,7 +280,7 @@ void sched_init(void) {
     }
 
     sched_set_policy(&sched_policy_rr);
-    kprintf("Scheduler initialized\n");
+    pr_info("Scheduler initialized");
 
     /* 创建 idle 线程 */
     /* 注意: idle 线程不加入运行队列, 也不需要策略 */
@@ -301,10 +298,10 @@ void sched_init(void) {
         if (idle_thread->stack) {
             thread_init_stack(idle_thread, idle_task, NULL);
         } else {
-            kprintf("ERROR: Failed to allocate idle stack\n");
+            panic("Failed to allocate idle stack");
         }
     } else {
-        kprintf("ERROR: Failed to allocate idle thread\n");
+        panic("Failed to allocate idle thread");
     }
 }
 
@@ -314,7 +311,7 @@ void sched_set_policy(struct sched_policy *policy) {
     }
     current_policy = policy;
     if (policy) {
-        kprintf("Sched policy: %s\n", policy->name);
+        pr_info("Sched policy: %s", policy->name);
     }
 }
 
@@ -523,7 +520,7 @@ void thread_exit(int code) {
     if (current) {
         current->state     = THREAD_EXITED;
         current->exit_code = code;
-        kprintf("Thread %d '%s' exited with code %d\n", current->tid, current->name, code);
+        pr_info("Thread %d '%s' exited with code %d", current->tid, current->name, code);
         sched_destroy_current();
     }
     schedule();

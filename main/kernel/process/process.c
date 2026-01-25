@@ -6,6 +6,7 @@
 #include <kernel/capability/capability.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
+#include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 
@@ -40,7 +41,7 @@ void process_subsystem_init(void) {
 
     process_list = &kernel_process;
 
-    kprintf("process: initialized (kernel PID 0)\n");
+    pr_info("Process subsystem initialized (kernel PID 0)");
 }
 
 pid_t process_alloc_pid(void) {

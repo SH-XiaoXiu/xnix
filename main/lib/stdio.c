@@ -26,10 +26,6 @@ void kputs(const char *str) {
     }
 }
 
-void klog(const char *str) {
-    kputs(str);
-}
-
 static void print_uint(uint32_t num, int base) {
     static const char digits[] = "0123456789abcdef";
     char              buf[32];
@@ -65,13 +61,10 @@ static inline void print_hex_padded(uint32_t num, int width) {
     }
 }
 
-void kprintf(const char *fmt, ...) {
+void vkprintf(const char *fmt, __builtin_va_list args) {
     if (!fmt) {
         return;
     }
-
-    __builtin_va_list args;
-    __builtin_va_start(args, fmt);
 
     while (*fmt) {
         if (*fmt != '%') {
@@ -139,6 +132,47 @@ void kprintf(const char *fmt, ...) {
         }
         fmt++;
     }
+}
 
+void kprintf(const char *fmt, ...) {
+    __builtin_va_list args;
+    __builtin_va_start(args, fmt);
+    vkprintf(fmt, args);
     __builtin_va_end(args);
+}
+
+void klog(int level, const char *fmt, ...) {
+    switch (level) {
+    case LOG_ERR:
+        console_set_color(KCOLOR_RED);
+        kputs("[ERR] ");
+        break;
+    case LOG_WARN:
+        console_set_color(KCOLOR_YELLOW);
+        kputs("[WARN] ");
+        break;
+    case LOG_INFO:
+        console_set_color(KCOLOR_WHITE);
+        kputs("[INFO] ");
+        break;
+    case LOG_OK:
+        console_set_color(KCOLOR_GREEN);
+        kputs("[OK]   ");
+        console_reset_color();
+        break;
+    case LOG_DBG:
+        console_set_color(KCOLOR_BLUE);
+        kputs("[DBG] ");
+        break;
+    default:
+        break;
+    }
+
+    __builtin_va_list args;
+    __builtin_va_start(args, fmt);
+    vkprintf(fmt, args);
+    __builtin_va_end(args);
+    /* 重置颜色并确保换行 */
+    console_reset_color();
+    kputc('\n');
 }
