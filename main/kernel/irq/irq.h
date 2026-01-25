@@ -4,7 +4,7 @@
  * @author XiaoXiu
  * @date 2026-01-22
  *
- * IRQ 子系统负责：
+ * IRQ 子系统负责:
  * 管理中断处理函数表
  * 分发中断到具体 handler
  * 提供中断控制器硬件抽象层
@@ -28,7 +28,7 @@ typedef void (*irq_handler_t)(struct irq_frame *frame);
 /**
  * @brief 中断控制器硬件抽象接口
  *
- * 具体的中断控制器驱动（PIC、APIC 等）需实现这些操作
+ * 具体的中断控制器驱动(PIC,APIC 等)需实现这些操作
  */
 struct irqchip_ops {
     const char *name;
@@ -41,7 +41,7 @@ struct irqchip_ops {
 /**
  * @brief 设置中断控制器
  *
- * 由平台驱动（PIC、APIC 等）调用，注册硬件操作接口
+ * 由平台驱动(PIC,APIC 等)调用,注册硬件操作接口
  */
 void irq_set_chip(const struct irqchip_ops *ops);
 
@@ -78,7 +78,7 @@ void irq_set_handler(uint8_t irq, irq_handler_t handler);
 /**
  * @brief IRQ 分发
  *
- * 由架构层中断入口调用，分发到具体的处理函数
+ * 由架构层中断入口调用,分发到具体的处理函数
  *
  * @param irq IRQ 编号
  * @param frame 中断帧

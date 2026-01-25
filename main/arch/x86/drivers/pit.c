@@ -6,9 +6,9 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/irq/irq.h>
-
 #include <drivers/timer.h>
+
+#include <kernel/irq/irq.h>
 
 #define PIT_CHANNEL0 0x40
 #define PIT_CMD      0x43

@@ -9,9 +9,9 @@ struct thread;
 /**
  * Notification 对象
  *
- * 用于异步事件通知。
- * 发送者设置 pending_bits (OR 操作)。
- * 接收者等待 pending_bits 非零，然后清除并返回。
+ * 用于异步事件通知.
+ * 发送者设置 pending_bits (OR 操作).
+ * 接收者等待 pending_bits 非零,然后清除并返回.
  */
 struct ipc_notification {
     spinlock_t     lock;

@@ -15,7 +15,7 @@
  * 能力句柄, 类似颁发了一个token
  */
 typedef uint32_t cap_handle_t;
-#define CAP_HANDLE_INVALID ((cap_handle_t)-1)
+#define CAP_HANDLE_INVALID ((cap_handle_t) - 1)
 
 /**
  * 能力权限位

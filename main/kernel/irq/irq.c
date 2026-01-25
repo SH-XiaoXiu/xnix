@@ -5,12 +5,11 @@
  * @date 2026-01-22
  */
 
+#include <asm/irq.h>
 #include <kernel/irq/irq.h>
 
-#include <asm/irq.h>
-
-static const struct irqchip_ops *current_chip                 = NULL;
-static irq_handler_t             irq_handlers[ARCH_NR_IRQS]   = {0};
+static const struct irqchip_ops *current_chip               = NULL;
+static irq_handler_t             irq_handlers[ARCH_NR_IRQS] = {0};
 
 void irq_set_chip(const struct irqchip_ops *ops) {
     current_chip = ops;
@@ -50,7 +49,7 @@ void irq_dispatch(uint8_t irq, struct irq_frame *frame) {
     if (irq < ARCH_NR_IRQS && irq_handlers[irq]) {
         irq_handlers[irq](frame);
     }
-    /* IRQ 0 (timer) 的 EOI 由 sched_tick 负责，避免上下文切换时双重 EOI */
+    /* IRQ 0 (timer) 的 EOI 由 sched_tick 负责,避免上下文切换时双重 EOI */
     if (irq != 0) {
         irq_eoi(irq);
     }

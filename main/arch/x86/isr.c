@@ -37,7 +37,7 @@ void isr_handler(struct irq_frame *frame) {
     klog(LOG_ERR, "DS:  0x%04x      CS:  0x%04x      EFLAGS: 0x%08x", frame->ds, frame->cs,
          frame->eflags);
 
-    /* 如果是页错误 (Page Fault, #14)，打印 CR2 */
+    /* 如果是页错误 (Page Fault, #14),打印 CR2 */
     if (frame->int_no == 14) {
         uint32_t cr2;
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));

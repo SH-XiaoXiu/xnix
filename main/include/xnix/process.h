@@ -18,7 +18,7 @@
 typedef struct process *process_t;
 
 typedef uint32_t pid_t;
-#define PID_INVALID ((pid_t)-1)
+#define PID_INVALID ((pid_t) - 1)
 
 /**
  * 进程状态

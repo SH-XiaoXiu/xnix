@@ -8,9 +8,9 @@
 #include <arch/cpu.h>
 
 #include <drivers/console.h>
-#include <drivers/irqchip.h>
 #include <drivers/timer.h>
 
+#include <kernel/irq/irq.h>
 #include <xnix/config.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
@@ -124,8 +124,8 @@ void kernel_main(void) {
     pr_ok("Memory manager initialized");
 
     /* 初始化中断控制器 */
-    irqchip_init();
-    pr_ok("IRQ chip initialized");
+    irq_init();
+    pr_ok("IRQ subsystem initialized");
 
     /* 初始化进程管理 */
     process_init();

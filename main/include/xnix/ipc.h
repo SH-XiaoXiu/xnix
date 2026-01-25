@@ -107,7 +107,7 @@ int ipc_reply(struct ipc_message *reply);
  * 异步 IPC
  */
 /**
- * 异步发送（消息入队，立即返回）
+ * 异步发送(消息入队,立即返回)
  *
  * @param ep_handle 目标 Endpoint
  * @param msg       消息内容
@@ -116,7 +116,7 @@ int ipc_reply(struct ipc_message *reply);
 int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg);
 
 /**
- * 等待多个对象（Endpoint 或 Notification）
+ * 等待多个对象(Endpoint 或 Notification)
  */
 #define IPC_WAIT_MAX 8
 struct ipc_wait_set {
@@ -129,7 +129,7 @@ struct ipc_wait_set {
  *
  * @param set        等待集合
  * @param timeout_ms 超时时间
- * @return 就绪的句柄，超时返回 CAP_HANDLE_INVALID
+ * @return 就绪的句柄,超时返回 CAP_HANDLE_INVALID
  */
 cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms);
 
@@ -141,7 +141,7 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms);
 cap_handle_t notification_create(void);
 
 /**
- * 发送信号（非阻塞，设置 bit）
+ * 发送信号(非阻塞,设置 bit)
  *
  * @param notif_handle Notification 句柄
  * @param bits         要设置的位
@@ -149,7 +149,7 @@ cap_handle_t notification_create(void);
 void notification_signal(cap_handle_t notif_handle, uint32_t bits);
 
 /**
- * 等待信号（阻塞直到有信号）
+ * 等待信号(阻塞直到有信号)
  *
  * @param notif_handle Notification 句柄
  * @return 收到的位

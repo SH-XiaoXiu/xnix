@@ -6,7 +6,6 @@
 #include <arch/cpu.h>
 
 #include <kernel/irq/irq.h>
-
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
@@ -432,7 +431,7 @@ void sched_block(void *wait_chan) {
     schedule();
 
     /* 被唤醒后从这里继续执行 */
-    /* 清除 pending_wakeup 标志，防止下次 block 误判 */
+    /* 清除 pending_wakeup 标志,防止下次 block 误判 */
     current->pending_wakeup = false;
 }
 
@@ -541,14 +540,14 @@ void sched_tick(void) {
         if (current_policy) {
             struct thread *next = current_policy->pick_next();
             if (next) {
-                /* 有可运行线程，切换过去 */
+                /* 有可运行线程,切换过去 */
                 irq_eoi(0);
                 schedule();
                 in_interrupt = false;
                 return;
             }
         }
-        /* 没有可运行线程，idle 继续运行 */
+        /* 没有可运行线程,idle 继续运行 */
         in_interrupt = false;
         irq_eoi(0);
         return;

@@ -52,8 +52,7 @@ void cap_table_destroy(struct cap_table *table);
  * @param rights 权限
  * @return 句柄,失败返回 CAP_HANDLE_INVALID
  */
-cap_handle_t cap_alloc(struct process *proc, cap_type_t type, void *object,
-                       cap_rights_t rights);
+cap_handle_t cap_alloc(struct process *proc, cap_type_t type, void *object, cap_rights_t rights);
 
 /**
  * 释放句柄
@@ -84,8 +83,8 @@ void *cap_lookup(struct process *proc, cap_handle_t handle, cap_type_t expected_
  * @param new_rights 新权限(必须 <= 原权限)
  * @return 目标进程中的新句柄,失败返回 CAP_HANDLE_INVALID
  */
-cap_handle_t cap_duplicate_to(struct process *src, cap_handle_t src_handle,
-                              struct process *dst, cap_rights_t new_rights);
+cap_handle_t cap_duplicate_to(struct process *src, cap_handle_t src_handle, struct process *dst,
+                              cap_rights_t new_rights);
 
 /**
  * 对象引用计数(由各对象类型实现)

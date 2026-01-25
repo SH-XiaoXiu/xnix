@@ -26,7 +26,7 @@ static void dump_stack(void) {
         /* 获取上一个栈帧的 EBP */
         uint32_t *next_ebp = (uint32_t *)*ebp;
 
-        /* 简单的有效性检查，防止死循环或访问非法内存 */
+        /* 简单的有效性检查,防止死循环或访问非法内存 */
         if (next_ebp <= ebp || (uint32_t)next_ebp < 0x100000) {
             break;
         }
@@ -35,7 +35,7 @@ static void dump_stack(void) {
 }
 
 void panic(const char *fmt, ...) {
-    /* 立即关中断，防止干扰 */
+    /* 立即关中断,防止干扰 */
     cpu_irq_disable();
 
     /* 红色分割线 */
