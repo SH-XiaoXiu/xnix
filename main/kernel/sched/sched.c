@@ -75,6 +75,20 @@ struct thread **sched_get_blocked_list(void) {
     return &blocked_list;
 }
 
+struct thread *sched_lookup_blocked(tid_t tid) {
+    uint32_t       flags = spin_lock_irqsave(&sched_lock);
+    struct thread *t     = blocked_list;
+    while (t) {
+        if (t->tid == tid) {
+            spin_unlock_irqrestore(&sched_lock, flags);
+            return t;
+        }
+        t = t->next;
+    }
+    spin_unlock_irqrestore(&sched_lock, flags);
+    return NULL;
+}
+
 struct sched_policy *sched_get_policy(void) {
     return current_policy;
 }

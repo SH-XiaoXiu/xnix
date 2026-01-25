@@ -61,6 +61,16 @@ struct thread {
     void    *wait_chan;   /* 阻塞在什么上 */
     uint64_t wakeup_tick; /* 睡眠唤醒时间(0 表示不在睡眠) */
     int      exit_code;
+
+    /* IPC 状态 */
+    /* 一个线程在同一时刻只允许一个 IPC 操作:
+     * ipc_req_msg   - 当前线程正在发送的消息(send/call),内核保证一次 IPC 操作完成前不会覆盖
+     * ipc_reply_msg - 当前线程等待接收的回复(call/receive),内核保证在消息处理完成前不会被覆盖
+     */
+    struct ipc_message *ipc_req_msg;   /* 发送消息缓冲区(send/call) */
+    struct ipc_message *ipc_reply_msg; /* 接收回复缓冲区(call/receive) */
+
+    tid_t ipc_peer; /* 通信对端 TID 主要是用来支持小消息同步 IPC(同步 RPC / call 模式) */
 };
 
 /* CPU 位图操作 */
@@ -154,6 +164,11 @@ void sched_blocked_list_remove(struct thread *t);
  * 获取阻塞链表头指针(用于遍历)
  */
 struct thread **sched_get_blocked_list(void);
+
+/**
+ * 查找阻塞的线程(用于 IPC reply)
+ */
+struct thread *sched_lookup_blocked(tid_t tid);
 
 /*
  * 内置策略声明

@@ -12,6 +12,7 @@
 #include <drivers/timer.h>
 
 #include <xnix/config.h>
+#include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/process.h>
 #include <xnix/stdio.h>
@@ -90,6 +91,10 @@ void kernel_main(void) {
     /* 初始化进程管理 */
     process_init();
     kprintf("%G[OK]%N Process manager initialized\n");
+
+    /* 初始化 IPC 子系统 */
+    ipc_init();
+    kprintf("%G[OK]%N IPC subsystem initialized\n");
 
     /* 初始化调度器 */
     sched_init();

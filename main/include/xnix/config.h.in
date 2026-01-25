@@ -9,13 +9,24 @@
 /* 调度器 */
 #define CFG_SCHED_HZ          @CFG_SCHED_HZ@
 #define CFG_THREAD_STACK_SIZE @CFG_THREAD_STACK_SIZE@
+#define CFG_DEF_TIME_SLICE    @CFG_DEF_TIME_SLICE@
+
+/* 资源限制 */
+#define CFG_MAX_PROCESSES     @CFG_MAX_PROCESSES@
+#define CFG_MAX_THREADS       @CFG_MAX_THREADS@
 
 /* 驱动 */
 #define CFG_MAX_CONSOLES      @CFG_MAX_CONSOLES@
 #define CFG_MAX_IRQS          @CFG_MAX_IRQS@
 
+/* IPC */
+#define CFG_CAP_TABLE_SIZE    @CFG_CAP_TABLE_SIZE@
+#define CFG_IPC_MSG_REGS      @CFG_IPC_MSG_REGS@
+#define CFG_IPC_MSG_CAPS_MAX  @CFG_IPC_MSG_CAPS_MAX@
+
 /* 调试开关 */
 #cmakedefine CFG_DEBUG_MM
 #cmakedefine CFG_DEBUG_SCHED
+#cmakedefine CFG_DEBUG_IPC
 
 #endif

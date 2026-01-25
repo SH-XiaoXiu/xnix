@@ -13,9 +13,9 @@
 #include <xnix/sync.h>
 #include <xnix/types.h>
 
-struct cap_table;    /* 前向声明 */
-struct thread;       /* 前向声明 */
-struct page_table;   /* 前向声明 */
+struct cap_table;  /* 前向声明 */
+struct thread;     /* 前向声明 */
+struct page_table; /* 前向声明 */
 
 /**
  * 进程控制块 (PCB)
@@ -40,8 +40,8 @@ struct process {
 
     /* 父子关系 */
     struct process *parent;
-    struct process *children;      /* 子进程链表 */
-    struct process *next_sibling;  /* 兄弟进程链表 */
+    struct process *children;     /* 子进程链表 */
+    struct process *next_sibling; /* 兄弟进程链表 */
 
     /* 进程链表 */
     struct process *next; /* 全局进程链表 */
@@ -50,7 +50,7 @@ struct process {
 };
 
 /**
- * 初始化进程管理子系统
+ * 初始化进程管理
  */
 void process_subsystem_init(void);
 
