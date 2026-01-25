@@ -6,6 +6,7 @@
 #include <arch/cpu.h>
 
 #include <kernel/irq/irq.h>
+#include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
@@ -13,6 +14,7 @@
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
+#include <xnix/vmm.h>
 
 /* 上下文切换函数(汇编实现) */
 extern void context_switch(struct thread_context *old, struct thread_context *new);

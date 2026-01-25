@@ -58,6 +58,7 @@ struct thread {
 
     struct thread *next;      /* 运行队列/阻塞队列链接 */
     struct thread *wait_next; /* 特定等待队列链接 (如 Notification, Mutex) */
+    struct thread *proc_next; /* 进程线程链表链接 */
 
     void    *wait_chan;   /* 阻塞在什么上 */
     uint64_t wakeup_tick; /* 睡眠唤醒时间(0 表示不在睡眠) */

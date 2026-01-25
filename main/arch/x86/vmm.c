@@ -30,17 +30,17 @@ static uint32_t *kernel_pd = NULL;
 
 /*
  * 临时映射窗口管理
- * 
+ *
  * PD[1022] 作为临时映射专用的页目录项.
- * 
+ *
  * 虚拟地址范围: 0xFF800000 - 0xFFBFFFFF (4MB)
- * 
+ *
  * 支持多个窗口,通过 spinlock 保护分配.
  * 为了简单,我们目前支持两个窗口,使用简单的位掩码或锁保护.
- * 
+ *
  * TEMP_WINDOW_1: 0xFFBFF000 (PT[1023]) - 用于映射 PD
  * TEMP_WINDOW_2: 0xFFBFE000 (PT[1022]) - 用于映射 PT
- * 
+ *
  * 注意:这只是一个简单的实现,如果是真正的多核系统,应该使用 per-CPU 窗口 //TODO per cpu模块
  * 或者更复杂的分配器.目前我们加全局锁.
  */
@@ -74,7 +74,7 @@ static uint32_t vmm_flags_to_x86(uint32_t flags) {
  * 映射任意物理页到临时窗口
  * window_id: 1 或 2
  * 返回虚拟地址
- * 
+ *
  * 注意:必须先持有 temp_map_lock!
  */
 static void *map_temp_page(int window_id, paddr_t paddr) {
@@ -203,32 +203,32 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
            无论是否当前 PD,我们都需要一个能访问 new_pt_phys 的虚拟地址.
            如果 is_current,我们其实可以用递归映射访问吗?
            如果 PDE 还没设置,递归映射还不能用.
-           
+
            为了统一,我们总是使用临时窗口 2 来清零新页表.
            注意:如果是 is_current,我们需要先加锁!
            哎呀,is_current 时没加锁.
-           
+
            修正:vmm_map_page 总是加锁使用临时窗口 2 来清零新页表是安全的吗?
            如果是 is_current,我们没有持有 temp_map_lock.
-           
+
            为了简化逻辑和安全,建议:如果是 is_current,也获取锁来使用临时窗口清零.
            或者:vmm_init 已经建立了 1:1 映射,如果 alloc_page 返回低端内存,可以直接访问?
            不,我们不能依赖 1:1 映射.
-           
+
            方案:总是获取锁.
         */
-        
+
         uint32_t temp_irq_flags = 0;
         if (is_current) {
-             temp_irq_flags = spin_lock_irqsave(&temp_map_lock);
+            temp_irq_flags = spin_lock_irqsave(&temp_map_lock);
         }
-        
+
         void *ptr = map_temp_page(2, (paddr_t)new_pt_phys);
         memset(ptr, 0, PAGE_SIZE);
         unmap_temp_page(2);
-        
+
         if (is_current) {
-             spin_unlock_irqrestore(&temp_map_lock, temp_irq_flags);
+            spin_unlock_irqrestore(&temp_map_lock, temp_irq_flags);
         }
 
         /* 设置 PDE 权限: 如果请求是用户态, PDE 也必须是用户态 */
@@ -236,7 +236,7 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
         if (flags & VMM_PROT_USER) {
             pde_flags |= PDE_USER;
         }
-        
+
         pd_virt[pd_idx] = ((uint32_t)new_pt_phys) | pde_flags;
     }
 
@@ -321,28 +321,28 @@ void *vmm_create_pd(void) {
     }
 
     /* 映射新 PD 到窗口 1 进行初始化 */
-    uint32_t irq_flags = spin_lock_irqsave(&temp_map_lock);
-    uint32_t *pd_virt = (uint32_t *)map_temp_page(1, (paddr_t)pd_phys);
+    uint32_t  irq_flags = spin_lock_irqsave(&temp_map_lock);
+    uint32_t *pd_virt   = (uint32_t *)map_temp_page(1, (paddr_t)pd_phys);
     memset(pd_virt, 0, PAGE_SIZE);
 
-    /* 
-     * 动态拷贝内核映射 
-     * 遍历 kernel_pd,复制所有 Present 且非用户态的 PDE 
+    /*
+     * 动态拷贝内核映射
+     * 遍历 kernel_pd,复制所有 Present 且非用户态的 PDE
      * 这样可以自适应内核大小变化
      */
-    /* 我们需要映射 kernel_pd 吗? 
+    /* 我们需要映射 kernel_pd 吗?
        如果当前是内核线程,kernel_pd 已经加载到 CR3 (或通过递归映射访问)
        kernel_pd 总是驻留内存.如果它不是当前 PD,我们怎么访问?
        kernel_pd 是全局变量,存的是物理地址.
-       
+
        如果 kernel_pd == current_pd,可以通过递归映射访问 (0xFFFFF000).
        如果 kernel_pd != current_pd,我们需要把它映射到窗口 2.
     */
-    
+
     uint32_t current_cr3;
     asm volatile("mov %%cr3, %0" : "=r"(current_cr3));
     bool kernel_is_current = ((uint32_t)kernel_pd == current_cr3);
-    
+
     uint32_t *kpd_virt;
     if (kernel_is_current) {
         kpd_virt = (uint32_t *)0xFFFFF000;
@@ -355,7 +355,7 @@ void *vmm_create_pd(void) {
             pd_virt[i] = kpd_virt[i];
         }
     }
-    
+
     if (!kernel_is_current) {
         unmap_temp_page(2);
     }
@@ -377,7 +377,7 @@ void vmm_destroy_pd(void *pd_phys) {
     }
 
     uint32_t irq_flags = spin_lock_irqsave(&temp_map_lock);
-    
+
     /* 映射 PD 到窗口 1 */
     uint32_t *pd_virt = (uint32_t *)map_temp_page(1, (paddr_t)pd_phys);
 
@@ -394,7 +394,7 @@ void vmm_destroy_pd(void *pd_phys) {
 
     unmap_temp_page(1);
     spin_unlock_irqrestore(&temp_map_lock, irq_flags);
-    
+
     free_page(pd_phys);
 }
 
@@ -446,23 +446,35 @@ paddr_t vmm_get_paddr(void *pd_phys, vaddr_t vaddr) {
 }
 
 void vmm_switch_pd(void *pd_phys) {
-    load_cr3((uint32_t)pd_phys);
+    uint32_t current_cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(current_cr3));
+
+    if (current_cr3 != (uint32_t)pd_phys) {
+        load_cr3((uint32_t)pd_phys);
+    }
 }
 
 void vmm_page_fault(uint32_t err_code, vaddr_t vaddr) {
     uint32_t cr3;
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
-    
+
     const char *reason;
-    if (!(err_code & 0x01)) reason = "Not Present";
-    else if (err_code & 0x02) reason = "Write Violation";
-    else if (err_code & 0x04) reason = "User Access Violation";
-    else if (err_code & 0x08) reason = "Reserved Bit Violation";
-    else if (err_code & 0x10) reason = "Instruction Fetch";
-    else reason = "Unknown";
+    if (!(err_code & 0x01)) {
+        reason = "Not Present";
+    } else if (err_code & 0x02) {
+        reason = "Write Violation";
+    } else if (err_code & 0x04) {
+        reason = "User Access Violation";
+    } else if (err_code & 0x08) {
+        reason = "Reserved Bit Violation";
+    } else if (err_code & 0x10) {
+        reason = "Instruction Fetch";
+    } else {
+        reason = "Unknown";
+    }
 
     panic("Page Fault at 0x%x\n"
           "Error Code: 0x%x (%s)\n"
-          "CR3: 0x%x", 
+          "CR3: 0x%x",
           vaddr, err_code, reason, cr3);
 }

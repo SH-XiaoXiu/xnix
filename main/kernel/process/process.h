@@ -27,8 +27,8 @@ struct process {
     process_state_t state;
     int             exit_code;
 
-    /* 地址空间(暂时为 NULL,后续实现虚拟内存时填充) */
-    struct page_table *page_table;
+    /* 地址空间 (页目录物理地址) */
+    void *page_dir_phys;
 
     /* 能力表 */
     struct cap_table *cap_table;

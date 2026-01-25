@@ -11,6 +11,7 @@
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
+#include <xnix/vmm.h>
 
 #include "arch/cpu.h"
 
@@ -39,19 +40,19 @@ void process_subsystem_init(void) {
     /* 占用 PID 0 */
     pid_bitmap[0] |= 1;
 
-    kernel_process.name         = "kernel";
-    kernel_process.state        = PROCESS_RUNNING;
-    kernel_process.exit_code    = 0;
-    kernel_process.page_table   = NULL;
-    kernel_process.cap_table    = cap_table_create();
-    kernel_process.threads      = NULL;
-    kernel_process.thread_count = 0;
-    kernel_process.thread_lock  = mutex_create();
-    kernel_process.parent       = NULL;
-    kernel_process.children     = NULL;
-    kernel_process.next_sibling = NULL;
-    kernel_process.next         = NULL;
-    kernel_process.refcount     = 1;
+    kernel_process.name          = "kernel";
+    kernel_process.state         = PROCESS_RUNNING;
+    kernel_process.exit_code     = 0;
+    kernel_process.page_dir_phys = NULL; /* 内核进程使用当前(或内核)页表 */
+    kernel_process.cap_table     = cap_table_create();
+    kernel_process.threads       = NULL;
+    kernel_process.thread_count  = 0;
+    kernel_process.thread_lock   = mutex_create();
+    kernel_process.parent        = NULL;
+    kernel_process.children      = NULL;
+    kernel_process.next_sibling  = NULL;
+    kernel_process.next          = NULL;
+    kernel_process.refcount      = 1;
 
     process_list = &kernel_process;
 
@@ -200,10 +201,18 @@ process_t process_create(const char *name) {
         return NULL;
     }
 
-    proc->name         = name;
-    proc->state        = PROCESS_RUNNING;
-    proc->exit_code    = 0;
-    proc->page_table   = NULL;
+    proc->name      = name;
+    proc->state     = PROCESS_RUNNING;
+    proc->exit_code = 0;
+
+    /* 创建地址空间 */
+    proc->page_dir_phys = vmm_create_pd();
+    if (!proc->page_dir_phys) {
+        free_pid(proc->pid);
+        kfree(proc);
+        return NULL;
+    }
+
     proc->cap_table    = cap_table_create();
     proc->threads      = NULL;
     proc->thread_count = 0;
@@ -214,6 +223,9 @@ process_t process_create(const char *name) {
     proc->refcount     = 1;
 
     if (!proc->cap_table || !proc->thread_lock) {
+        if (proc->page_dir_phys) {
+            vmm_destroy_pd(proc->page_dir_phys);
+        }
         if (proc->cap_table) {
             cap_table_destroy(proc->cap_table);
         }
@@ -254,8 +266,9 @@ void process_add_thread(struct process *proc, struct thread *t) {
 
     mutex_lock(proc->thread_lock);
 
-    t->next       = proc->threads;
+    t->proc_next  = proc->threads;
     proc->threads = t;
+    t->owner      = proc;
     proc->thread_count++;
 
     mutex_unlock(proc->thread_lock);
@@ -271,12 +284,13 @@ void process_remove_thread(struct process *proc, struct thread *t) {
     struct thread **pp = &proc->threads;
     while (*pp) {
         if (*pp == t) {
-            *pp     = t->next;
-            t->next = NULL;
+            *pp          = t->proc_next;
+            t->proc_next = NULL;
+            t->owner     = NULL;
             proc->thread_count--;
             break;
         }
-        pp = &(*pp)->next;
+        pp = &(*pp)->proc_next;
     }
 
     mutex_unlock(proc->thread_lock);
