@@ -26,14 +26,20 @@ void kputs(const char *str) {
     }
 }
 
-static void print_uint(uint32_t num, int base) {
+static void print_padding(int width, int len, int pad_zero) {
+    char padc = pad_zero ? '0' : ' ';
+    while (width-- > len) {
+        kputc(padc);
+    }
+}
+
+static int utoa_buf(uint32_t num, int base, char *buf) {
     static const char digits[] = "0123456789abcdef";
-    char              buf[32];
-    int               i = 0;
+    int i = 0;
 
     if (num == 0) {
-        kputc('0');
-        return;
+        buf[i++] = '0';
+        return i;
     }
 
     while (num > 0) {
@@ -41,17 +47,36 @@ static void print_uint(uint32_t num, int base) {
         num /= base;
     }
 
-    while (i > 0) {
-        kputc(buf[--i]);
+    for (int j = 0; j < i / 2; j++) {
+        char t = buf[j];
+        buf[j] = buf[i - j - 1];
+        buf[i - j - 1] = t;
+    }
+    return i;
+}
+
+static int itoa_buf(int32_t num, char *buf) {
+    if (num < 0) {
+        buf[0] = '-';
+        return 1 + utoa_buf((uint32_t)(-(int64_t)num), 10, buf + 1);
+    }
+    return utoa_buf((uint32_t)num, 10, buf);
+}
+
+static void print_uint(uint32_t num, int base) {
+    char buf[32];
+    int len = utoa_buf(num, base, buf);
+    for (int i = 0; i < len; i++) {
+        kputc(buf[i]);
     }
 }
 
 static void print_int(int32_t num) {
-    if (num < 0) {
-        kputc('-');
-        num = -num;
+    char buf[32];
+    int len = itoa_buf(num, buf);
+    for (int i = 0; i < len; i++) {
+        kputc(buf[i]);
     }
-    print_uint((uint32_t)num, 10);
 }
 
 static inline void print_hex_padded(uint32_t num, int width) {
@@ -73,23 +98,68 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
         }
 
         fmt++;
+        /* 处理宽度修饰符*/
+        int width = 0;
+        int pad_zero = 0;
+        if (*fmt == '0') {
+            pad_zero = 1;
+            fmt++;
+        }
+        while (*fmt >= '0' && *fmt <= '9') {
+            width = width * 10 + (*fmt - '0');
+            fmt++;
+        }
+
         switch (*fmt) {
-        case 's':
-            kputs(__builtin_va_arg(args, const char *) ?: "(null)");
+        case 's': {
+            const char *s = __builtin_va_arg(args, const char *) ?: "(null)";
+            int len = 0;
+            while (s[len]) len++;
+            print_padding(width, len, 0);
+            kputs(s);
             break;
-        case 'c':
-            kputc((char)__builtin_va_arg(args, int));
+        }
+        case 'c': {
+            char c = (char)__builtin_va_arg(args, int);
+            print_padding(width, 1, 0);
+            kputc(c);
             break;
+        }
         case 'd':
-        case 'i':
-            print_int(__builtin_va_arg(args, int32_t));
+        case 'i': {
+            char buf[32];
+            int32_t v = __builtin_va_arg(args, int32_t);
+            int len = itoa_buf(v, buf);
+
+            if (pad_zero && buf[0] == '-') {
+                kputc('-');
+                print_padding(width, len, 1);
+                for (int i = 1; i < len; i++) kputc(buf[i]);
+            } else {
+                print_padding(width, len, pad_zero);
+                for (int i = 0; i < len; i++) kputc(buf[i]);
+            }
             break;
-        case 'u':
-            print_uint(__builtin_va_arg(args, uint32_t), 10);
+        }
+        case 'u': {
+            char buf[32];
+            int len = utoa_buf(__builtin_va_arg(args, uint32_t), 10, buf);
+            print_padding(width, len, pad_zero);
+            for (int i = 0; i < len; i++) kputc(buf[i]);
             break;
-        case 'x':
-            print_uint(__builtin_va_arg(args, uint32_t), 16);
+        }
+        case 'x': {
+            uint32_t v = __builtin_va_arg(args, uint32_t);
+            if (pad_zero && width > 0) {
+                print_hex_padded(v, width);
+            } else {
+                char buf[32];
+                int len = utoa_buf(v, 16, buf);
+                print_padding(width, len, pad_zero);
+                for (int i = 0; i < len; i++) kputc(buf[i]);
+            }
             break;
+        }
         case 'p':
             kputs("0x");
             print_hex_padded((uint32_t)(uintptr_t)__builtin_va_arg(args, void *), 8);
