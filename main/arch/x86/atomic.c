@@ -30,6 +30,27 @@ void atomic_set(atomic_t *v, int32_t val) {
 }
 
 /*
+ * atomic_load_acquire - 带 acquire 语义的读取
+ * 保证此读之后的操作不会被重排到此读之前
+ * x86 的 load 自带 acquire 语义，只需编译器屏障
+ */
+int32_t atomic_load_acquire(const atomic_t *v) {
+    int32_t val = v->value;
+    __asm__ volatile("" ::: "memory");
+    return val;
+}
+
+/*
+ * atomic_store_release - 带 release 语义的写入
+ * 保证此写之前的操作不会被重排到此写之后
+ * x86 的 store 自带 release 语义，只需编译器屏障
+ */
+void atomic_store_release(atomic_t *v, int32_t val) {
+    __asm__ volatile("" ::: "memory");
+    v->value = val;
+}
+
+/*
  * atomic_add - 原子加法
  * 使用 LOCK XADD: 交换 delta 和 *v，然后 *v += 原 delta
  * XADD 返回旧值，所以要 +delta 得到新值

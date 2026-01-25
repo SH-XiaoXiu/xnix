@@ -29,6 +29,10 @@ typedef struct {
 int32_t atomic_read(const atomic_t *v);
 void    atomic_set(atomic_t *v, int32_t val);
 
+/* 带内存序的读写 */
+int32_t atomic_load_acquire(const atomic_t *v); /* 读后屏障：后续操作不会重排到此读之前 */
+void    atomic_store_release(atomic_t *v, int32_t val); /* 写前屏障：之前操作不会重排到此写之后 */
+
 /* 算术操作 - 返回操作后的值 */
 int32_t atomic_add(atomic_t *v, int32_t delta); /* v += delta, 返回新值 */
 int32_t atomic_sub(atomic_t *v, int32_t delta); /* v -= delta, 返回新值 */

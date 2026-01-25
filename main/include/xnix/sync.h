@@ -13,19 +13,20 @@
 #ifndef XNIX_SYNC_H
 #define XNIX_SYNC_H
 
+#include <arch/atomic.h>
+
 #include <xnix/types.h>
 
 /**
  * 自旋锁
  *
  * 获取不到就循环等待。临界区必须短，不能睡眠。
- * 单核实现就是关中断。
  */
 typedef struct {
-    volatile uint32_t locked;
+    atomic_t locked;
 } spinlock_t;
 
-#define SPINLOCK_INIT {.locked = 0}
+#define SPINLOCK_INIT {.locked = ATOMIC_INIT(0)}
 
 void     spin_init(spinlock_t *lock);
 void     spin_lock(spinlock_t *lock);
