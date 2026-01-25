@@ -5,13 +5,14 @@
 
 #include <arch/cpu.h>
 
-#include <drivers/irqchip.h>
+#include <kernel/irq/irq.h>
 
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
+#include <xnix/string.h>
 #include <xnix/sync.h>
 
 /* 上下文切换函数(汇编实现) */
@@ -28,8 +29,9 @@ static struct runqueue runqueues[1];
 /* 当前调度策略 */
 static struct sched_policy *current_policy = NULL;
 
-/* TID 分配器 */
-static tid_t next_tid = 1;
+/* TID Bitmap */
+static uint32_t *tid_bitmap   = NULL;
+static uint32_t  tid_capacity = 0;
 
 /* 标记是否在中断上下文 */
 static volatile bool in_interrupt = false;
@@ -46,9 +48,60 @@ static struct thread *blocked_list = NULL;
 /* 调度器锁,保护运行队列和阻塞链表 */
 static spinlock_t sched_lock = SPINLOCK_INIT;
 
+static void free_tid(tid_t tid) {
+    if (tid == 0 || tid >= tid_capacity) {
+        return;
+    }
+
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+    tid_bitmap[tid / 32] &= ~(1UL << (tid % 32));
+    spin_unlock_irqrestore(&sched_lock, flags);
+}
+
 static tid_t alloc_tid(void) {
-    // TODO 原子保护 回收
-    return next_tid++;
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
+    for (uint32_t i = 0; i < (tid_capacity + 31) / 32; i++) {
+        if (tid_bitmap[i] == 0xFFFFFFFF) {
+            continue;
+        }
+
+        for (int j = 0; j < 32; j++) {
+            uint32_t tid = i * 32 + j;
+            if (tid >= tid_capacity) {
+                break;
+            }
+
+            if (!((tid_bitmap[i] >> j) & 1)) {
+                tid_bitmap[i] |= (1UL << j);
+                spin_unlock_irqrestore(&sched_lock, flags);
+                return tid;
+            }
+        }
+    }
+
+    /* 扩容 */
+    uint32_t  new_capacity = tid_capacity * 2;
+    uint32_t *new_bitmap   = kzalloc((new_capacity + 31) / 8);
+    if (!new_bitmap) {
+        spin_unlock_irqrestore(&sched_lock, flags);
+        return TID_INVALID;
+    }
+
+    memcpy(new_bitmap, tid_bitmap, (tid_capacity + 31) / 8);
+    kfree(tid_bitmap);
+    tid_bitmap   = new_bitmap;
+    tid_capacity = new_capacity;
+
+    /* 返回新扩容部分的第一个 ID */
+    /* 上一次循环结束时, tid_capacity 之前的位都已满(或在循环中被跳过),
+       但为了简单和正确,我们可以直接分配 tid_capacity / 2 (即旧容量的第一个新位) */
+    /* 注意: tid_capacity 肯定是 32 的倍数(初始化时保证),所以 old_cap 就是新分配区域的起始 bit */
+    tid_t tid = tid_capacity / 2;
+    tid_bitmap[tid / 32] |= (1UL << (tid % 32));
+
+    spin_unlock_irqrestore(&sched_lock, flags);
+    return tid;
 }
 
 /* 阻塞链表操作(导出给 sleep.c 使用) */
@@ -159,7 +212,14 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
         return NULL;
     }
 
-    t->tid           = alloc_tid();
+    t->tid = alloc_tid();
+    if (t->tid == TID_INVALID) {
+        pr_err("Failed to allocate TID");
+        kfree(t->stack);
+        kfree(t);
+        return NULL;
+    }
+
     t->name          = name;
     t->state         = THREAD_READY;
     t->priority      = 0;
@@ -205,6 +265,7 @@ void schedule(void) {
 
     /* 清理上次退出的线程 */
     if (zombie_thread) {
+        free_tid(zombie_thread->tid);
         kfree(zombie_thread->stack);
         kfree(zombie_thread);
         zombie_thread = NULL;
@@ -271,6 +332,17 @@ void schedule(void) {
  **/
 
 void sched_init(void) {
+    /* 分配 TID Bitmap (初始容量使用配置值) */
+    tid_capacity       = (CFG_INITIAL_THREADS + 31) & ~31; /* 32 对齐 */
+    size_t bitmap_size = (tid_capacity / 8);
+    tid_bitmap         = kzalloc(bitmap_size);
+    if (!tid_bitmap) {
+        panic("Failed to allocate TID bitmap");
+    }
+
+    /* 初始化 TID Bitmap (保留 TID 0) */
+    tid_bitmap[0] |= 1;
+
     /* 初始化运行队列 */
     for (int i = 0; i < 1; i++) {
         runqueues[i].head       = NULL;

@@ -6,9 +6,11 @@
 #include <kernel/capability/capability.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
+#include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
+#include <xnix/string.h>
 
 #include "arch/cpu.h"
 
@@ -16,15 +18,27 @@
 static struct process *process_list = NULL;
 static spinlock_t      process_list_lock;
 
-/* PID 分配器 */
-static pid_t next_pid = 1;
+/* PID Bitmap */
+static uint32_t *pid_bitmap   = NULL;
+static uint32_t  pid_capacity = 0;
 
 /* 内核进程(PID 0) */
 static struct process kernel_process;
 
 void process_subsystem_init(void) {
+    /* 分配 PID Bitmap */
+    pid_capacity       = (CFG_INITIAL_PROCESSES + 31) & ~31;
+    size_t bitmap_size = (pid_capacity / 8);
+    pid_bitmap         = kzalloc(bitmap_size);
+    if (!pid_bitmap) {
+        panic("Failed to allocate PID bitmap");
+    }
+
     /* 初始化内核进程 */
-    kernel_process.pid          = 0;
+    kernel_process.pid = 0;
+    /* 占用 PID 0 */
+    pid_bitmap[0] |= 1;
+
     kernel_process.name         = "kernel";
     kernel_process.state        = PROCESS_RUNNING;
     kernel_process.exit_code    = 0;
@@ -44,11 +58,59 @@ void process_subsystem_init(void) {
     pr_info("Process subsystem initialized (kernel PID 0)");
 }
 
+static void free_pid(pid_t pid) {
+    if (pid == 0 || pid >= pid_capacity) {
+        return;
+    }
+
+    uint32_t flags = cpu_irq_save();
+    spin_lock(&process_list_lock);
+    pid_bitmap[pid / 32] &= ~(1UL << (pid % 32));
+    spin_unlock(&process_list_lock);
+    cpu_irq_restore(flags);
+}
+
 pid_t process_alloc_pid(void) {
     uint32_t flags = cpu_irq_save();
     spin_lock(&process_list_lock);
 
-    pid_t pid = next_pid++;
+    for (uint32_t i = 0; i < (pid_capacity + 31) / 32; i++) {
+        if (pid_bitmap[i] == 0xFFFFFFFF) {
+            continue;
+        }
+
+        for (int j = 0; j < 32; j++) {
+            uint32_t pid = i * 32 + j;
+            if (pid >= pid_capacity) {
+                break;
+            }
+
+            if (!((pid_bitmap[i] >> j) & 1)) {
+                pid_bitmap[i] |= (1UL << j);
+                spin_unlock(&process_list_lock);
+                cpu_irq_restore(flags);
+                return pid;
+            }
+        }
+    }
+
+    /* 扩容 */
+    uint32_t  new_capacity = pid_capacity * 2;
+    uint32_t *new_bitmap   = kzalloc((new_capacity + 31) / 8);
+    if (!new_bitmap) {
+        spin_unlock(&process_list_lock);
+        cpu_irq_restore(flags);
+        return PID_INVALID;
+    }
+
+    memcpy(new_bitmap, pid_bitmap, (pid_capacity + 31) / 8);
+    kfree(pid_bitmap);
+    pid_bitmap   = new_bitmap;
+    pid_capacity = new_capacity;
+
+    /* 返回新扩容部分的第一个 ID */
+    pid_t pid = pid_capacity / 2;
+    pid_bitmap[pid / 32] |= (1UL << (pid % 32));
 
     spin_unlock(&process_list_lock);
     cpu_irq_restore(flags);
@@ -119,6 +181,7 @@ void process_unref(struct process *proc) {
         spin_unlock(&process_list_lock);
         cpu_irq_restore(flags);
 
+        free_pid(proc->pid);
         kfree(proc);
         return;
     }
@@ -131,7 +194,12 @@ process_t process_create(const char *name) {
         return NULL;
     }
 
-    proc->pid          = process_alloc_pid();
+    proc->pid = process_alloc_pid();
+    if (proc->pid == PID_INVALID) {
+        kfree(proc);
+        return NULL;
+    }
+
     proc->name         = name;
     proc->state        = PROCESS_RUNNING;
     proc->exit_code    = 0;
