@@ -11,7 +11,6 @@
 #include <drivers/timer.h>
 #include <xnix/config.h>
 #include <xnix/mm.h>
-#include <xnix/sched.h>
 #include <xnix/thread.h>
 #include <xnix/stdio.h>
 

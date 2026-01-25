@@ -3,7 +3,7 @@
  * @brief 调度器核心实现
  */
 
-#include "sched.h"
+#include <kernel/sched/sched.h>
 
 #include <arch/cpu.h>
 
@@ -11,7 +11,6 @@
 
 #include <xnix/config.h>
 #include <xnix/mm.h>
-#include <xnix/sched.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 
@@ -40,10 +39,6 @@ static struct thread *zombie_thread = NULL;
 
 /* 阻塞线程链表（等待唤醒） */
 static struct thread *blocked_list = NULL;
-
-/*
- * 内部辅助函数
- **/
 
 static tid_t alloc_tid(void) {
     return next_tid++;
@@ -120,7 +115,7 @@ static void thread_init_stack(struct thread *t, void (*entry)(void *), void *arg
     t->ctx.edi = 0;
 }
 
-struct thread *sched_spawn(const char *name, void (*entry)(void *), void *arg) {
+static struct thread *sched_spawn(const char *name, void (*entry)(void *), void *arg) {
     if (!current_policy) {
         return NULL;
     }
@@ -345,4 +340,51 @@ void sched_migrate(struct thread *t, cpu_id_t target_cpu) {
     /* TODO: 多核实现 */
     (void)t;
     (void)target_cpu;
+}
+
+/*
+ * 线程 API 实现（原 thread.c）
+ **/
+
+thread_t thread_create(const char *name, void (*entry)(void *), void *arg) {
+    return sched_spawn(name, entry, arg);
+}
+
+void thread_exit(int code) {
+    struct thread *current = sched_current();
+    if (current) {
+        current->state     = THREAD_EXITED;
+        current->exit_code = code;
+        kprintf("Thread %d '%s' exited with code %d\n", current->tid, current->name, code);
+        sched_destroy_current();
+    }
+    schedule();
+    /* 不应该返回 */
+    while (1) {
+        cpu_halt();
+    }
+}
+
+void thread_yield(void) {
+    sched_yield();
+}
+
+thread_t thread_current(void) {
+    return sched_current();
+}
+
+/*
+ * 线程访问器
+ **/
+
+tid_t thread_get_tid(thread_t t) {
+    return t ? t->tid : TID_INVALID;
+}
+
+const char *thread_get_name(thread_t t) {
+    return t ? t->name : NULL;
+}
+
+thread_state_t thread_get_state(thread_t t) {
+    return t ? t->state : THREAD_EXITED;
 }

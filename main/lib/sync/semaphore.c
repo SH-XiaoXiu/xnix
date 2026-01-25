@@ -11,16 +11,32 @@
  *   - count=N: 限制并发数（连接池、缓冲区槽位）
  */
 
-#include <xnix/sched.h>
-#include <xnix/sync.h>
+#include <sync/sync_def.h>
 
-void semaphore_init(semaphorephore_t *s, int count) {
+#include <xnix/mm.h>
+#include <xnix/thread.h>
+
+semaphore_t *semaphore_create(int count) {
+    semaphore_t *s = kzalloc(sizeof(semaphore_t));
+    if (s) {
+        semaphore_init(s, count);
+    }
+    return s;
+}
+
+void semaphore_destroy(semaphore_t *s) {
+    if (s) {
+        kfree(s);
+    }
+}
+
+void semaphore_init(semaphore_t *s, int count) {
     s->count   = count;
     s->waiters = NULL;
     spin_init(&s->guard);
 }
 
-void semaphore_down(semaphorephore_t *s) {
+void semaphore_down(semaphore_t *s) {
     uint32_t flags = spin_lock_irqsave(&s->guard);
 
     while (s->count <= 0) {
@@ -38,7 +54,7 @@ void semaphore_down(semaphorephore_t *s) {
     spin_unlock_irqrestore(&s->guard, flags);
 }
 
-void semaphore_up(semaphorephore_t *s) {
+void semaphore_up(semaphore_t *s) {
     uint32_t flags = spin_lock_irqsave(&s->guard);
 
     s->count++;

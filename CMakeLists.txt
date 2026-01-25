@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 11)
 # 架构设置
 # ============================================
 set(ARCH "x86")
-set(ARCH_DIR "${CMAKE_SOURCE_DIR}/kernel/arch/${ARCH}")
+set(ARCH_DIR "${CMAKE_SOURCE_DIR}/main/arch/${ARCH}")
 
 # ============================================
 # 编译选项
@@ -26,16 +26,16 @@ option(CFG_DEBUG_MM "Debug memory manager" OFF)
 option(CFG_DEBUG_SCHED "Debug scheduler" OFF)
 
 configure_file(
-    ${CMAKE_SOURCE_DIR}/kernel/include/xnix/config.h.in
+    ${CMAKE_SOURCE_DIR}/main/include/xnix/config.h.in
     ${CMAKE_BINARY_DIR}/include/xnix/config.h
 )
 
 # ============================================
 # 源文件收集
 # ============================================
-file(GLOB_RECURSE KERNEL_C  "${CMAKE_SOURCE_DIR}/kernel/main/*.c")
-file(GLOB_RECURSE LIB_C     "${CMAKE_SOURCE_DIR}/kernel/lib/*.c")
-file(GLOB_RECURSE DRIVERS_C "${CMAKE_SOURCE_DIR}/kernel/drivers/*.c")
+file(GLOB_RECURSE KERNEL_C  "${CMAKE_SOURCE_DIR}/main/kernel/*.c")
+file(GLOB_RECURSE LIB_C     "${CMAKE_SOURCE_DIR}/main/lib/*.c")
+file(GLOB_RECURSE DRIVERS_C "${CMAKE_SOURCE_DIR}/main/drivers/*.c")
 file(GLOB_RECURSE ARCH_C    "${ARCH_DIR}/*.c")
 file(GLOB_RECURSE ARCH_ASM  "${ARCH_DIR}/*.s")
 set(KERNEL_SOURCES ${KERNEL_C} ${LIB_C} ${DRIVERS_C} ${ARCH_C} ${ARCH_ASM})
@@ -49,13 +49,15 @@ add_executable(xnix.elf ${KERNEL_SOURCES})
 # 头文件搜索路径
 # ============================================
 target_include_directories(xnix.elf PRIVATE
-    ${CMAKE_SOURCE_DIR}/kernel/include
+    ${CMAKE_SOURCE_DIR}/main/include    # <xnix/xxx>, <arch/xxx>, <drivers/xxx>
+    ${CMAKE_SOURCE_DIR}/main            # <kernel/xxx>
+    ${CMAKE_SOURCE_DIR}/main/lib        # <sync/xxx>
     ${CMAKE_BINARY_DIR}/include
     ${ARCH_DIR}/include
 )
 
 # 为 CLion 索引添加头文件
-file(GLOB_RECURSE ALL_HEADERS "${CMAKE_SOURCE_DIR}/kernel/*.h")
+file(GLOB_RECURSE ALL_HEADERS "${CMAKE_SOURCE_DIR}/main/*.h")
 target_sources(xnix.elf PRIVATE ${ALL_HEADERS})
 
 # ============================================

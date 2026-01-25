@@ -12,15 +12,13 @@
  *   3. 每次 tick 检查是否有线程该醒来
  */
 
-#include "sched.h"
+#include <kernel/sched/sched.h>
 
 #include <arch/cpu.h>
 
 #include <drivers/timer.h>
 
 #include <xnix/config.h>
-#include <xnix/sched.h>
-#include <xnix/thread.h>
 
 /**
  * 检查并唤醒睡眠到期的线程

@@ -11,9 +11,24 @@
  *   3. 释放时唤醒一个等待者
  */
 
-#include <xnix/sched.h>
-#include <xnix/sync.h>
+#include <sync/sync_def.h>
+
+#include <xnix/mm.h>
 #include <xnix/thread.h>
+
+mutex_t *mutex_create(void) {
+    mutex_t *m = kzalloc(sizeof(mutex_t));
+    if (m) {
+        mutex_init(m);
+    }
+    return m;
+}
+
+void mutex_destroy(mutex_t *m) {
+    if (m) {
+        kfree(m);
+    }
+}
 
 void mutex_init(mutex_t *m) {
     m->locked  = 0;
@@ -38,7 +53,7 @@ void mutex_lock(mutex_t *m) {
 
     /* 获取锁成功 */
     m->locked = 1;
-    m->owner  = sched_current();
+    m->owner  = thread_current();
 
     spin_unlock_irqrestore(&m->guard, flags);
 }

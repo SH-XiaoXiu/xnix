@@ -8,7 +8,7 @@
  * - FIFO 队列，公平轮转
  */
 
-#include "sched.h"
+#include <kernel/sched/sched.h>
 #include <arch/smp.h>
 
 /* 时间片长度（tick 数） */

@@ -14,8 +14,24 @@
  *   如果先 unlock 再 sleep，可能在这之间错过 signal
  */
 
-#include <xnix/sched.h>
-#include <xnix/sync.h>
+#include <sync/sync_def.h>
+
+#include <xnix/mm.h>
+#include <xnix/thread.h>
+
+condvar_t *condvar_create(void) {
+    condvar_t *c = kzalloc(sizeof(condvar_t));
+    if (c) {
+        condvar_init(c);
+    }
+    return c;
+}
+
+void condvar_destroy(condvar_t *c) {
+    if (c) {
+        kfree(c);
+    }
+}
 
 void condvar_init(condvar_t *c) {
     c->waiters = NULL;
