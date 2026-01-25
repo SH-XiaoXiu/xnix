@@ -10,9 +10,7 @@
  */
 
 static void x86_vmm_init(void) {
-    /* vmm_init 已经在 mm_init 中被调用了,这里需要做额外的适配初始化 */
-    /* 应该把 vmm_init 的逻辑移到这里来 */
-    /* 目前保持现状, vmm_init 已经完成基础设置 */
+    vmm_init();
     pr_info("x86 VMM ops initialized");
 }
 
@@ -22,8 +20,7 @@ static void *x86_vmm_create_as(void) {
 }
 
 static void x86_vmm_destroy_as(void *as) {
-    /* TODO: 实现 vmm_destroy_pd */
-    (void)as;
+    vmm_destroy_pd(as);
 }
 
 static void x86_vmm_switch_as(void *as) {
@@ -43,10 +40,7 @@ static void x86_vmm_unmap(void *as, uintptr_t vaddr) {
 }
 
 static uintptr_t x86_vmm_query(void *as, uintptr_t vaddr) {
-    /* TODO: 实现页表查询 */
-    (void)as;
-    (void)vaddr;
-    return 0;
+    return (uintptr_t)vmm_get_paddr(as, vaddr);
 }
 
 static const struct mm_operations x86_vmm_ops = {

@@ -6,6 +6,7 @@
 #include <kernel/process/process.h>
 #include <xnix/errno.h>
 #include <xnix/mm.h>
+#include <xnix/mm_ops.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/vmm.h>
@@ -107,6 +108,11 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
         return -EINVAL;
     }
 
+    const struct mm_operations *mm = mm_get_ops();
+    if (!mm || !mm->map || !mm->query) {
+        return -EFAULT;
+    }
+
     /*
      * elf_data 是物理地址.
      * 由于 vmm_init() 已经建立了物理内存的恒等映射,
@@ -140,7 +146,7 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
 
         for (uint32_t vaddr = page_start; vaddr < page_end; vaddr += PAGE_SIZE) {
             /* 检查是否已经映射 */
-            paddr_t exist_paddr = vmm_get_paddr(proc->page_dir_phys, vaddr);
+            paddr_t exist_paddr = (paddr_t)mm->query(proc->page_dir_phys, vaddr);
             if (!exist_paddr) {
                 void *page = alloc_page();
                 if (!page) {
@@ -155,7 +161,10 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
                 /* 总是给写权限以便初始化数据 */
                 flags |= VMM_PROT_WRITE;
 
-                vmm_map_page(proc->page_dir_phys, vaddr, (paddr_t)page, flags);
+                if (mm->map(proc->page_dir_phys, vaddr, (paddr_t)page, flags) != 0) {
+                    free_page(page);
+                    return -ENOMEM;
+                }
 
                 /* 清空页面 */
                 memset(page, 0, PAGE_SIZE);
@@ -176,7 +185,7 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
                 chunk_size = file_len - copied;
             }
 
-            paddr_t paddr = vmm_get_paddr(proc->page_dir_phys, page_vaddr);
+            paddr_t paddr = (paddr_t)mm->query(proc->page_dir_phys, page_vaddr);
             if (!paddr) {
                 return -EFAULT;
             }
@@ -209,10 +218,21 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
     }
 
     /* 映射两页栈 (8KB) */
-    vmm_map_page(proc->page_dir_phys, USER_STACK_TOP - 4096, (paddr_t)stack_page_1,
-                 VMM_PROT_USER | VMM_PROT_READ | VMM_PROT_WRITE);
-    vmm_map_page(proc->page_dir_phys, USER_STACK_TOP - 8192, (paddr_t)stack_page_2,
-                 VMM_PROT_USER | VMM_PROT_READ | VMM_PROT_WRITE);
+    if (mm->map(proc->page_dir_phys, USER_STACK_TOP - 4096, (paddr_t)stack_page_1,
+                VMM_PROT_USER | VMM_PROT_READ | VMM_PROT_WRITE) != 0) {
+        free_page(stack_page_1);
+        free_page(stack_page_2);
+        return -ENOMEM;
+    }
+    if (mm->map(proc->page_dir_phys, USER_STACK_TOP - 8192, (paddr_t)stack_page_2,
+                VMM_PROT_USER | VMM_PROT_READ | VMM_PROT_WRITE) != 0) {
+        if (mm->unmap) {
+            mm->unmap(proc->page_dir_phys, USER_STACK_TOP - 4096);
+        }
+        free_page(stack_page_1);
+        free_page(stack_page_2);
+        return -ENOMEM;
+    }
 
     /* 清空栈 */
     memset(stack_page_1, 0, PAGE_SIZE);

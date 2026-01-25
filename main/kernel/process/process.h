@@ -9,6 +9,7 @@
 #ifndef KERNEL_PROCESS_H
 #define KERNEL_PROCESS_H
 
+#include <xnix/capability.h>
 #include <xnix/process.h>
 #include <xnix/sync.h>
 #include <xnix/types.h>
@@ -113,5 +114,19 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size);
  * 加载 ELF 文件到进程
  */
 int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size);
+
+/**
+ * 设置 boot 阶段的 console endpoint 能力句柄(用于后续进程继承)
+ *
+ * @param handle endpoint 句柄(当前进程内有效)
+ */
+void         process_set_boot_console_endpoint(cap_handle_t handle);
+
+/**
+ * 获取 boot 阶段的 console endpoint 能力句柄
+ *
+ * @return 句柄,无效则为 CAP_HANDLE_INVALID
+ */
+cap_handle_t process_get_boot_console_endpoint(void);
 
 #endif

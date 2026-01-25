@@ -4,13 +4,16 @@
 
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
+#include <xnix/mm_ops.h>
 #include <xnix/stdio.h> /* pr_info */
-#include <xnix/vmm.h>
 
 void arch_thread_switch(struct thread *next) {
     /* 切换地址空间 */
     if (next->owner && next->owner->page_dir_phys) {
-        vmm_switch_pd(next->owner->page_dir_phys);
+        const struct mm_operations *mm = mm_get_ops();
+        if (mm && mm->switch_as) {
+            mm->switch_as(next->owner->page_dir_phys);
+        }
     }
 
     /* 更新 TSS 的内核栈指针 (ESP0) */

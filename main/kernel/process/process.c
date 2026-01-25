@@ -9,9 +9,9 @@
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
+#include <xnix/mm_ops.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
-#include <xnix/vmm.h>
 
 #include "arch/cpu.h"
 
@@ -25,6 +25,16 @@ static uint32_t  pid_capacity = 0;
 
 /* 内核进程(PID 0) */
 static struct process kernel_process;
+
+static cap_handle_t g_boot_console_ep = CAP_HANDLE_INVALID;
+
+void process_set_boot_console_endpoint(cap_handle_t handle) {
+    g_boot_console_ep = handle;
+}
+
+cap_handle_t process_get_boot_console_endpoint(void) {
+    return g_boot_console_ep;
+}
 
 void process_subsystem_init(void) {
     /* 分配 PID Bitmap */
@@ -159,6 +169,13 @@ void process_unref(struct process *proc) {
         cpu_irq_restore(flags);
 
         /* 销毁进程 */
+        if (proc->page_dir_phys) {
+            const struct mm_operations *mm = mm_get_ops();
+            if (mm && mm->destroy_as) {
+                mm->destroy_as(proc->page_dir_phys);
+            }
+            proc->page_dir_phys = NULL;
+        }
         if (proc->cap_table) {
             cap_table_destroy(proc->cap_table);
         }
@@ -206,7 +223,11 @@ process_t process_create(const char *name) {
     proc->exit_code = 0;
 
     /* 创建地址空间 */
-    proc->page_dir_phys = vmm_create_pd();
+    const struct mm_operations *mm = mm_get_ops();
+    if (!mm || !mm->create_as) {
+        panic("MM ops not initialized");
+    }
+    proc->page_dir_phys = mm->create_as();
     if (!proc->page_dir_phys) {
         free_pid(proc->pid);
         kfree(proc);
@@ -222,9 +243,20 @@ process_t process_create(const char *name) {
     proc->next_sibling = NULL;
     proc->refcount     = 1;
 
+    if (g_boot_console_ep != CAP_HANDLE_INVALID) {
+        struct process *creator = process_get_current();
+        cap_handle_t    dup =
+            cap_duplicate_to(creator, g_boot_console_ep, proc, CAP_READ | CAP_WRITE);
+        if (dup != g_boot_console_ep) {
+            pr_warn("Boot: console endpoint handle mismatch (%u -> %u)", g_boot_console_ep, dup);
+        }
+    }
+
     if (!proc->cap_table || !proc->thread_lock) {
         if (proc->page_dir_phys) {
-            vmm_destroy_pd(proc->page_dir_phys);
+            if (mm->destroy_as) {
+                mm->destroy_as(proc->page_dir_phys);
+            }
         }
         if (proc->cap_table) {
             cap_table_destroy(proc->cap_table);
