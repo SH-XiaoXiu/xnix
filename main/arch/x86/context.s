@@ -60,3 +60,32 @@ context_switch_first:
 
     /* 不在此处开中断，thread_entry_wrapper 会处理 */
     ret
+
+/**
+ * void enter_user_mode(uint32_t eip, uint32_t esp)
+ * 切换到用户模式
+ */
+.global enter_user_mode
+enter_user_mode:
+    mov 4(%esp), %ebx  /* eip */
+    mov 8(%esp), %ecx  /* esp */
+
+    /* 设置数据段 (USER_DS | RPL3) = 0x20 | 3 = 0x23 */
+    mov $0x23, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+
+    /* 构造 IRET 栈帧: SS, ESP, EFLAGS, CS, EIP */
+    push $0x23         /* SS */
+    push %ecx          /* ESP */
+    pushf
+    pop %eax
+    or $0x200, %eax    /* Enable Interrupts (IF) */
+    push %eax          /* EFLAGS */
+    push $0x1B         /* CS (USER_CS | RPL3) = 0x18 | 3 = 0x1B */
+    push %ebx          /* EIP */
+
+    /* 切换! */
+    iret

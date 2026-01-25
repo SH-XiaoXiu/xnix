@@ -535,6 +535,9 @@ void sched_tick(void) {
             first->running_on = cpu;
             rq->current       = first;
 
+            /* 架构特定的线程切换 */
+            arch_thread_switch(first);
+
             irq_eoi(0);
             context_switch_first(&first->ctx);
             /* 不会返回 */
