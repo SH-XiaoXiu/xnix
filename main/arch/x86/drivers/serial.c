@@ -7,7 +7,10 @@
 
 #include <arch/cpu.h>
 
-#include <drivers/console.h>
+#include <xnix/console.h>
+#include <xnix/ipc.h>
+#include <xnix/thread.h>
+#include <xnix/string.h>
 
 #define COM1 0x3F8
 
@@ -65,8 +68,113 @@ static void serial_clear(void) {
     serial_puts("\033[2J\033[H");
 }
 
+static cap_handle_t serial_udm_ep = CAP_HANDLE_INVALID;
+
+static void serial_udm_server(void *arg) {
+    cap_handle_t ep = (cap_handle_t)(uintptr_t)arg;
+
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+
+    while (1) {
+        msg.buffer.data = NULL;
+        msg.buffer.size = 0;
+        ipc_receive(ep, &msg, 0);
+
+        uint32_t op = msg.regs.data[0];
+        switch (op) {
+        case CONSOLE_UDM_OP_PUTC:
+            serial_putc((char)(msg.regs.data[1] & 0xFF));
+            break;
+        case CONSOLE_UDM_OP_SET_COLOR:
+            serial_set_color((kcolor_t)msg.regs.data[1]);
+            break;
+        case CONSOLE_UDM_OP_RESET_COLOR:
+            serial_reset_color();
+            break;
+        case CONSOLE_UDM_OP_CLEAR:
+            serial_clear();
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+static void serial_udm_putc(char c) {
+    if (serial_udm_ep == CAP_HANDLE_INVALID) {
+        return;
+    }
+
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.regs.data[0] = CONSOLE_UDM_OP_PUTC;
+    msg.regs.data[1] = (uint32_t)(uint8_t)c;
+
+    /* 发送到消息队列，如果队列满则回退到直接输出 */
+    if (ipc_send_async(serial_udm_ep, &msg) != IPC_OK) {
+        serial_putc(c);
+    }
+}
+
+static void serial_udm_puts(const char *s) {
+    if (!s) {
+        return;
+    }
+    while (*s) {
+        if (*s == '\n') {
+            serial_udm_putc('\r');
+        }
+        serial_udm_putc(*s++);
+    }
+}
+
+static void serial_udm_set_color(kcolor_t color) {
+    if (serial_udm_ep == CAP_HANDLE_INVALID) {
+        return;
+    }
+
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.regs.data[0] = CONSOLE_UDM_OP_SET_COLOR;
+    msg.regs.data[1] = (uint32_t)color;
+    ipc_send_async(serial_udm_ep, &msg);
+}
+
+static void serial_udm_reset_color(void) {
+    if (serial_udm_ep == CAP_HANDLE_INVALID) {
+        return;
+    }
+
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.regs.data[0] = CONSOLE_UDM_OP_RESET_COLOR;
+    ipc_send_async(serial_udm_ep, &msg);
+}
+
+static void serial_udm_clear(void) {
+    if (serial_udm_ep == CAP_HANDLE_INVALID) {
+        return;
+    }
+
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.regs.data[0] = CONSOLE_UDM_OP_CLEAR;
+    ipc_send_async(serial_udm_ep, &msg);
+}
+
+static struct console serial_console_udm = {
+    .name        = "serial",
+    .init        = NULL,
+    .putc        = serial_udm_putc,
+    .puts        = serial_udm_puts,
+    .set_color   = serial_udm_set_color,
+    .reset_color = serial_udm_reset_color,
+    .clear       = serial_udm_clear,
+};
+
 /* 导出驱动结构 */
-static struct console_driver serial_console = {
+static struct console serial_console = {
     .name        = "serial",
     .init        = serial_init,
     .putc        = serial_putc,
@@ -78,4 +186,28 @@ static struct console_driver serial_console = {
 
 void serial_console_register(void) {
     console_register(&serial_console);
+}
+
+cap_handle_t serial_udm_start(void) {
+    if (serial_udm_ep != CAP_HANDLE_INVALID) {
+        return serial_udm_ep;
+    }
+
+    serial_udm_ep = endpoint_create();
+    if (serial_udm_ep == CAP_HANDLE_INVALID) {
+        return CAP_HANDLE_INVALID;
+    }
+
+    thread_t t = thread_create("seriald", serial_udm_server, (void *)(uintptr_t)serial_udm_ep);
+    if (!t) {
+        cap_close(serial_udm_ep);
+        serial_udm_ep = CAP_HANDLE_INVALID;
+        return CAP_HANDLE_INVALID;
+    }
+
+    return serial_udm_ep;
+}
+
+struct console *serial_udm_console_driver(void) {
+    return &serial_console_udm;
 }

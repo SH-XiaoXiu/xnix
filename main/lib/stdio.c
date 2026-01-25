@@ -5,7 +5,7 @@
  * @date 2026-01-20
  */
 
-#include <drivers/console.h>
+#include <xnix/console.h>
 
 #include <xnix/stdio.h>
 #include <xnix/types.h>

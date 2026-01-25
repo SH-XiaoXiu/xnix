@@ -6,20 +6,20 @@
  */
 
 #include <arch/cpu.h>
+#include <arch/hal/feature.h>
 
-#include <drivers/console.h>
 #include <drivers/timer.h>
 
 #include <asm/multiboot.h>
 #include <kernel/irq/irq.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
+#include <xnix/boot.h>
 #include <xnix/config.h>
+#include <xnix/console.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
-
-#include "arch/hal/feature.h"
 
 /* 测试任务 bg */
 static void task_bg(void *arg) {
@@ -30,6 +30,15 @@ static void task_bg(void *arg) {
     }
 }
 
+extern cap_handle_t    serial_udm_start(void);
+extern struct console *serial_udm_console_driver(void);
+
+static void boot_console_udm_switch(void *arg) {
+    (void)arg;
+    console_replace("serial", serial_udm_console_driver());
+    pr_ok("UDM serial console enabled");
+}
+
 void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     /* 注册所有驱动 */
     arch_early_init();
@@ -38,19 +47,21 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     console_init();
     console_clear();
 
-    /* 硬件特性探测 */
-    struct hal_features features;
-    hal_probe_features(&features);
+    boot_init(magic, mb_info);
 
+    extern struct hal_features g_hal_features;
     kprintf("\n");
     kprintf("%C========================================%N\n");
     kprintf("%C        Xnix Kernel Loaded!%N\n");
     kprintf("%C========================================%N\n");
-    kprintf("Detected CPU: %s (%d cores)\n", features.cpu_vendor, features.cpu_count);
+    kprintf("Detected CPU: %s (%d cores)\n", g_hal_features.cpu_vendor, g_hal_features.cpu_count);
     kprintf("Features: [MMU:%s] [FPU:%s] [SMP:%s]\n",
-            (features.flags & HAL_FEATURE_MMU) ? "Yes" : "No",
-            (features.flags & HAL_FEATURE_FPU) ? "Yes" : "No",
-            (features.flags & HAL_FEATURE_SMP) ? "Yes" : "No");
+            (g_hal_features.flags & HAL_FEATURE_MMU) ? "Yes" : "No",
+            (g_hal_features.flags & HAL_FEATURE_FPU) ? "Yes" : "No",
+            (g_hal_features.flags & HAL_FEATURE_SMP) ? "Yes" : "No");
+    if (g_hal_features.ram_size_mb) {
+        kprintf("RAM: %u MB\n", g_hal_features.ram_size_mb);
+    }
     kprintf("\n");
 
     /* 检查 Multiboot 魔数 */
@@ -84,6 +95,12 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     sched_init();
     pr_ok("Scheduler initialized");
 
+    cap_handle_t serial_ep = serial_udm_start();
+    if (serial_ep != CAP_HANDLE_INVALID) {
+        process_set_boot_console_endpoint(serial_ep);
+        thread_create("console_udm_switch", boot_console_udm_switch, NULL);
+    }
+
     thread_create("task_bg", task_bg, NULL);
     pr_info("Threads created");
 
@@ -93,7 +110,8 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     pr_ok("Timer initialized (%d Hz)", CFG_SCHED_HZ);
 
     /* 查找/启动 init 进程 */
-    struct multiboot_mod_list *init_mod = NULL;
+    struct multiboot_mod_list *init_mod       = NULL;
+    uint32_t                   init_mod_index = 0;
     if (magic == MULTIBOOT_BOOTLOADER_MAGIC && mb_info && (mb_info->flags & MULTIBOOT_INFO_MODS)) {
         if (mb_info->mods_count > 0) {
             init_mod = (struct multiboot_mod_list *)mb_info->mods_addr;
@@ -114,8 +132,12 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
         */
         /* 确保我们访问的是正确的指针 */
         struct multiboot_mod_list *mods = (struct multiboot_mod_list *)mb_info->mods_addr;
-        /* 假设 init.elf 是第一个模块 */
-        init_mod           = &mods[0];
+        init_mod_index                  = boot_get_initmod_index();
+        if (init_mod_index >= mb_info->mods_count) {
+            pr_warn("Boot: xnix.initmod=%u out of range, defaulting to 0", init_mod_index);
+            init_mod_index = 0;
+        }
+        init_mod           = &mods[init_mod_index];
         void    *mod_vaddr = (void *)init_mod->mod_start;
         uint32_t mod_size  = init_mod->mod_end - init_mod->mod_start;
         pr_info("Found init module (%u bytes)", mod_size);
@@ -123,10 +145,8 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     } else {
         pr_warn("No init module found");
     }
-    /* 开启中断 */
-    pr_info("Enabling interrupts...");
+    pr_info("Starting scheduler...");
     cpu_irq_enable();
-    /* 主循环 */
     while (1) {
         cpu_halt();
     }

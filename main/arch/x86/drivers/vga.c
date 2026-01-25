@@ -5,7 +5,7 @@
  * @date 2026-01-20
  */
 
-#include <drivers/console.h>
+#include <xnix/console.h>
 
 #include <xnix/types.h>
 
@@ -111,7 +111,7 @@ static void vga_clear(void) {
 }
 
 /* 导出驱动结构 */
-static struct console_driver vga_console = {
+static struct console vga_console = {
     .name        = "vga",
     .init        = vga_init,
     .putc        = vga_putc,

@@ -5,19 +5,35 @@
  * @date 2026-01-22
  */
 
-#include <drivers/console.h>
+#include <xnix/console.h>
+#include <xnix/string.h>
 
 #define MAX_CONSOLES 4
 
-static struct console_driver *consoles[MAX_CONSOLES];
-static int                    console_count = 0;
+static struct console *consoles[MAX_CONSOLES];
+static int             console_count = 0;
 
-int console_register(struct console_driver *drv) {
-    if (console_count >= MAX_CONSOLES || !drv) {
+int console_register(struct console *c) {
+    if (console_count >= MAX_CONSOLES || !c) {
         return -1;
     }
-    consoles[console_count++] = drv;
+    consoles[console_count++] = c;
     return 0;
+}
+
+int console_replace(const char *name, struct console *c) {
+    if (!name || !c) {
+        return -1;
+    }
+
+    for (int i = 0; i < console_count; i++) {
+        if (consoles[i] && consoles[i]->name && !strcmp(consoles[i]->name, name)) {
+            consoles[i] = c;
+            return 0;
+        }
+    }
+
+    return -1;
 }
 
 void console_init(void) {
