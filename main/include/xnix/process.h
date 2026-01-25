@@ -68,6 +68,6 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size);
 /**
  * 加载 ELF 文件到进程
  */
-int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size);
+int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, uint32_t *out_entry);
 
 #endif

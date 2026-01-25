@@ -103,8 +103,12 @@ static int elf_verify_header(Elf32_Ehdr *hdr) {
 extern void *vmm_kmap(paddr_t paddr);
 extern void  vmm_kunmap(void *vaddr);
 
-int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
-    if (!proc || !elf_data) {
+int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, uint32_t *out_entry) {
+    if (!proc || !elf_data || !out_entry) {
+        return -EINVAL;
+    }
+
+    if (!elf_size) {
         return -EINVAL;
     }
 
@@ -239,5 +243,6 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size) {
     memset(stack_page_2, 0, PAGE_SIZE);
 
     pr_info("ELF loaded, entry point %x", hdr->e_entry);
-    return (int)hdr->e_entry;
+    *out_entry = hdr->e_entry;
+    return 0;
 }

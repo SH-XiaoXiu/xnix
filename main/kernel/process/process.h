@@ -113,7 +113,7 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size);
 /**
  * 加载 ELF 文件到进程
  */
-int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size);
+int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, uint32_t *out_entry);
 
 /**
  * 设置 boot 阶段的 console endpoint 能力句柄(用于后续进程继承)

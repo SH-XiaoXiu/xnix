@@ -245,8 +245,7 @@ process_t process_create(const char *name) {
 
     if (g_boot_console_ep != CAP_HANDLE_INVALID) {
         struct process *creator = process_get_current();
-        cap_handle_t    dup =
-            cap_duplicate_to(creator, g_boot_console_ep, proc, CAP_READ | CAP_WRITE);
+        cap_handle_t dup = cap_duplicate_to(creator, g_boot_console_ep, proc, CAP_READ | CAP_WRITE);
         if (dup != g_boot_console_ep) {
             pr_warn("Boot: console endpoint handle mismatch (%u -> %u)", g_boot_console_ep, dup);
         }
@@ -395,9 +394,10 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
     }
 
     /* 加载用户程序 */
-    int ret;
+    int      ret;
+    uint32_t entry_point = 0;
     if (elf_data) {
-        ret = process_load_elf(proc, elf_data, elf_size);
+        ret = process_load_elf(proc, elf_data, elf_size, &entry_point);
     } else {
         pr_err("No init module provided");
         process_destroy((process_t)proc);
@@ -412,17 +412,6 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
 
     /* 创建主线程 */
     /* 线程创建后默认是 READY 状态,会被调度器调度 */
-
-    uint32_t entry_point;
-
-    /* process_load_elf 返回入口点 */
-    if (ret > 0) {
-        entry_point = (uint32_t)ret;
-    } else {
-        pr_err("Invalid entry point returned by loader");
-        process_destroy((process_t)proc);
-        return PID_INVALID;
-    }
 
     thread_t t =
         thread_create_with_owner("bootstrap", user_thread_entry, (void *)entry_point, proc);
