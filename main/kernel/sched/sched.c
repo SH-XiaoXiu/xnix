@@ -23,7 +23,7 @@ extern void context_switch_first(struct thread_context *new);
  **/
 
 /* Per-CPU 运行队列(当前单核,数组大小为 1) */
-static struct runqueue runqueues[1];
+static struct runqueue runqueues[CFG_MAX_CPUS];
 
 /* 当前调度策略 */
 static struct sched_policy *current_policy = NULL;
@@ -36,7 +36,8 @@ static uint32_t  tid_capacity = 0;
 static volatile bool in_interrupt = false;
 
 /* 待清理的已退出线程(切换后释放) */
-static struct thread *zombie_thread = NULL;
+static struct thread *per_cpu_zombie[CFG_MAX_CPUS] = {NULL};
+#define zombie_thread per_cpu_zombie[0]
 
 /* Idle 线程 */
 static struct thread *idle_thread = NULL;
@@ -158,6 +159,23 @@ struct runqueue *sched_get_runqueue(cpu_id_t cpu) {
  * 线程创建
  **/
 
+static void sched_cleanup_zombie(void) {
+    cpu_id_t cpu = cpu_current_id();
+
+    /* 取出整个链表并清空头指针 */
+    struct thread *z    = per_cpu_zombie[cpu];
+    per_cpu_zombie[cpu] = NULL;
+
+    /* 释放链表上所有 zombie 线程 */
+    while (z) {
+        struct thread *next = z->next;
+        free_tid(z->tid);
+        kfree(z->stack);
+        kfree(z);
+        z = next;
+    }
+}
+
 /**
  * 线程入口包装器
  * 从寄存器读取 entry 和 arg(ebx=entry, esi=arg)
@@ -170,7 +188,7 @@ static void thread_entry_wrapper(void) {
     __asm__ volatile("mov %%ebx, %0" : "=r"(entry));
     __asm__ volatile("mov %%esi, %0" : "=r"(arg));
 
-    cpu_irq_enable(); /* 开中断 */
+    cpu_irq_enable();
     entry(arg);
     thread_exit(0);
 }
@@ -262,14 +280,6 @@ void schedule(void) {
 
     uint32_t flags = spin_lock_irqsave(&sched_lock);
 
-    /* 清理上次退出的线程 */
-    if (zombie_thread) {
-        free_tid(zombie_thread->tid);
-        kfree(zombie_thread->stack);
-        kfree(zombie_thread);
-        zombie_thread = NULL;
-    }
-
     cpu_id_t         cpu  = cpu_current_id();
     struct runqueue *rq   = sched_get_runqueue(cpu);
     struct thread   *prev = rq->current;
@@ -285,8 +295,10 @@ void schedule(void) {
     }
 
     if (next == prev) {
-        spin_unlock_irqrestore(&sched_lock, flags);
-        return; /* 仍然是当前线程 */
+        spin_unlock(&sched_lock);
+        sched_cleanup_zombie();
+        cpu_irq_restore(flags);
+        return;
     }
 
     /* 更新状态 */
@@ -317,12 +329,15 @@ void schedule(void) {
     spin_unlock(&sched_lock);
 
     if (prev) {
+        /* 切换后在新线程栈上运行,此时清理 zombie 是安全的 */
         context_switch(&prev->ctx, &next->ctx);
+        sched_cleanup_zombie();
     } else {
+        /* context_switch_first 不返回,zombie 会在下次 context_switch 返回时清理 */
         context_switch_first(&next->ctx);
+        __builtin_unreachable();
     }
 
-    /* 恢复中断状态(只有从 context_switch 返回的线程会到这里) */
     cpu_irq_restore(flags);
 }
 
@@ -343,7 +358,7 @@ void sched_init(void) {
     tid_bitmap[0] |= 1;
 
     /* 初始化运行队列 */
-    for (int i = 0; i < 1; i++) {
+    for (int i = 0; i < CFG_MAX_CPUS; i++) {
         runqueues[i].head       = NULL;
         runqueues[i].tail       = NULL;
         runqueues[i].current    = NULL;
@@ -499,13 +514,6 @@ void sched_wakeup_thread(struct thread *t) {
     spin_unlock_irqrestore(&sched_lock, flags);
 }
 
-void sched_destroy_current(void) {
-    struct thread *t = sched_current();
-    if (t) {
-        zombie_thread = t;
-    }
-}
-
 void sched_tick(void) {
     struct thread *current = sched_current();
 
@@ -587,14 +595,34 @@ thread_t thread_create(const char *name, void (*entry)(void *), void *arg) {
 }
 
 void thread_exit(int code) {
+    /* 关中断,防止在挂链过程中发生调度 */
+    cpu_irq_disable();
+
     struct thread *current = sched_current();
     if (current) {
+        /* 安全检查:绝不允许 idle 线程退出 */
+        if (current == idle_thread) {
+            panic("Idle thread tried to exit!");
+        }
+
         current->state     = THREAD_EXITED;
         current->exit_code = code;
+
         pr_info("Thread %d '%s' exited with code %d", current->tid, current->name, code);
-        sched_destroy_current();
+
+        /* 从运行队列移除 */
+        if (current_policy && current_policy->dequeue) {
+            current_policy->dequeue(current);
+        }
+
+        /* 挂入 per-cpu 僵尸链表 */
+        cpu_id_t cpu        = cpu_current_id();
+        current->next       = per_cpu_zombie[cpu];
+        per_cpu_zombie[cpu] = current;
     }
+
     schedule();
+
     /* 不应该返回 */
     while (1) {
         cpu_halt();

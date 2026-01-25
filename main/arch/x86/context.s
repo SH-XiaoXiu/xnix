@@ -44,6 +44,8 @@ context_switch:
 /**
  * void context_switch_first(struct task_context *new)
  * 第一次启动任务，不保存旧上下文
+ * 注意不在此处开中断，由 thread_entry_wrapper 开启
+ * 这样确保 sched_cleanup_zombie 在中断关闭的状态下执行
  */
 .global context_switch_first
 context_switch_first:
@@ -56,5 +58,5 @@ context_switch_first:
     mov 12(%edx), %esi
     mov 16(%edx), %edi
 
-    sti                     /* 开中断 */
+    /* 不在此处开中断，thread_entry_wrapper 会处理 */
     ret

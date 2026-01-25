@@ -25,6 +25,9 @@ set(CFG_INITIAL_PROCESSES 64)
 set(CFG_INITIAL_THREADS 256)
 set(CFG_MAX_CONSOLES 4)
 
+# CPU 配置
+set(CFG_MAX_CPUS 1)
+
 # IPC 配置
 set(CFG_CAP_TABLE_SIZE 256)      # 每个进程最多句柄数
 set(CFG_IPC_MSG_REGS 8)          # 短消息寄存器数量

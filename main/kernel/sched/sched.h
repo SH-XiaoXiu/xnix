@@ -148,11 +148,6 @@ void schedule(void);
 struct thread *sched_current(void);
 
 /**
- * 标记当前线程待销毁(下次调度时释放内存)
- */
-void sched_destroy_current(void);
-
-/**
  * 将线程加入阻塞链表
  */
 void sched_blocked_list_add(struct thread *t);
