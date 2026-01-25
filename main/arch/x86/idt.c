@@ -109,7 +109,7 @@ void idt_init(void) {
     idt_set_gate(11, (uint32_t)isr11, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(12, (uint32_t)isr12, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(13, (uint32_t)isr13, 0x08, IDT_GATE_INTERRUPT);
-    idt_set_gate(14, (uint32_t)isr14, 0x08, IDT_GATE_INTERRUPT);
+    idt_set_gate(14, (uint32_t)isr14, 0x08, IDT_GATE_INTERRUPT); /* Page Fault */
     idt_set_gate(15, (uint32_t)isr15, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(16, (uint32_t)isr16, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(17, (uint32_t)isr17, 0x08, IDT_GATE_INTERRUPT);

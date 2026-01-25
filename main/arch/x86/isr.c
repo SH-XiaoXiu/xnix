@@ -26,8 +26,19 @@ static const char *exception_names[] = {
     "Reserved",         "Reserved",       "Reserved",    "Reserved",      "Reserved",
     "Security",         "Reserved"};
 
+/* 声明 vmm_page_fault */
+#include <xnix/vmm.h>
+
 /* CPU 异常处理 */
 void isr_handler(struct irq_frame *frame) {
+    /* 如果是页错误 (Page Fault, #14), 调用 vmm_page_fault */
+    if (frame->int_no == 14) {
+        uint32_t cr2;
+        __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+        vmm_page_fault(frame->err_code, cr2);
+        return; /* 如果 vmm_page_fault 返回,说明已处理(目前是 panic,所以不会返回) */
+    }
+
     /* 打印通用寄存器 */
     klog(LOG_ERR, "--- Register Dump ---");
     klog(LOG_ERR, "EAX: 0x%08x  EBX: 0x%08x  ECX: 0x%08x  EDX: 0x%08x", frame->eax, frame->ebx,

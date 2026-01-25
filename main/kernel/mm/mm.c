@@ -6,8 +6,8 @@
  * @brief 内存管理初始化入口
  */
 
-#include <xnix/debug.h>
 #include <xnix/mm.h>
+#include <xnix/vmm.h>
 #include <xnix/stdio.h>
 
 /* page_alloc.c 中定义 */
@@ -17,6 +17,7 @@ extern uint32_t page_alloc_total_count(void);
 
 void mm_init(void) {
     page_alloc_init();
+    vmm_init();
 }
 
 void mm_dump_stats(void) {
