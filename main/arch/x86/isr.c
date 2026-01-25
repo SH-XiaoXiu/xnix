@@ -4,10 +4,7 @@
  * @author XiaoXiu
  */
 
-#include <arch/cpu.h>
-
-#include <drivers/irqchip.h>
-
+#include <kernel/irq/irq.h>
 #include <xnix/debug.h>
 #include <xnix/stdio.h>
 #include <xnix/types.h>

@@ -1,26 +1,22 @@
 /**
- * @file irqchip.c
- * @brief 中断控制器驱动框架
+ * @file irq.c
+ * @brief 中断请求 (IRQ) 子系统实现
  * @author XiaoXiu
  * @date 2026-01-22
  */
 
-#include <drivers/irqchip.h>
+#include <kernel/irq/irq.h>
 
-#define MAX_IRQS 16
+#include <asm/irq.h>
 
-static struct irqchip_driver *current_chip           = NULL;
-static irq_handler_t          irq_handlers[MAX_IRQS] = {0};
+static const struct irqchip_ops *current_chip                 = NULL;
+static irq_handler_t             irq_handlers[ARCH_NR_IRQS]   = {0};
 
-int irqchip_register(struct irqchip_driver *drv) {
-    if (!drv) {
-        return -1;
-    }
-    current_chip = drv;
-    return 0;
+void irq_set_chip(const struct irqchip_ops *ops) {
+    current_chip = ops;
 }
 
-void irqchip_init(void) {
+void irq_init(void) {
     if (current_chip && current_chip->init) {
         current_chip->init();
     }
@@ -45,16 +41,16 @@ void irq_eoi(uint8_t irq) {
 }
 
 void irq_set_handler(uint8_t irq, irq_handler_t handler) {
-    if (irq < MAX_IRQS) {
+    if (irq < ARCH_NR_IRQS) {
         irq_handlers[irq] = handler;
     }
 }
 
 void irq_dispatch(uint8_t irq, struct irq_frame *frame) {
-    if (irq < MAX_IRQS && irq_handlers[irq]) {
+    if (irq < ARCH_NR_IRQS && irq_handlers[irq]) {
         irq_handlers[irq](frame);
     }
-    /* IRQ 0 (timer) 的 EOI 由 sched_tick 负责,避免上下文切换时双重 EOI */
+    /* IRQ 0 (timer) 的 EOI 由 sched_tick 负责，避免上下文切换时双重 EOI */
     if (irq != 0) {
         irq_eoi(irq);
     }

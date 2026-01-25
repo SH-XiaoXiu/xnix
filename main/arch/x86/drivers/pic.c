@@ -6,7 +6,7 @@
 
 #include <arch/cpu.h>
 
-#include <drivers/irqchip.h>
+#include <kernel/irq/irq.h>
 
 #define PIC1_CMD  0x20
 #define PIC1_DATA 0x21
@@ -55,7 +55,7 @@ static void pic_eoi(uint8_t irq) {
     outb(PIC1_CMD, PIC_EOI);
 }
 
-static struct irqchip_driver pic_chip = {
+static const struct irqchip_ops pic_chip = {
     .name    = "8259-pic",
     .init    = pic_init,
     .enable  = pic_enable,
@@ -64,5 +64,5 @@ static struct irqchip_driver pic_chip = {
 };
 
 void pic_register(void) {
-    irqchip_register(&pic_chip);
+    irq_set_chip(&pic_chip);
 }

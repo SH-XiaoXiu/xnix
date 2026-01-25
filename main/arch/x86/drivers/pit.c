@@ -6,7 +6,8 @@
 
 #include <arch/cpu.h>
 
-#include <drivers/irqchip.h>
+#include <kernel/irq/irq.h>
+
 #include <drivers/timer.h>
 
 #define PIT_CHANNEL0 0x40
