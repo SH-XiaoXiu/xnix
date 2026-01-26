@@ -117,6 +117,7 @@ graph TD
 ### 架构设计图
 
 ```mermaid
+%%{init: {'flowchart': {'useMaxWidth': false, 'nodeSpacing': 40, 'rankSpacing': 60}, 'themeVariables': {'fontSize': '20px'}}}%%
 graph TB
     subgraph UserSpace["用户态 user/"]
         U_Init["Init进程"]
@@ -166,6 +167,7 @@ graph TB
 ### 调度图
 
 ```mermaid
+%%{init: {'flowchart': {'useMaxWidth': false, 'nodeSpacing': 40, 'rankSpacing': 70}, 'themeVariables': {'fontSize': '20px'}}}%%
 graph TD
     IRQ0["IRQ0 PIT"] --> TimerTick["timer_tick()"]
     TimerTick --> SchedTick["sched_tick()"]
@@ -197,6 +199,7 @@ graph TD
 ### IPC图（Endpoint/RPC/异步/Notification + Capability）
 
 ```mermaid
+%%{init: {'flowchart': {'useMaxWidth': false, 'nodeSpacing': 40, 'rankSpacing': 70}, 'themeVariables': {'fontSize': '20px'}}}%%
 graph LR
     subgraph User["用户态"]
         U_S["发送方线程"]
