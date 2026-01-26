@@ -1,15 +1,13 @@
 /**
  * @file serial.c
- * @brief x86 串口驱动 (8250/16550)
- * @author XiaoXiu
- * @date 2026-01-20
+ * @brief x86 串口驱动 (8250/16550) - 内核直驱
+ *
+ * 用于启动早期的内核日志输出.UDM 切换后此驱动不再使用.
  */
 
 #include <arch/cpu.h>
 
 #include <xnix/console.h>
-#include <xnix/ipc.h>
-#include <xnix/string.h>
 
 #define COM1 0x3F8
 
@@ -67,78 +65,6 @@ static void serial_clear(void) {
     serial_puts("\033[2J\033[H");
 }
 
-static cap_handle_t serial_udm_ep = CAP_HANDLE_INVALID;
-
-static void serial_udm_putc(char c) {
-    if (serial_udm_ep == CAP_HANDLE_INVALID) {
-        return;
-    }
-
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = CONSOLE_UDM_OP_PUTC;
-    msg.regs.data[1] = (uint32_t)(uint8_t)c;
-
-    ipc_send_async(serial_udm_ep, &msg);
-}
-
-static void serial_udm_puts(const char *s) {
-    if (!s) {
-        return;
-    }
-    while (*s) {
-        if (*s == '\n') {
-            serial_udm_putc('\r');
-        }
-        serial_udm_putc(*s++);
-    }
-}
-
-static void serial_udm_set_color(kcolor_t color) {
-    if (serial_udm_ep == CAP_HANDLE_INVALID) {
-        return;
-    }
-
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = CONSOLE_UDM_OP_SET_COLOR;
-    msg.regs.data[1] = (uint32_t)color;
-    ipc_send_async(serial_udm_ep, &msg);
-}
-
-static void serial_udm_reset_color(void) {
-    if (serial_udm_ep == CAP_HANDLE_INVALID) {
-        return;
-    }
-
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = CONSOLE_UDM_OP_RESET_COLOR;
-    ipc_send_async(serial_udm_ep, &msg);
-}
-
-static void serial_udm_clear(void) {
-    if (serial_udm_ep == CAP_HANDLE_INVALID) {
-        return;
-    }
-
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = CONSOLE_UDM_OP_CLEAR;
-    ipc_send_async(serial_udm_ep, &msg);
-}
-
-static struct console serial_console_udm = {
-    .name        = "serial",
-    .init        = NULL,
-    .putc        = serial_udm_putc,
-    .puts        = serial_udm_puts,
-    .set_color   = serial_udm_set_color,
-    .reset_color = serial_udm_reset_color,
-    .clear       = serial_udm_clear,
-};
-
-/* 导出驱动结构 */
 static struct console serial_console = {
     .name        = "serial",
     .init        = serial_init,
@@ -151,21 +77,4 @@ static struct console serial_console = {
 
 void serial_console_register(void) {
     console_register(&serial_console);
-}
-
-cap_handle_t serial_udm_start(void) {
-    if (serial_udm_ep != CAP_HANDLE_INVALID) {
-        return serial_udm_ep;
-    }
-
-    serial_udm_ep = endpoint_create();
-    if (serial_udm_ep == CAP_HANDLE_INVALID) {
-        return CAP_HANDLE_INVALID;
-    }
-
-    return serial_udm_ep;
-}
-
-struct console *serial_udm_console_driver(void) {
-    return &serial_console_udm;
 }

@@ -2,7 +2,6 @@
 #define XNIX_CONSOLE_H
 
 #include <xnix/capability.h>
-#include <xnix/console_udm.h>
 #include <xnix/types.h>
 
 /**

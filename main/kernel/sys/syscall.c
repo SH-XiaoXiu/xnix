@@ -25,8 +25,9 @@
  *
  * 返回值通过 eax 返回
  */
-/* 声明 thread_exit */
+/* 声明 thread_exit 和 sleep_ms */
 extern void thread_exit(int code);
+extern void sleep_ms(uint32_t ms);
 
 /*
  * IPC syscall 的用户指针处理
@@ -300,6 +301,13 @@ void syscall_handler(struct irq_regs *regs) {
             break;
         }
         ret = (int)inb(port);
+        break;
+    }
+
+    case SYS_SLEEP: {
+        uint32_t ms = regs->ebx;
+        sleep_ms(ms);
+        ret = 0;
         break;
     }
 

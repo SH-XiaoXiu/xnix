@@ -42,5 +42,6 @@
  * - 负数失败(如 -EPERM:无权限或端口不在授权范围内)
  */
 #define SYS_IOPORT_INB 9
+#define SYS_SLEEP      10
 
 #endif
