@@ -1,6 +1,11 @@
+#include <arch/cpu.h>
+
 #include <asm/irq_defs.h>
+#include <kernel/capability/capability.h>
+#include <kernel/io/ioport.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
+#include <xnix/process.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/syscall.h>
@@ -267,6 +272,34 @@ void syscall_handler(struct irq_regs *regs) {
         }
         ret = ipc_reply(kreply);
         syscall_ipc_msg_free(kreply);
+        break;
+    }
+
+    case SYS_IOPORT_OUTB: {
+        cap_handle_t         h    = (cap_handle_t)regs->ebx;
+        uint16_t             port = (uint16_t)regs->ecx;
+        uint8_t              val  = (uint8_t)regs->edx;
+        struct process      *proc = (struct process *)process_current();
+        struct ioport_range *r    = cap_lookup(proc, h, CAP_TYPE_IOPORT, CAP_WRITE);
+        if (!r || !ioport_range_contains(r, port)) {
+            ret = -EPERM;
+            break;
+        }
+        outb(port, val);
+        ret = 0;
+        break;
+    }
+
+    case SYS_IOPORT_INB: {
+        cap_handle_t         h    = (cap_handle_t)regs->ebx;
+        uint16_t             port = (uint16_t)regs->ecx;
+        struct process      *proc = (struct process *)process_current();
+        struct ioport_range *r    = cap_lookup(proc, h, CAP_TYPE_IOPORT, CAP_READ);
+        if (!r || !ioport_range_contains(r, port)) {
+            ret = -EPERM;
+            break;
+        }
+        ret = (int)inb(port);
         break;
     }
 

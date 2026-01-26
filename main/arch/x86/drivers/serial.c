@@ -9,7 +9,6 @@
 
 #include <xnix/console.h>
 #include <xnix/ipc.h>
-#include <xnix/thread.h>
 #include <xnix/string.h>
 
 #define COM1 0x3F8
@@ -70,37 +69,6 @@ static void serial_clear(void) {
 
 static cap_handle_t serial_udm_ep = CAP_HANDLE_INVALID;
 
-static void serial_udm_server(void *arg) {
-    cap_handle_t ep = (cap_handle_t)(uintptr_t)arg;
-
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-
-    while (1) {
-        msg.buffer.data = NULL;
-        msg.buffer.size = 0;
-        ipc_receive(ep, &msg, 0);
-
-        uint32_t op = msg.regs.data[0];
-        switch (op) {
-        case CONSOLE_UDM_OP_PUTC:
-            serial_putc((char)(msg.regs.data[1] & 0xFF));
-            break;
-        case CONSOLE_UDM_OP_SET_COLOR:
-            serial_set_color((kcolor_t)msg.regs.data[1]);
-            break;
-        case CONSOLE_UDM_OP_RESET_COLOR:
-            serial_reset_color();
-            break;
-        case CONSOLE_UDM_OP_CLEAR:
-            serial_clear();
-            break;
-        default:
-            break;
-        }
-    }
-}
-
 static void serial_udm_putc(char c) {
     if (serial_udm_ep == CAP_HANDLE_INVALID) {
         return;
@@ -111,10 +79,7 @@ static void serial_udm_putc(char c) {
     msg.regs.data[0] = CONSOLE_UDM_OP_PUTC;
     msg.regs.data[1] = (uint32_t)(uint8_t)c;
 
-    /* 发送到消息队列,如果队列满则回退到直接输出 */
-    if (ipc_send_async(serial_udm_ep, &msg) != IPC_OK) {
-        serial_putc(c);
-    }
+    ipc_send_async(serial_udm_ep, &msg);
 }
 
 static void serial_udm_puts(const char *s) {
@@ -195,13 +160,6 @@ cap_handle_t serial_udm_start(void) {
 
     serial_udm_ep = endpoint_create();
     if (serial_udm_ep == CAP_HANDLE_INVALID) {
-        return CAP_HANDLE_INVALID;
-    }
-
-    thread_t t = thread_create("seriald", serial_udm_server, (void *)(uintptr_t)serial_udm_ep);
-    if (!t) {
-        cap_close(serial_udm_ep);
-        serial_udm_ep = CAP_HANDLE_INVALID;
         return CAP_HANDLE_INVALID;
     }
 

@@ -34,6 +34,7 @@ typedef enum {
     CAP_TYPE_NONE = 0,
     CAP_TYPE_ENDPOINT,     /* IPC endpoint */
     CAP_TYPE_NOTIFICATION, /* 异步通知 */
+    CAP_TYPE_IOPORT,       /* I/O 端口范围授权(配合 SYS_IOPORT_INB/OUTB) */
     CAP_TYPE_VMAR,         /* 虚拟内存区域(共享内存) */
     CAP_TYPE_THREAD,       /* 线程 */
     CAP_TYPE_PROCESS,      /* 进程 */

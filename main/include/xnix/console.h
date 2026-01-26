@@ -2,6 +2,7 @@
 #define XNIX_CONSOLE_H
 
 #include <xnix/capability.h>
+#include <xnix/console_udm.h>
 #include <xnix/types.h>
 
 /**
@@ -11,26 +12,6 @@
  * - 作为内核输出的 fan-out 层: 将 kputc/kputs 等输出分发到多个后端
  * - 后端可以是直接硬件驱动(如 VGA/Serial),也可以是 IPC/UDM stub
  */
-
-/**
- * 控制台 UDM/IPC 协议
- *
- * 约定:
- * - msg.regs.data[0] 为 opcode
- * - 其余参数放在 data[1..] 中
- * - 当前只覆盖最小控制台功能(putc/颜色/清屏)
- */
-#define CONSOLE_UDM_OPS(X) \
-    X(PUTC, 1)             \
-    X(SET_COLOR, 2)        \
-    X(RESET_COLOR, 3)      \
-    X(CLEAR, 4)
-
-enum console_udm_op {
-#define CONSOLE_UDM_OP_ENUM(name, val) CONSOLE_UDM_OP_##name = (val),
-    CONSOLE_UDM_OPS(CONSOLE_UDM_OP_ENUM)
-#undef CONSOLE_UDM_OP_ENUM
-};
 
 /**
  * 控制台后端
