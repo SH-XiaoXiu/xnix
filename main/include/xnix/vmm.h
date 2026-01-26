@@ -41,4 +41,7 @@ paddr_t vmm_get_paddr(void *pd_phys, vaddr_t vaddr);
 /* 缺页异常处理 */
 void vmm_page_fault(uint32_t err_code, vaddr_t vaddr);
 
+/* 获取内核页目录物理地址 */
+void *vmm_get_kernel_pd(void);
+
 #endif

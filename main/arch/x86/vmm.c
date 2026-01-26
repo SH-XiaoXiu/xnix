@@ -1,9 +1,9 @@
 #include <arch/mmu.h>
 #include <arch/smp.h>
 
+#include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
-#include <xnix/config.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
@@ -505,4 +505,8 @@ void vmm_page_fault(uint32_t err_code, vaddr_t vaddr) {
           "Error Code: 0x%x (%s)\n"
           "CR3: 0x%x",
           vaddr, err_code, reason, cr3);
+}
+
+void *vmm_get_kernel_pd(void) {
+    return kernel_pd;
 }

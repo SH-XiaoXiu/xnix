@@ -19,6 +19,8 @@
 #define SYS_IOPORT_OUTB     8
 #define SYS_IOPORT_INB      9
 #define SYS_SLEEP           10
+#define SYS_SPAWN           11
+#define SYS_MODULE_COUNT    12
 
 /* 系统调用内联包装 */
 static inline int syscall0(int num) {
@@ -76,6 +78,32 @@ static inline int sys_ipc_receive(uint32_t ep, struct ipc_message *msg, uint32_t
 
 static inline void sys_sleep(uint32_t ms) {
     syscall1(SYS_SLEEP, ms);
+}
+
+/* capability 权限定义 */
+#define CAP_READ   (1 << 0)
+#define CAP_WRITE  (1 << 1)
+#define CAP_GRANT  (1 << 2)
+
+/* spawn 相关结构 */
+struct spawn_cap {
+    uint32_t src;       /* 源 capability handle */
+    uint32_t rights;    /* 授予的权限 */
+    uint32_t dst_hint;  /* 期望的目标 handle（-1 表示任意） */
+};
+
+struct spawn_args {
+    uint32_t         module_index;  /* 启动模块索引 */
+    uint32_t         cap_count;     /* 传递的 capability 数量 */
+    struct spawn_cap caps[8];       /* 最多传递 8 个 capability */
+};
+
+static inline int sys_spawn(struct spawn_args *args) {
+    return syscall1(SYS_SPAWN, (uint32_t)(uintptr_t)args);
+}
+
+static inline int sys_module_count(void) {
+    return syscall0(SYS_MODULE_COUNT);
 }
 
 #endif /* _XNIX_SYSCALL_H */

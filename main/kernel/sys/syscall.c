@@ -3,6 +3,8 @@
 #include <asm/irq_defs.h>
 #include <kernel/capability/capability.h>
 #include <kernel/io/ioport.h>
+#include <kernel/process/process.h>
+#include <xnix/boot.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/process.h>
@@ -10,6 +12,7 @@
 #include <xnix/string.h>
 #include <xnix/syscall.h>
 #include <xnix/usraccess.h>
+#include <xnix/vmm.h>
 
 #include "xnix/errno.h"
 
@@ -28,6 +31,19 @@
 /* 声明 thread_exit 和 sleep_ms */
 extern void thread_exit(int code);
 extern void sleep_ms(uint32_t ms);
+
+/* 用户态 spawn 参数结构(与用户态定义一致) */
+struct user_spawn_cap {
+    uint32_t src;
+    uint32_t rights;
+    uint32_t dst_hint;
+};
+
+struct user_spawn_args {
+    uint32_t              module_index;
+    uint32_t              cap_count;
+    struct user_spawn_cap caps[8];
+};
 
 /*
  * IPC syscall 的用户指针处理
@@ -308,6 +324,71 @@ void syscall_handler(struct irq_regs *regs) {
         uint32_t ms = regs->ebx;
         sleep_ms(ms);
         ret = 0;
+        break;
+    }
+
+    case SYS_MODULE_COUNT: {
+        ret = (int)boot_get_module_count();
+        break;
+    }
+
+    case SYS_SPAWN: {
+        struct user_spawn_args *user_args = (struct user_spawn_args *)regs->ebx;
+        struct user_spawn_args  kargs;
+
+        ret = copy_from_user(&kargs, user_args, sizeof(kargs));
+        if (ret < 0) {
+            break;
+        }
+
+        /* 获取模块数据 */
+        void    *mod_addr = NULL;
+        uint32_t mod_size = 0;
+        ret               = boot_get_module(kargs.module_index, &mod_addr, &mod_size);
+        if (ret < 0) {
+            ret = -EINVAL;
+            break;
+        }
+
+        /* 构建 capability 继承列表 */
+        uint32_t cap_count = kargs.cap_count;
+        if (cap_count > 8) {
+            cap_count = 8;
+        }
+
+        struct spawn_inherit_cap inherit_caps[8];
+        for (uint32_t i = 0; i < cap_count; i++) {
+            inherit_caps[i].src          = (cap_handle_t)kargs.caps[i].src;
+            inherit_caps[i].rights       = kargs.caps[i].rights;
+            inherit_caps[i].expected_dst = (cap_handle_t)kargs.caps[i].dst_hint;
+        }
+
+        /*
+         * 切换到内核页表执行 spawn
+         *
+         * process_spawn_module_ex 需要访问:
+         * 1. 模块 ELF 数据 (通过恒等映射)
+         * 2. vmm_create_pd 中的临时映射
+         *
+         * 用户进程的页表虽然复制了内核映射,但临时映射窗口可能有问题
+         * 切换到内核页表可以确保正确访问
+         */
+        uint32_t user_cr3;
+        asm volatile("mov %%cr3, %0" : "=r"(user_cr3));
+        void *kernel_pd = vmm_get_kernel_pd();
+        vmm_switch_pd(kernel_pd);
+
+        /* 创建进程 */
+        pid_t pid = process_spawn_module_ex(NULL, mod_addr, mod_size, inherit_caps, cap_count);
+
+        /* 切换回用户页表 */
+        vmm_switch_pd((void *)user_cr3);
+
+        if (pid == PID_INVALID) {
+            ret = -ENOMEM;
+        } else {
+            ret = (int)pid;
+        }
         break;
     }
 

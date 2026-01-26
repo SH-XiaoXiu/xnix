@@ -29,4 +29,18 @@ uint32_t boot_get_initmod_index(void);
 
 uint32_t boot_get_serialmod_index(void);
 
+/**
+ * 获取启动模块数量
+ */
+uint32_t boot_get_module_count(void);
+
+/**
+ * 获取启动模块信息
+ * @param index 模块索引
+ * @param out_addr 输出模块起始地址
+ * @param out_size 输出模块大小
+ * @return 0 成功,<0 失败
+ */
+int boot_get_module(uint32_t index, void **out_addr, uint32_t *out_size);
+
 #endif

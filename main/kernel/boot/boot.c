@@ -77,12 +77,33 @@ static bool boot_cmdline_get_u32(const char *cmdline, const char *key, uint32_t 
 static uint32_t g_boot_initmod_index   = 0;
 static uint32_t g_boot_serialmod_index = 0xFFFFFFFFu;
 
+/* 保存 multiboot 模块信息 */
+static struct multiboot_mod_list *g_boot_modules      = NULL;
+static uint32_t                   g_boot_module_count = 0;
+
 uint32_t boot_get_initmod_index(void) {
     return g_boot_initmod_index;
 }
 
 uint32_t boot_get_serialmod_index(void) {
     return g_boot_serialmod_index;
+}
+
+uint32_t boot_get_module_count(void) {
+    return g_boot_module_count;
+}
+
+int boot_get_module(uint32_t index, void **out_addr, uint32_t *out_size) {
+    if (index >= g_boot_module_count || !g_boot_modules) {
+        return -1;
+    }
+    if (out_addr) {
+        *out_addr = (void *)g_boot_modules[index].mod_start;
+    }
+    if (out_size) {
+        *out_size = g_boot_modules[index].mod_end - g_boot_modules[index].mod_start;
+    }
+    return 0;
 }
 
 static uint32_t boot_compute_ram_mb(uint32_t magic, const struct multiboot_info *mb_info) {
@@ -123,6 +144,12 @@ __attribute__((weak)) void boot_init(uint32_t magic, const struct multiboot_info
 
         if (mb_info->flags & MULTIBOOT_INFO_CMDLINE) {
             cmdline = (const char *)mb_info->cmdline;
+        }
+
+        /* 保存模块信息 */
+        if ((mb_info->flags & MULTIBOOT_INFO_MODS) && mb_info->mods_count > 0) {
+            g_boot_modules      = (struct multiboot_mod_list *)mb_info->mods_addr;
+            g_boot_module_count = mb_info->mods_count;
         }
     }
 

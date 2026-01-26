@@ -41,7 +41,9 @@
  * - >=0 读取到的字节(低 8 位有效)\n
  * - 负数失败(如 -EPERM:无权限或端口不在授权范围内)
  */
-#define SYS_IOPORT_INB 9
-#define SYS_SLEEP      10
+#define SYS_IOPORT_INB   9
+#define SYS_SLEEP        10
+#define SYS_SPAWN        11
+#define SYS_MODULE_COUNT 12
 
 #endif

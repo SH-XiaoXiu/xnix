@@ -105,26 +105,23 @@ static void boot_phase_late(void) {
     pr_ok("Timer initialized (%d Hz)", CFG_SCHED_HZ);
 }
 
-#define BOOT_MOD_NONE 0xFFFFFFFFu
-
 /**
- * Services - 启动 UDM 驱动和 init 进程
+ * Services - 仅启动 init 进程
+ *
+ * 内核只负责:
+ * 创建必要的 cap(serial_ep, io_cap)
+ * 启动 init 进程并传递这些 cap
+ *
+ * seriald 等服务的启动由 init 进程负责(通过 sys_spawn)
  */
-static void boot_start_services(uint32_t magic, struct multiboot_info *mb_info) {
-    if (magic != MULTIBOOT_BOOTLOADER_MAGIC || !mb_info) {
-        pr_warn("No Multiboot info, skipping module loading");
-        return;
-    }
-
-    if (!(mb_info->flags & MULTIBOOT_INFO_MODS) || mb_info->mods_count == 0) {
+static void boot_start_services(void) {
+    uint32_t mods_count = boot_get_module_count();
+    if (mods_count == 0) {
         pr_warn("No modules found");
         return;
     }
 
-    struct multiboot_mod_list *mods       = (struct multiboot_mod_list *)mb_info->mods_addr;
-    uint32_t                   mods_count = mb_info->mods_count;
-
-    /* 创建 UDM console endpoint */
+    /* 创建 UDM console endpoint 和 I/O port capability */
     cap_handle_t serial_ep = endpoint_create();
     cap_handle_t io_cap    = CAP_HANDLE_INVALID;
 
@@ -134,50 +131,38 @@ static void boot_start_services(uint32_t magic, struct multiboot_info *mb_info) 
                                      CAP_READ | CAP_WRITE | CAP_GRANT);
     }
 
-    /* 加载 seriald 模块(可选) */
-    uint32_t serial_mod_index = boot_get_serialmod_index();
-    if (serial_mod_index != BOOT_MOD_NONE && serial_ep != CAP_HANDLE_INVALID) {
-        if (serial_mod_index >= mods_count) {
-            pr_warn("Boot: xnix.serialmod=%u out of range, ignoring", serial_mod_index);
-        } else {
-            struct multiboot_mod_list *sm       = &mods[serial_mod_index];
-            void                      *sm_vaddr = (void *)sm->mod_start;
-            uint32_t                   sm_size  = sm->mod_end - sm->mod_start;
-
-            pr_info("Loading seriald module (%u bytes)", sm_size);
-
-            struct spawn_inherit_cap serial_inherit[2] = {
-                {.src = serial_ep, .rights = CAP_READ | CAP_WRITE, .expected_dst = 0},
-                {.src = io_cap, .rights = CAP_READ | CAP_WRITE, .expected_dst = 1},
-            };
-            process_spawn_module_ex("seriald", sm_vaddr, sm_size, serial_inherit,
-                                    (io_cap == CAP_HANDLE_INVALID) ? 1 : 2);
-            thread_create("console_udm_switch", boot_console_udm_switch, NULL);
-        }
-    }
-
-    /* 加载 init 模块(必须) */
+    /* 获取 init 模块 */
     uint32_t init_mod_index = boot_get_initmod_index();
     if (init_mod_index >= mods_count) {
         pr_warn("Boot: xnix.initmod=%u out of range, defaulting to 0", init_mod_index);
         init_mod_index = 0;
     }
 
-    struct multiboot_mod_list *init_mod  = &mods[init_mod_index];
-    void                      *mod_vaddr = (void *)init_mod->mod_start;
-    uint32_t                   mod_size  = init_mod->mod_end - init_mod->mod_start;
+    void    *mod_addr = NULL;
+    uint32_t mod_size = 0;
+    if (boot_get_module(init_mod_index, &mod_addr, &mod_size) < 0) {
+        pr_err("Failed to get init module");
+        return;
+    }
 
     pr_info("Loading init module (%u bytes)", mod_size);
 
-    if (serial_ep != CAP_HANDLE_INVALID) {
-        struct spawn_inherit_cap init_inherit = {
-            .src          = serial_ep,
-            .rights       = CAP_WRITE,
-            .expected_dst = 0,
+    /*
+     * 传递给 init 的 capability:
+     *   handle 0: serial_ep (用于 printf 输出)
+     *   handle 1: io_cap (传递给 seriald)
+     */
+    if (serial_ep != CAP_HANDLE_INVALID && io_cap != CAP_HANDLE_INVALID) {
+        struct spawn_inherit_cap init_inherit[2] = {
+            {.src = serial_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 0},
+            {.src = io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 1},
         };
-        process_spawn_module_ex("init", mod_vaddr, mod_size, &init_inherit, 1);
+        process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 2);
+
+        /* UDM console 切换线程 */
+        thread_create("console_udm_switch", boot_console_udm_switch, NULL);
     } else {
-        process_spawn_module("init", mod_vaddr, mod_size);
+        process_spawn_module("init", mod_addr, mod_size);
     }
 }
 
@@ -189,7 +174,7 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     boot_phase_core();
     boot_phase_subsys();
     boot_phase_late();
-    boot_start_services(magic, mb_info);
+    boot_start_services();
 
     pr_info("Starting scheduler...");
     cpu_irq_enable();
