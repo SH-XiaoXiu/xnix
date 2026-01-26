@@ -68,4 +68,16 @@ void arch_tlb_flush_page(vaddr_t addr);
  */
 void arch_get_memory_range(paddr_t *start, paddr_t *end);
 
+typedef enum {
+    ARCH_MEM_USABLE = 1,
+} arch_mem_type_t;
+
+struct arch_mem_region {
+    paddr_t start;
+    paddr_t end;
+    uint32_t type;
+};
+
+uint32_t arch_get_memory_map(struct arch_mem_region *regions, uint32_t max_regions);
+
 #endif

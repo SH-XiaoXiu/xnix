@@ -15,12 +15,21 @@
 #define MULTIBOOT_INFO_ELF_SHDR 0x020
 #define MULTIBOOT_INFO_MEM_MAP  0x040
 
+#define MULTIBOOT_MEMORY_AVAILABLE 1
+
 struct multiboot_mod_list {
     uint32_t mod_start;
     uint32_t mod_end;
     uint32_t cmdline;
     uint32_t pad;
 };
+
+struct multiboot_mmap_entry {
+    uint32_t size;
+    uint64_t addr;
+    uint64_t len;
+    uint32_t type;
+} __attribute__((packed));
 
 struct multiboot_info {
     uint32_t flags;

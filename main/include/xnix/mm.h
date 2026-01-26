@@ -36,6 +36,7 @@
  *   free_page(page);
  */
 void *alloc_page(void);
+void *alloc_page_high(void);
 
 /**
  * 分配连续的多个物理页

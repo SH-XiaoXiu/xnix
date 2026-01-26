@@ -80,6 +80,33 @@ uint32_t boot_get_initmod_index(void) {
     return g_boot_initmod_index;
 }
 
+static uint32_t boot_compute_ram_mb(uint32_t magic, const struct multiboot_info *mb_info) {
+    if (magic != MULTIBOOT_BOOTLOADER_MAGIC || !mb_info) {
+        return 0;
+    }
+
+    if ((mb_info->flags & MULTIBOOT_INFO_MEM_MAP) && mb_info->mmap_length && mb_info->mmap_addr) {
+        uint64_t total_kb = 0;
+        uint32_t off      = 0;
+        while (off < mb_info->mmap_length) {
+            struct multiboot_mmap_entry *e =
+                (struct multiboot_mmap_entry *)(uintptr_t)(mb_info->mmap_addr + off);
+            if (e->type == MULTIBOOT_MEMORY_AVAILABLE && e->len) {
+                total_kb += e->len / 1024ULL;
+            }
+            off += e->size + sizeof(e->size);
+        }
+        return (uint32_t)(total_kb / 1024ULL);
+    }
+
+    if (mb_info->flags & MULTIBOOT_INFO_MEMORY) {
+        uint32_t total_kb = mb_info->mem_upper + 1024;
+        return total_kb / 1024;
+    }
+
+    return 0;
+}
+
 __attribute__((weak)) void boot_init(uint32_t magic, const struct multiboot_info *mb_info) {
     struct hal_features features;
     const char         *cmdline = NULL;
@@ -87,10 +114,7 @@ __attribute__((weak)) void boot_init(uint32_t magic, const struct multiboot_info
     hal_probe_features(&features);
 
     if (magic == MULTIBOOT_BOOTLOADER_MAGIC && mb_info) {
-        if (mb_info->flags & MULTIBOOT_INFO_MEMORY) {
-            uint32_t total_kb    = mb_info->mem_upper + 1024;
-            features.ram_size_mb = total_kb / 1024;
-        }
+        features.ram_size_mb = boot_compute_ram_mb(magic, mb_info);
 
         if (mb_info->flags & MULTIBOOT_INFO_CMDLINE) {
             cmdline = (const char *)mb_info->cmdline;

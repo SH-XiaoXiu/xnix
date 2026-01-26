@@ -3,6 +3,7 @@
 
 #include <xnix/debug.h>
 #include <xnix/mm.h>
+#include <xnix/config.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
@@ -143,6 +144,10 @@ void vmm_init(void) {
     arch_get_memory_range(&start, &end);
 
     /* 对齐到 4MB 边界 (每个页表 4MB) */
+    uint32_t max_idmap = (uint32_t)CFG_KERNEL_IDMAP_MB * 1024u * 1024u;
+    if (max_idmap && end > max_idmap) {
+        end = max_idmap;
+    }
     uint32_t map_end = (end + 0x3FFFFF) & ~0x3FFFFF;
 
     /*
@@ -198,8 +203,8 @@ void vmm_init(void) {
     /* 启用分页 */
     load_cr3((uint32_t)kernel_pd);
     enable_paging();
-    pr_ok("VMM initialized, Paging enabled, mapped %u MB (RAM %u MB)", map_end / 1024 / 1024,
-          end / 1024 / 1024);
+    pr_ok("VMM initialized, Paging enabled, mapped %u MB (IDMAP %u MB)", map_end / 1024 / 1024,
+          (uint32_t)CFG_KERNEL_IDMAP_MB);
 }
 
 int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {

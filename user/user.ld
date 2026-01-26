@@ -2,7 +2,7 @@ ENTRY(_start)
 
 SECTIONS
 {
-    . = 0x90000000; /* 用户态代码基址 */
+    . = 0x08048000; /* 用户态代码基址 */
 
     .text : ALIGN(4K) {
         *(.text)

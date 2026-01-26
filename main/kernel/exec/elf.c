@@ -152,7 +152,7 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
             /* 检查是否已经映射 */
             paddr_t exist_paddr = (paddr_t)mm->query(proc->page_dir_phys, vaddr);
             if (!exist_paddr) {
-                void *page = alloc_page();
+                void *page = alloc_page_high();
                 if (!page) {
                     return -ENOMEM;
                 }
@@ -171,7 +171,9 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
                 }
 
                 /* 清空页面 */
-                memset(page, 0, PAGE_SIZE);
+                void *k = vmm_kmap((paddr_t)page);
+                memset(k, 0, PAGE_SIZE);
+                vmm_kunmap(k);
             }
         }
 
@@ -215,8 +217,8 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
     }
 
     /* 分配并映射用户栈 */
-    void *stack_page_1 = alloc_page();
-    void *stack_page_2 = alloc_page();
+    void *stack_page_1 = alloc_page_high();
+    void *stack_page_2 = alloc_page_high();
     if (!stack_page_1 || !stack_page_2) {
         return -ENOMEM;
     }
@@ -239,8 +241,12 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
     }
 
     /* 清空栈 */
-    memset(stack_page_1, 0, PAGE_SIZE);
-    memset(stack_page_2, 0, PAGE_SIZE);
+    void *k1 = vmm_kmap((paddr_t)stack_page_1);
+    memset(k1, 0, PAGE_SIZE);
+    vmm_kunmap(k1);
+    void *k2 = vmm_kmap((paddr_t)stack_page_2);
+    memset(k2, 0, PAGE_SIZE);
+    vmm_kunmap(k2);
 
     pr_info("ELF loaded, entry point %x", hdr->e_entry);
     *out_entry = hdr->e_entry;

@@ -39,6 +39,10 @@ if(ENABLE_VMM_DEBUG)
     add_definitions(-DENABLE_VMM_DEBUG)
 endif()
 
+# 低端恒等映射窗口(用于内核直接访问物理地址)
+# x86 non-PAE 下，为避免与用户态地址布局冲突，应保持较小(例如 64MB/128MB)。
+set(CFG_KERNEL_IDMAP_MB 64)
+
 # IPC 配置
 set(CFG_CAP_TABLE_SIZE 256)      # 每个进程最多句柄数
 set(CFG_IPC_MSG_REGS 8)          # 短消息寄存器数量
