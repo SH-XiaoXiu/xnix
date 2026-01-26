@@ -27,4 +27,6 @@ void boot_init(uint32_t magic, const struct multiboot_info *mb_info);
  */
 uint32_t boot_get_initmod_index(void);
 
+uint32_t boot_get_serialmod_index(void);
+
 #endif

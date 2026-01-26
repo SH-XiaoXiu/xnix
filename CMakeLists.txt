@@ -105,14 +105,16 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ISO_DIR}/boot/grub
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:xnix.elf> ${ISO_DIR}/boot/xnix.elf
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/init.elf ${ISO_DIR}/boot/init.elf
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/seriald.elf ${ISO_DIR}/boot/seriald.elf
         COMMAND ${CMAKE_COMMAND} -E echo "set timeout=0" > ${ISO_DIR}/boot/grub/grub.cfg
         COMMAND ${CMAKE_COMMAND} -E echo "set default=0" >> ${ISO_DIR}/boot/grub/grub.cfg
         COMMAND ${CMAKE_COMMAND} -E echo "menuentry \"Xnix\" { " >> ${ISO_DIR}/boot/grub/grub.cfg
-        COMMAND ${CMAKE_COMMAND} -E echo "  multiboot /boot/xnix.elf" >> ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND ${CMAKE_COMMAND} -E echo "  multiboot /boot/xnix.elf xnix.initmod=0 xnix.serialmod=1" >> ${ISO_DIR}/boot/grub/grub.cfg
         COMMAND ${CMAKE_COMMAND} -E echo "  module /boot/init.elf" >> ${ISO_DIR}/boot/grub/grub.cfg
+        COMMAND ${CMAKE_COMMAND} -E echo "  module /boot/seriald.elf" >> ${ISO_DIR}/boot/grub/grub.cfg
         COMMAND ${CMAKE_COMMAND} -E echo "}" >> ${ISO_DIR}/boot/grub/grub.cfg
         COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/xnix.iso ${ISO_DIR} 2>/dev/null || true
-        DEPENDS xnix.elf init.elf
+        DEPENDS xnix.elf init.elf seriald.elf
         COMMENT "创建可引导 ISO..."
 )
 add_custom_target(iso DEPENDS ${CMAKE_BINARY_DIR}/xnix.iso)

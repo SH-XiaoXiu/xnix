@@ -11,6 +11,7 @@
 #include <drivers/timer.h>
 
 #include <asm/multiboot.h>
+#include <kernel/io/ioport.h>
 #include <kernel/irq/irq.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
@@ -91,15 +92,11 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     ipc_init();
     pr_ok("IPC subsystem initialized");
 
+    ioport_init();
+
     /* 初始化调度器 */
     sched_init();
     pr_ok("Scheduler initialized");
-
-    cap_handle_t serial_ep = serial_udm_start();
-    if (serial_ep != CAP_HANDLE_INVALID) {
-        process_set_boot_console_endpoint(serial_ep);
-        thread_create("console_udm_switch", boot_console_udm_switch, NULL);
-    }
 
     thread_create("task_bg", task_bg, NULL);
     pr_info("Threads created");
@@ -110,8 +107,9 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     pr_ok("Timer initialized (%d Hz)", CFG_SCHED_HZ);
 
     /* 查找/启动 init 进程 */
-    struct multiboot_mod_list *init_mod       = NULL;
-    uint32_t                   init_mod_index = 0;
+    struct multiboot_mod_list *init_mod         = NULL;
+    uint32_t                   init_mod_index   = 0;
+    uint32_t                   serial_mod_index = boot_get_serialmod_index();
     if (magic == MULTIBOOT_BOOTLOADER_MAGIC && mb_info && (mb_info->flags & MULTIBOOT_INFO_MODS)) {
         if (mb_info->mods_count > 0) {
             init_mod = (struct multiboot_mod_list *)mb_info->mods_addr;
@@ -137,11 +135,53 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
             pr_warn("Boot: xnix.initmod=%u out of range, defaulting to 0", init_mod_index);
             init_mod_index = 0;
         }
+
+        cap_handle_t serial_ep = serial_udm_start();
+        if (serial_ep != CAP_HANDLE_INVALID) {
+            cap_handle_t io_cap = ioport_create_range((struct process *)process_current(), 0x3F8,
+                                                      0x3FF, CAP_READ | CAP_WRITE | CAP_GRANT);
+
+            if (serial_mod_index != 0xFFFFFFFFu) {
+                if (serial_mod_index >= mb_info->mods_count) {
+                    pr_warn("Boot: xnix.serialmod=%u out of range, ignoring", serial_mod_index);
+                } else {
+                    struct multiboot_mod_list *sm       = &mods[serial_mod_index];
+                    void                      *sm_vaddr = (void *)sm->mod_start;
+                    uint32_t                   sm_size  = sm->mod_end - sm->mod_start;
+                    pr_info("Found serial module (%u bytes)", sm_size);
+                    struct spawn_inherit_cap serial_inherit[2] = {
+                        {
+                            .src          = serial_ep,
+                            .rights       = CAP_READ | CAP_WRITE,
+                            .expected_dst = 0,
+                        },
+                        {
+                            .src          = io_cap,
+                            .rights       = CAP_READ | CAP_WRITE,
+                            .expected_dst = 1,
+                        },
+                    };
+                    process_spawn_module_ex("seriald", sm_vaddr, sm_size, serial_inherit,
+                                            (io_cap == CAP_HANDLE_INVALID) ? 1 : 2);
+                    thread_create("console_udm_switch", boot_console_udm_switch, NULL);
+                }
+            }
+        }
+
         init_mod           = &mods[init_mod_index];
         void    *mod_vaddr = (void *)init_mod->mod_start;
         uint32_t mod_size  = init_mod->mod_end - init_mod->mod_start;
         pr_info("Found init module (%u bytes)", mod_size);
-        process_spawn_init(mod_vaddr, mod_size);
+        if (serial_ep != CAP_HANDLE_INVALID) {
+            struct spawn_inherit_cap init_inherit = {
+                .src          = serial_ep,
+                .rights       = CAP_WRITE,
+                .expected_dst = 0,
+            };
+            process_spawn_module_ex("init", mod_vaddr, mod_size, &init_inherit, 1);
+        } else {
+            process_spawn_module("init", mod_vaddr, mod_size);
+        }
     } else {
         pr_warn("No init module found");
     }

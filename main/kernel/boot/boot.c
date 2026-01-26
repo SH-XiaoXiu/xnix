@@ -74,10 +74,15 @@ static bool boot_cmdline_get_u32(const char *cmdline, const char *key, uint32_t 
     return false;
 }
 
-static uint32_t g_boot_initmod_index = 0;
+static uint32_t g_boot_initmod_index   = 0;
+static uint32_t g_boot_serialmod_index = 0xFFFFFFFFu;
 
 uint32_t boot_get_initmod_index(void) {
     return g_boot_initmod_index;
+}
+
+uint32_t boot_get_serialmod_index(void) {
+    return g_boot_serialmod_index;
 }
 
 static uint32_t boot_compute_ram_mb(uint32_t magic, const struct multiboot_info *mb_info) {
@@ -137,6 +142,12 @@ __attribute__((weak)) void boot_init(uint32_t magic, const struct multiboot_info
         if (boot_cmdline_get_u32(cmdline, "xnix.initmod", &init_mod_index)) {
             g_boot_initmod_index = init_mod_index;
             pr_info("Boot: xnix.initmod=%u", g_boot_initmod_index);
+        }
+
+        uint32_t serial_mod_index;
+        if (boot_cmdline_get_u32(cmdline, "xnix.serialmod", &serial_mod_index)) {
+            g_boot_serialmod_index = serial_mod_index;
+            pr_info("Boot: xnix.serialmod=%u", g_boot_serialmod_index);
         }
     }
 
