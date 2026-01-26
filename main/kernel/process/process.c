@@ -26,16 +26,6 @@ static uint32_t  pid_capacity = 0;
 /* 内核进程(PID 0) */
 static struct process kernel_process;
 
-static cap_handle_t g_boot_console_ep = CAP_HANDLE_INVALID;
-
-void process_set_boot_console_endpoint(cap_handle_t handle) {
-    g_boot_console_ep = handle;
-}
-
-cap_handle_t process_get_boot_console_endpoint(void) {
-    return g_boot_console_ep;
-}
-
 void process_subsystem_init(void) {
     /* 分配 PID Bitmap */
     pid_capacity       = (CFG_INITIAL_PROCESSES + 31) & ~31;
@@ -243,14 +233,6 @@ process_t process_create(const char *name) {
     proc->next_sibling = NULL;
     proc->refcount     = 1;
 
-    if (g_boot_console_ep != CAP_HANDLE_INVALID) {
-        struct process *creator = process_get_current();
-        cap_handle_t dup = cap_duplicate_to(creator, g_boot_console_ep, proc, CAP_READ | CAP_WRITE);
-        if (dup != g_boot_console_ep) {
-            pr_warn("Boot: console endpoint handle mismatch (%u -> %u)", g_boot_console_ep, dup);
-        }
-    }
-
     if (!proc->cap_table || !proc->thread_lock) {
         if (proc->page_dir_phys) {
             if (mm->destroy_as) {
@@ -386,44 +368,63 @@ void user_thread_entry(void *arg) {
 }
 
 pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
-    /* 创建进程结构 */
-    struct process *proc = (struct process *)process_create("init");
+    return process_spawn_module("init", elf_data, elf_size);
+}
+
+pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size) {
+    return process_spawn_module_ex(name, elf_data, elf_size, NULL, 0);
+}
+
+pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
+                              const struct spawn_inherit_cap *inherit_caps,
+                              uint32_t                        inherit_count) {
+    struct process *proc = (struct process *)process_create(name);
     if (!proc) {
-        pr_err("Failed to create init process");
+        pr_err("Failed to create process");
         return PID_INVALID;
     }
 
-    /* 加载用户程序 */
+    struct process *creator = process_get_current();
+    for (uint32_t i = 0; i < inherit_count; i++) {
+        cap_handle_t dup =
+            cap_duplicate_to(creator, inherit_caps[i].src, proc, inherit_caps[i].rights);
+        if (dup == CAP_HANDLE_INVALID) {
+            pr_err("Failed to inherit capability for %s", name ? name : "?");
+            process_destroy((process_t)proc);
+            return PID_INVALID;
+        }
+        if (inherit_caps[i].expected_dst != CAP_HANDLE_INVALID &&
+            dup != inherit_caps[i].expected_dst) {
+            pr_warn("Boot: inherited handle mismatch (%u -> %u)", inherit_caps[i].expected_dst,
+                    dup);
+        }
+    }
+
     int      ret;
     uint32_t entry_point = 0;
     if (elf_data) {
         ret = process_load_elf(proc, elf_data, elf_size, &entry_point);
     } else {
-        pr_err("No init module provided");
+        pr_err("No module provided");
         process_destroy((process_t)proc);
         return PID_INVALID;
     }
 
     if (ret < 0) {
-        pr_err("Failed to load init program: %d", ret);
+        pr_err("Failed to load program: %d", ret);
         process_destroy((process_t)proc);
         return PID_INVALID;
     }
-
-    /* 创建主线程 */
-    /* 线程创建后默认是 READY 状态,会被调度器调度 */
 
     thread_t t =
         thread_create_with_owner("bootstrap", user_thread_entry, (void *)entry_point, proc);
     if (!t) {
-        pr_err("Failed to create init thread");
+        pr_err("Failed to create process thread");
         process_destroy((process_t)proc);
         return PID_INVALID;
     }
 
-    /* 将线程关联到进程 */
     process_add_thread(proc, (struct thread *)t);
-
-    pr_ok("Spawned init process (PID %d)", proc->pid);
+    pr_ok("Spawned %s process (PID %d)", name ? name : "?", proc->pid);
     return proc->pid;
 }

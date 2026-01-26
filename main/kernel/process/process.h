@@ -115,18 +115,16 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size);
  */
 int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, uint32_t *out_entry);
 
-/**
- * 设置 boot 阶段的 console endpoint 能力句柄(用于后续进程继承)
- *
- * @param handle endpoint 句柄(当前进程内有效)
- */
-void         process_set_boot_console_endpoint(cap_handle_t handle);
+pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size);
 
-/**
- * 获取 boot 阶段的 console endpoint 能力句柄
- *
- * @return 句柄,无效则为 CAP_HANDLE_INVALID
- */
-cap_handle_t process_get_boot_console_endpoint(void);
+struct spawn_inherit_cap {
+    cap_handle_t src;
+    cap_rights_t rights;
+    cap_handle_t expected_dst;
+};
+
+pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
+                             const struct spawn_inherit_cap *inherit_caps,
+                             uint32_t inherit_count);
 
 #endif
