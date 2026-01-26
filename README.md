@@ -117,9 +117,10 @@ graph TD
 ### 架构设计图
 
 ```mermaid
-%%{init: {'flowchart': {'useMaxWidth': false, 'nodeSpacing': 40, 'rankSpacing': 60}, 'themeVariables': {'fontSize': '20px'}}}%%
+%%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 40}, 'themeVariables': {'fontSize': '16px'}}}%%
 graph TB
     subgraph UserSpace["用户态 user/"]
+        direction TB
         U_Init["Init进程"]
         U_DrvSerial["seriald UDM驱动"]
         U_DrvKbd["kbd UDM驱动"]
@@ -128,6 +129,7 @@ graph TB
     end
 
     subgraph KernelSpace["内核态 main/kernel/"]
+        direction TB
         K_Sys["syscall分发: kernel/sys/syscall.c"]
         K_Cap["Capability: kernel/capability/"]
         K_IPC["IPC: endpoint/notification: kernel/ipc/"]
@@ -137,6 +139,7 @@ graph TB
     end
 
     subgraph ArchHAL["架构与HAL main/arch/x86/"]
+        direction TB
         A_IRQ["中断/定时器: pit.c"]
         A_Ctx["上下文切换: context.s"]
         A_AS["地址空间切换: process.c"]
@@ -167,27 +170,27 @@ graph TB
 ### 调度图
 
 ```mermaid
-%%{init: {'flowchart': {'useMaxWidth': false, 'nodeSpacing': 40, 'rankSpacing': 70}, 'themeVariables': {'fontSize': '20px'}}}%%
+%%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 40}, 'themeVariables': {'fontSize': '16px'}}}%%
 graph TD
     IRQ0["IRQ0 PIT"] --> TimerTick["timer_tick()"]
     TimerTick --> SchedTick["sched_tick()"]
-    SchedTick --> WakeSleep["sleep_check_wakeup(): 扫描 blocked_list"]
-    SchedTick --> NeedResched{"policy.tick(): 需要抢占?"}
+    SchedTick --> WakeSleep["sleep_check_wakeup()\n扫描 blocked_list"]
+    SchedTick --> NeedResched{"policy.tick()\n需要抢占?"}
     NeedResched -->|否| ContinueRun["继续运行 current"]
     NeedResched -->|是| Schedule["schedule()"]
 
     subgraph Queues["关键队列/状态"]
-        RunQ["runqueue: policy_rr FIFO"]
-        Blocked["blocked_list: wait_chan"]
+        RunQ["runqueue\npolicy_rr FIFO"]
+        Blocked["blocked_list\nwait_chan"]
         Zombie["zombie_list"]
     end
 
     Schedule --> Pick["policy.pick_next()"]
-    Pick --> Switch["context_switch()/context_switch_first()"]
+    Pick --> Switch["context_switch()\ncontext_switch_first()"]
     Switch --> Cleanup["sched_cleanup_zombies()"]
 
-    IPCSendPath["ipc_send/ipc_call: 无receiver?"] -->|sender入队并阻塞| BlockSend["sched_block(wait_chan=endpoint)"]
-    IPCRecvPath["ipc_receive: 无sender?"] -->|receiver入队并阻塞| BlockRecv["sched_block(wait_chan=endpoint)"]
+    IPCSendPath["ipc_send/ipc_call\n无receiver?"] -->|sender入队并阻塞| BlockSend["sched_block\n(wait_chan=endpoint)"]
+    IPCRecvPath["ipc_receive\n无sender?"] -->|receiver入队并阻塞| BlockRecv["sched_block\n(wait_chan=endpoint)"]
 
     BlockSend --> Blocked
     BlockRecv --> Blocked
@@ -199,8 +202,8 @@ graph TD
 ### IPC图（Endpoint/RPC/异步/Notification + Capability）
 
 ```mermaid
-%%{init: {'flowchart': {'useMaxWidth': false, 'nodeSpacing': 40, 'rankSpacing': 70}, 'themeVariables': {'fontSize': '20px'}}}%%
-graph LR
+%%{init: {'flowchart': {'nodeSpacing': 20, 'rankSpacing': 40}, 'themeVariables': {'fontSize': '16px'}}}%%
+graph TB
     subgraph User["用户态"]
         U_S["发送方线程"]
         U_R["接收方线程"]
@@ -230,8 +233,20 @@ graph LR
         FindBlocked["sched_lookup_blocked()"]
     end
 
-    U_S -->|SYS_IPC_SEND,SYS_IPC_CALL| CopyIn --> LookupW --> SQ
-    U_R -->|SYS_IPC_RECV| CopyIn --> LookupR --> RQ
+    subgraph Notif["Notification(已实现, syscall暂未导出)"]
+        N_Sig["notification_signal(bits)"]
+        N_Wait["notification_wait()"]
+    end
+
+    U_S -->|SYS_IPC_SEND,SYS_IPC_CALL| CopyIn
+    U_R -->|SYS_IPC_RECV| CopyIn
+    U_R -->|SYS_IPC_REPLY| CopyIn
+    U_S -.->|ipc_send_async| CopyIn
+
+    CopyIn --> LookupW --> SQ
+    CopyIn --> LookupR --> RQ
+    CopyIn --> LookupW --> AQ
+    CopyIn --> FindBlocked
 
     SQ -->|"有receiver在等"| CopyMsg --> WakeT --> CopyOut --> U_R
     SQ -->|"无receiver"| Block
@@ -239,14 +254,7 @@ graph LR
     RQ -->|"有sender在等"| CopyMsg --> Peer --> CopyOut --> U_R
     RQ -->|"无sender"| Block
 
-    U_R -->|SYS_IPC_REPLY| CopyIn --> FindBlocked --> CopyMsg --> WakeT --> U_S
-
-    U_S -.->|ipc_send_async: 未导出syscall| LookupW --> AQ
-
-    subgraph Notif["Notification(已实现, syscall暂未导出)"]
-        N_Sig["notification_signal(bits)"]
-        N_Wait["notification_wait()"]
-    end
+    FindBlocked --> CopyMsg --> WakeT --> U_S
 
     N_Wait --> Block
     N_Sig --> WakeT
