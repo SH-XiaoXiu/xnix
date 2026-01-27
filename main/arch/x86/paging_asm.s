@@ -11,3 +11,6 @@ enable_paging:
     or  $0x80000000, %eax # Set PG bit (31)
     mov %eax, %cr0
     ret
+
+# 标记栈为不可执行
+.section .note.GNU-stack,"",@progbits

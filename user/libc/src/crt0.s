@@ -17,3 +17,6 @@ _start:
 
     # 不应到达这里
 1:  jmp 1b
+
+# 标记栈为不可执行
+.section .note.GNU-stack,"",@progbits
