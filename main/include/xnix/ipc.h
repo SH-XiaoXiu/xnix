@@ -6,51 +6,46 @@
 #ifndef XNIX_IPC_H
 #define XNIX_IPC_H
 
+#include <xnix/abi/ipc.h>
 #include <xnix/capability.h>
-#include <xnix/config.h>
 #include <xnix/types.h>
 
-/*
- * 消息结构
- */
-/* 消息寄存器(短消息快速路径) */
-#define IPC_MSG_REGS CFG_IPC_MSG_REGS
+#define IPC_MSG_REGS     ABI_IPC_MSG_REGS
+#define IPC_MSG_CAPS_MAX ABI_IPC_MSG_CAPS_MAX
+
+/* 内核使用的消息结构(与 ABI 结构布局兼容) */
 struct ipc_msg_regs {
-    uint32_t data[IPC_MSG_REGS]; /* 8 个 32 位字 */
+    uint32_t data[IPC_MSG_REGS];
 };
 
-/* 消息缓冲区(长消息) */
 struct ipc_msg_buffer {
     void  *data;
     size_t size;
 };
 
-/* 消息句柄(能力传递) */
-#define IPC_MSG_CAPS_MAX CFG_IPC_MSG_CAPS_MAX
 struct ipc_msg_caps {
     cap_handle_t handles[IPC_MSG_CAPS_MAX];
     uint32_t     count;
 };
 
-/* 完整消息 */
 struct ipc_message {
-    struct ipc_msg_regs   regs;   /* 短数据 */
-    struct ipc_msg_buffer buffer; /* 长数据, 缓冲区(可选) */
-    struct ipc_msg_caps   caps;   /* 能力句柄(可选) */
+    struct ipc_msg_regs   regs;
+    struct ipc_msg_buffer buffer;
+    struct ipc_msg_caps   caps;
     uint32_t              flags;
 };
 
 /* 消息标志 */
-#define IPC_FLAG_NO_BLOCK (1 << 0) /* 非阻塞 */
-#define IPC_FLAG_TIMEOUT  (1 << 1) /* 使用超时 */
+#define IPC_FLAG_NO_BLOCK ABI_IPC_FLAG_NONBLOCK
+#define IPC_FLAG_TIMEOUT  ABI_IPC_FLAG_TIMEOUT
 
 /* 错误码 */
-#define IPC_OK          0
-#define IPC_ERR_INVALID (-1) /* 无效句柄 */
-#define IPC_ERR_PERM    (-2) /* 权限不足 */
-#define IPC_ERR_TIMEOUT (-3) /* 超时 */
-#define IPC_ERR_CLOSED  (-4) /* endpoint 已关闭 */
-#define IPC_ERR_NOMEM   (-5) /* 内存不足 */
+#define IPC_OK          ABI_IPC_OK
+#define IPC_ERR_INVALID ABI_IPC_ERR_INVALID
+#define IPC_ERR_PERM    ABI_IPC_ERR_PERM
+#define IPC_ERR_TIMEOUT ABI_IPC_ERR_TIMEOUT
+#define IPC_ERR_CLOSED  ABI_IPC_ERR_CLOSED
+#define IPC_ERR_NOMEM   ABI_IPC_ERR_NOMEM
 
 /* spin_unlock
  * IPC 原语

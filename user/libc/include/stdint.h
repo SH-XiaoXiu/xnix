@@ -1,21 +1,15 @@
 /**
  * @file stdint.h
  * @brief 标准整数类型定义
+ *
+ * 基础类型来自 ABI 层，保证与内核一致。
  */
 
 #ifndef _STDINT_H
 #define _STDINT_H
 
-/* 精确宽度整数类型 */
-typedef signed char int8_t;
-typedef short       int16_t;
-typedef int         int32_t;
-typedef long long   int64_t;
-
-typedef unsigned char      uint8_t;
-typedef unsigned short     uint16_t;
-typedef unsigned int       uint32_t;
-typedef unsigned long long uint64_t;
+/* 精确宽度整数类型（从 ABI 层导入） */
+#include <xnix/abi/stdint.h>
 
 /* 最小宽度整数类型 */
 typedef int8_t  int_least8_t;
@@ -39,7 +33,7 @@ typedef uint32_t uint_fast16_t;
 typedef uint32_t uint_fast32_t;
 typedef uint64_t uint_fast64_t;
 
-/* 指针相关整数类型 */
+/* 指针相关整数类型（32 位架构） */
 typedef int32_t  intptr_t;
 typedef uint32_t uintptr_t;
 
@@ -47,22 +41,7 @@ typedef uint32_t uintptr_t;
 typedef int64_t  intmax_t;
 typedef uint64_t uintmax_t;
 
-/* 常量宏 */
-#define INT8_MIN  (-128)
-#define INT16_MIN (-32768)
-#define INT32_MIN (-2147483647 - 1)
-#define INT64_MIN (-9223372036854775807LL - 1)
-
-#define INT8_MAX  127
-#define INT16_MAX 32767
-#define INT32_MAX 2147483647
-#define INT64_MAX 9223372036854775807LL
-
-#define UINT8_MAX  255
-#define UINT16_MAX 65535
-#define UINT32_MAX 4294967295U
-#define UINT64_MAX 18446744073709551615ULL
-
+/* 指针相关极值 */
 #define INTPTR_MIN  INT32_MIN
 #define INTPTR_MAX  INT32_MAX
 #define UINTPTR_MAX UINT32_MAX

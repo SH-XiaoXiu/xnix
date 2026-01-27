@@ -8,6 +8,7 @@
 #ifndef XNIX_PROCESS_H
 #define XNIX_PROCESS_H
 
+#include <xnix/abi/types.h>
 #include <xnix/types.h>
 
 /**
@@ -17,8 +18,7 @@
  */
 typedef struct process *process_t;
 
-typedef uint32_t pid_t;
-#define PID_INVALID ((pid_t) - 1)
+/* pid_t 和 PID_INVALID 来自 <xnix/abi/types.h> */
 
 /**
  * 进程状态

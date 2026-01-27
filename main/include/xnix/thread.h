@@ -9,6 +9,7 @@
 #ifndef XNIX_THREAD_H
 #define XNIX_THREAD_H
 
+#include <xnix/abi/types.h>
 #include <xnix/types.h>
 
 /**
@@ -18,8 +19,7 @@
  */
 typedef struct thread *thread_t;
 
-typedef uint32_t tid_t;
-#define TID_INVALID ((tid_t) - 1)
+/* tid_t 和 TID_INVALID 来自 <xnix/abi/types.h> */
 
 /**
  * 线程状态

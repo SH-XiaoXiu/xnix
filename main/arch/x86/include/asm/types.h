@@ -1,36 +1,31 @@
 /**
  * @file asm/types.h
  * @brief x86 (32-bit) 架构类型定义
- * @author XiaoXiu
+ *
+ * 只包含架构相关的类型,固定宽度整数在 abi/stdint.h
  */
 
 #ifndef ASM_TYPES_H
 #define ASM_TYPES_H
 
+#include <xnix/abi/stdint.h>
+
 #define __ARCH_BITS 32
 
-/* 有符号整数 */
-typedef signed char      __s8;
-typedef signed short     __s16;
-typedef signed int       __s32;
-typedef signed long long __s64;
+/*
+ * 架构相关类型
+ *
+ * 这些类型的大小取决于 CPU 架构(32 位 vs 64 位)
+ */
+typedef uint32_t __arch_size_t;
+typedef int32_t  __arch_ssize_t;
+typedef uint32_t __arch_uintptr_t;
+typedef int32_t  __arch_intptr_t;
+typedef int32_t  __arch_ptrdiff_t;
 
-/* 无符号整数 */
-typedef unsigned char      __u8;
-typedef unsigned short     __u16;
-typedef unsigned int       __u32;
-typedef unsigned long long __u64;
+/* 架构相关极值 */
+#define __ARCH_SIZE_MAX    UINT32_MAX
+#define __ARCH_PTRDIFF_MIN INT32_MIN
+#define __ARCH_PTRDIFF_MAX INT32_MAX
 
-/* 架构相关类型 (32位) */
-typedef __u32 __arch_size_t;
-typedef __s32 __arch_ssize_t;
-typedef __u32 __arch_uintptr_t;
-typedef __s32 __arch_intptr_t;
-typedef __s32 __arch_ptrdiff_t;
-
-/* 极值 (架构相关) */
-#define __ARCH_SIZE_MAX    0xFFFFFFFFU
-#define __ARCH_PTRDIFF_MIN (-2147483647 - 1)
-#define __ARCH_PTRDIFF_MAX 2147483647
-
-#endif
+#endif /* ASM_TYPES_H */
