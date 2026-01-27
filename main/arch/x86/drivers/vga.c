@@ -6,7 +6,6 @@
  */
 
 #include <xnix/console.h>
-
 #include <xnix/types.h>
 
 #define VGA_BUFFER 0xB8000
@@ -113,6 +112,7 @@ static void vga_clear(void) {
 /* 导出驱动结构 */
 static struct console vga_console = {
     .name        = "vga",
+    .flags       = CONSOLE_SYNC,
     .init        = vga_init,
     .putc        = vga_putc,
     .puts        = vga_puts,

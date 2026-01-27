@@ -18,4 +18,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap);
 int putchar(int c);
 int puts(const char *s);
 
+/* 流操作 */
+int fflush(void *stream);
+
 #endif /* _STDIO_H */

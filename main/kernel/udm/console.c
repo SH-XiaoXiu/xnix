@@ -126,6 +126,7 @@ static void udm_console_clear(void) {
 
 static struct console udm_console_driver = {
     .name        = "udm",
+    .flags       = CONSOLE_ASYNC,
     .init        = NULL,
     .putc        = udm_console_putc,
     .puts        = udm_console_puts,

@@ -10,7 +10,15 @@
  * 作用:
  * - 作为内核输出的 fan-out 层: 将 kputc/kputs 等输出分发到多个后端
  * - 后端可以是直接硬件驱动(如 VGA/Serial),也可以是 IPC/UDM stub
+ *
+ * 同步/异步模式:
+ * - 同步驱动(VGA): putc 时立即调用,保证即时输出
+ * - 异步驱动(Serial): 写入 ring buffer,由消费者线程处理
  */
+
+/* 驱动标志 */
+#define CONSOLE_SYNC  0 /* 同步驱动,putc 时立即调用 */
+#define CONSOLE_ASYNC 1 /* 异步驱动,从 buffer 消费 */
 
 /**
  * 控制台后端
@@ -19,6 +27,7 @@
  */
 struct console {
     const char *name;
+    uint32_t    flags; /* CONSOLE_SYNC / CONSOLE_ASYNC */
     void (*init)(void);
     void (*putc)(char c);
     void (*puts)(const char *s);
@@ -73,5 +82,31 @@ void console_reset_color(void);
  * 清屏(对所有后端调用 clear)
  */
 void console_clear(void);
+
+/**
+ * 启用异步输出
+ *
+ * 调用后,对 CONSOLE_ASYNC 驱动的输出将写入 ring buffer.
+ * 需要在调度器初始化后调用.
+ */
+void console_async_enable(void);
+
+/**
+ * 从 ring buffer 读取一个字符
+ *
+ * 供异步消费者线程调用.
+ *
+ * @param c 输出参数
+ * @return 0 成功, -1 缓冲区空
+ */
+int console_ringbuf_get(char *c);
+
+/**
+ * 强制刷新缓冲区
+ *
+ * 阻塞直到 buffer 为空(所有消费者处理完毕).
+ * 用于 panic 等需要确保输出完整的场景.
+ */
+void console_flush(void);
 
 #endif

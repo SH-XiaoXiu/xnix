@@ -1,6 +1,8 @@
 /**
  * @file printf.c
  * @brief 简易 printf 实现
+ *
+ * stdout 使用行缓冲，减少 syscall 次数。
  */
 
 #include <stdarg.h>
@@ -8,16 +10,50 @@
 #include <string.h>
 #include <xnix/syscall.h>
 
+/*
+ * stdout 缓冲区
+ *
+ * 行缓冲模式：遇到 \n 或缓冲区满时刷新
+ */
+#define STDOUT_BUF_SIZE 256
+
+static char stdout_buf[STDOUT_BUF_SIZE];
+static int  stdout_len = 0;
+
+/* 刷新 stdout 缓冲区 */
+static void stdout_flush(void) {
+    for (int i = 0; i < stdout_len; i++) {
+        sys_putc(stdout_buf[i]);
+    }
+    stdout_len = 0;
+}
+
+/* 向 stdout 缓冲区写入一个字符 */
+static void stdout_putc(char c) {
+    stdout_buf[stdout_len++] = c;
+
+    /* 遇到换行或缓冲区满时刷新 */
+    if (c == '\n' || stdout_len >= STDOUT_BUF_SIZE - 1) {
+        stdout_flush();
+    }
+}
+
 int putchar(int c) {
-    sys_putc((char)c);
+    stdout_putc((char)c);
     return c;
 }
 
 int puts(const char *s) {
     while (*s) {
-        putchar(*s++);
+        stdout_putc(*s++);
     }
-    putchar('\n');
+    stdout_putc('\n');
+    return 0;
+}
+
+int fflush(void *stream) {
+    (void)stream; /* 目前只支持 stdout */
+    stdout_flush();
     return 0;
 }
 
@@ -63,13 +99,13 @@ static int print_num(char *buf, size_t size, unsigned int num, int base, int is_
         }
         buf[written] = '\0';
     } else {
-        /* 直接输出 */
+        /* 写入 stdout 缓冲区 */
         while (pad-- > 0) {
-            putchar(pad_zero ? '0' : ' ');
+            stdout_putc(pad_zero ? '0' : ' ');
             written++;
         }
         while (i-- > 0) {
-            putchar(tmp[i]);
+            stdout_putc(tmp[i]);
             written++;
         }
     }
@@ -90,7 +126,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
                     remain--;
                 }
             } else {
-                putchar(*fmt);
+                stdout_putc(*fmt);
             }
             written++;
             fmt++;
@@ -164,8 +200,8 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
                 remain -= n;
                 written += 2 + n;
             } else {
-                putchar('0');
-                putchar('x');
+                stdout_putc('0');
+                stdout_putc('x');
                 written += 2 + print_num(NULL, 0, val, 16, 0, 8, 1);
             }
             break;
@@ -182,7 +218,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
                         remain--;
                     }
                 } else {
-                    putchar(*s);
+                    stdout_putc(*s);
                 }
                 written++;
                 s++;
@@ -197,7 +233,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
                     remain--;
                 }
             } else {
-                putchar(c);
+                stdout_putc(c);
             }
             written++;
             break;
@@ -209,7 +245,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
                     remain--;
                 }
             } else {
-                putchar('%');
+                stdout_putc('%');
             }
             written++;
             break;
@@ -225,8 +261,8 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
                     remain--;
                 }
             } else {
-                putchar('%');
-                putchar(*fmt);
+                stdout_putc('%');
+                stdout_putc(*fmt);
             }
             written += 2;
             break;

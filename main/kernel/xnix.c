@@ -25,11 +25,8 @@
 extern void            udm_console_set_endpoint(cap_handle_t ep);
 extern struct console *udm_console_get_driver(void);
 
-static void boot_console_udm_switch(void *arg) {
-    (void)arg;
-    console_replace("serial", udm_console_get_driver());
-    pr_ok("UDM serial console enabled");
-}
+/* 串口消费者线程 */
+extern void serial_consumer_start(void);
 
 static void boot_print_banner(void) {
     extern struct hal_features g_hal_features;
@@ -100,12 +97,17 @@ static void boot_phase_subsys(void) {
 }
 
 /**
- * Late - 定时器
+ * Late - 定时器,异步输出
  */
 static void boot_phase_late(void) {
     timer_set_callback(sched_tick);
     timer_init(CFG_SCHED_HZ);
     pr_ok("Timer initialized (%d Hz)", CFG_SCHED_HZ);
+
+    /* 启动串口消费者线程并启用异步输出 */
+    serial_consumer_start();
+    console_async_enable();
+    pr_ok("Async console output enabled");
 }
 
 /**
@@ -162,8 +164,12 @@ static void boot_start_services(void) {
         };
         process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 2);
 
-        /* UDM console 切换线程 */
-        thread_create("console_udm_switch", boot_console_udm_switch, NULL);
+        /*
+         * 不切换到 UDM 控制台
+         *
+         * 异步 IPC 队列有限(64 条),高频输出会溢出丢消息.
+         * 串口保持直接输出,更可靠.UDM 可用于其他低频场景.
+         */
     } else {
         process_spawn_module("init", mod_addr, mod_size);
     }
