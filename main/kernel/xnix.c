@@ -13,6 +13,7 @@
 #include <kernel/irq/irq.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
+#include <kernel/sys/syscall.h>
 #include <xnix/boot.h>
 #include <xnix/config.h>
 #include <xnix/console.h>
@@ -91,6 +92,8 @@ static void boot_phase_subsys(void) {
     pr_ok("IPC subsystem initialized");
 
     ioport_init();
+
+    syscall_init();
 
     sched_init();
     pr_ok("Scheduler initialized");

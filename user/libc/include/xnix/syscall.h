@@ -47,6 +47,23 @@ static inline int syscall3(int num, uint32_t arg1, uint32_t arg2, uint32_t arg3)
     return ret;
 }
 
+static inline int syscall4(int num, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4) {
+    int ret;
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3), "S"(arg4));
+    return ret;
+}
+
+static inline int syscall5(int num, uint32_t arg1, uint32_t arg2, uint32_t arg3, uint32_t arg4,
+                           uint32_t arg5) {
+    int ret;
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5));
+    return ret;
+}
+
 /* 高层系统调用包装 */
 static inline void sys_exit(int code) {
     syscall1(SYS_EXIT, (uint32_t)code);
@@ -76,26 +93,40 @@ static inline int sys_ipc_receive(uint32_t ep, struct ipc_message *msg, uint32_t
     return syscall3(SYS_IPC_RECV, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
 }
 
+static inline int sys_ipc_call(uint32_t ep, struct ipc_message *req, struct ipc_message *reply,
+                               uint32_t timeout_ms) {
+    return syscall4(SYS_IPC_CALL, ep, (uint32_t)(uintptr_t)req, (uint32_t)(uintptr_t)reply,
+                    timeout_ms);
+}
+
+static inline int sys_ipc_reply(struct ipc_message *reply) {
+    return syscall1(SYS_IPC_REPLY, (uint32_t)(uintptr_t)reply);
+}
+
+static inline int sys_endpoint_create(void) {
+    return syscall0(SYS_ENDPOINT_CREATE);
+}
+
 static inline void sys_sleep(uint32_t ms) {
     syscall1(SYS_SLEEP, ms);
 }
 
 /* capability 权限定义 */
-#define CAP_READ   (1 << 0)
-#define CAP_WRITE  (1 << 1)
-#define CAP_GRANT  (1 << 2)
+#define CAP_READ  (1 << 0)
+#define CAP_WRITE (1 << 1)
+#define CAP_GRANT (1 << 2)
 
 /* spawn 相关结构 */
 struct spawn_cap {
-    uint32_t src;       /* 源 capability handle */
-    uint32_t rights;    /* 授予的权限 */
-    uint32_t dst_hint;  /* 期望的目标 handle（-1 表示任意） */
+    uint32_t src;      /* 源 capability handle */
+    uint32_t rights;   /* 授予的权限 */
+    uint32_t dst_hint; /* 期望的目标 handle（-1 表示任意） */
 };
 
 struct spawn_args {
-    uint32_t         module_index;  /* 启动模块索引 */
-    uint32_t         cap_count;     /* 传递的 capability 数量 */
-    struct spawn_cap caps[8];       /* 最多传递 8 个 capability */
+    uint32_t         module_index; /* 启动模块索引 */
+    uint32_t         cap_count;    /* 传递的 capability 数量 */
+    struct spawn_cap caps[8];      /* 最多传递 8 个 capability */
 };
 
 static inline int sys_spawn(struct spawn_args *args) {
