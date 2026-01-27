@@ -90,3 +90,15 @@ target_link_options(seriald.elf PRIVATE
 add_custom_command(TARGET seriald.elf POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:seriald.elf> ${CMAKE_BINARY_DIR}/seriald.elf
 )
+
+# ============================================
+# Demo 程序 (自动发现)
+# ============================================
+# 确保 include 目录存在
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
+
+add_subdirectory(demo)
+
+# 传递 demo 变量给父级
+set(DEMO_TARGETS "${DEMO_TARGETS}" PARENT_SCOPE)
+set(DEMO_NAMES "${DEMO_NAMES}" PARENT_SCOPE)
