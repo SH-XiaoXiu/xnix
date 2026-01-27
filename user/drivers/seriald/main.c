@@ -18,6 +18,14 @@ static int console_handler(struct ipc_message *msg) {
     case UDM_CONSOLE_PUTC:
         serial_putc(UDM_MSG_ARG(msg, 0) & 0xFF);
         break;
+    case UDM_CONSOLE_WRITE: {
+        /* 字符串从 data[1] 开始，最多 24 字节 */
+        const char *str = (const char *)&msg->regs.data[1];
+        for (int i = 0; i < UDM_CONSOLE_WRITE_MAX && str[i]; i++) {
+            serial_putc(str[i]);
+        }
+        break;
+    }
     case UDM_CONSOLE_SET_COLOR:
         serial_set_color(UDM_MSG_ARG(msg, 0));
         break;
