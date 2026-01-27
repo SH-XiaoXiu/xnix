@@ -24,6 +24,7 @@ static void start_seriald(void) {
     printf("[init] Starting seriald...\n");
 
     struct spawn_args args = {
+        .name         = "seriald",
         .module_index = MODULE_SERIALD,
         .cap_count    = 2,
         .caps =

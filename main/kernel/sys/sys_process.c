@@ -22,6 +22,7 @@ struct user_spawn_cap {
 };
 
 struct user_spawn_args {
+    char                  name[16];
     uint32_t              module_index;
     uint32_t              cap_count;
     struct user_spawn_cap caps[8];
@@ -65,6 +66,9 @@ static int32_t sys_spawn(const uint32_t *args) {
         inherit_caps[i].expected_dst = (cap_handle_t)kargs.caps[i].dst_hint;
     }
 
+    /* 确保进程名以 NUL 结尾 */
+    kargs.name[sizeof(kargs.name) - 1] = '\0';
+
     /*
      * 切换到内核页表执行 spawn
      *
@@ -77,7 +81,7 @@ static int32_t sys_spawn(const uint32_t *args) {
     void *kernel_pd = vmm_get_kernel_pd();
     vmm_switch_pd(kernel_pd);
 
-    pid_t pid = process_spawn_module_ex(NULL, mod_addr, mod_size, inherit_caps, cap_count);
+    pid_t pid = process_spawn_module_ex(kargs.name, mod_addr, mod_size, inherit_caps, cap_count);
 
     /* 切换回用户页表 */
     vmm_switch_pd((void *)(uintptr_t)user_cr3);

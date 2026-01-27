@@ -124,6 +124,7 @@ struct spawn_cap {
 };
 
 struct spawn_args {
+    char             name[16];     /* 进程名 */
     uint32_t         module_index; /* 启动模块索引 */
     uint32_t         cap_count;    /* 传递的 capability 数量 */
     struct spawn_cap caps[8];      /* 最多传递 8 个 capability */
