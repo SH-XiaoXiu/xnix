@@ -1,11 +1,15 @@
 #include <arch/hal/chipset.h>
 #include <arch/hal/feature.h>
 
+#include <asm/smp_defs.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 
 /* 全局特性变量 */
 struct hal_features g_hal_features = {0};
+
+/* SMP 信息 (由 lapic.c 定义) */
+extern struct smp_info g_smp_info;
 
 /*
  * x86 CPUID 检测辅助函数
@@ -54,13 +58,17 @@ void hal_probe_features(struct hal_features *features) {
         features->flags |= HAL_FEATURE_MMU;
     }
 
-/* 检测 SMP 支持 (简单假设) */
-/* 实际需要检测 MP Table 或 ACPI MADT,这里暂时硬编码检测逻辑或假设单核 */
+/* 解析 MP Table 获取 SMP 信息 */
 #ifdef ENABLE_SMP
-    features->flags |= HAL_FEATURE_SMP;
-    /* TODO: 从 MP Table 解析真实 CPU 数量 */
-    features->cpu_count = 1;
+    if (mp_table_parse(&g_smp_info) == 0 && g_smp_info.cpu_count > 1) {
+        features->flags |= HAL_FEATURE_SMP;
+        features->cpu_count = g_smp_info.cpu_count;
+    } else {
+        features->cpu_count = 1;
+    }
 #else
+    /* 非 SMP 构建也解析 MP Table 以获取 APIC 信息 */
+    mp_table_parse(&g_smp_info);
     features->cpu_count = 1;
 #endif
 

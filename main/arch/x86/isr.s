@@ -91,7 +91,7 @@ ISR_NOERR 29
 ISR_ERR   30
 ISR_NOERR 31
 
-/* IRQ 0-15 -> 中断 32-47 */
+/* IRQ 0-15 -> 中断 32-47 (PIC 兼容) */
 IRQ 0,  32
 IRQ 1,  33
 IRQ 2,  34
@@ -108,6 +108,54 @@ IRQ 12, 44
 IRQ 13, 45
 IRQ 14, 46
 IRQ 15, 47
+
+/* IRQ 16-23 -> 中断 48-55 (I/O APIC 扩展) */
+IRQ 16, 48
+IRQ 17, 49
+IRQ 18, 50
+IRQ 19, 51
+IRQ 20, 52
+IRQ 21, 53
+IRQ 22, 54
+IRQ 23, 55
+
+/* IPI 入口宏 */
+.macro IPI vector
+.global ipi_\vector
+ipi_\vector:
+    push $0             /* 假错误码 */
+    push $\vector       /* 向量号 */
+    jmp ipi_common
+.endm
+
+/* IPI 向量 */
+IPI 0xF0    /* IPI_VECTOR_RESCHED */
+IPI 0xF1    /* IPI_VECTOR_TLB */
+IPI 0xF2    /* IPI_VECTOR_PANIC */
+
+/* IPI 通用处理 */
+ipi_common:
+    pusha
+    push %ds
+
+    mov $0x10, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+
+    push %esp
+    call ipi_handler
+    add $4, %esp
+
+    pop %ds
+    mov %ds, %ax
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+    popa
+    add $8, %esp
+    iret
 
 /* 异常通用处理 */
 isr_common:

@@ -75,6 +75,19 @@ extern void irq12(void);
 extern void irq13(void);
 extern void irq14(void);
 extern void irq15(void);
+extern void irq16(void);
+extern void irq17(void);
+extern void irq18(void);
+extern void irq19(void);
+extern void irq20(void);
+extern void irq21(void);
+extern void irq22(void);
+extern void irq23(void);
+
+/* IPI 入口 */
+extern void ipi_0xF0(void);
+extern void ipi_0xF1(void);
+extern void ipi_0xF2(void);
 
 extern void isr_syscall(void);
 
@@ -130,7 +143,7 @@ void idt_init(void) {
     idt_set_gate(30, (uint32_t)isr30, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(31, (uint32_t)isr31, 0x08, IDT_GATE_INTERRUPT);
 
-    /* IRQ (32-47) */
+    /* IRQ (32-47, PIC 兼容) */
     idt_set_gate(32, (uint32_t)irq0, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(33, (uint32_t)irq1, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(34, (uint32_t)irq2, 0x08, IDT_GATE_INTERRUPT);
@@ -147,6 +160,21 @@ void idt_init(void) {
     idt_set_gate(45, (uint32_t)irq13, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(46, (uint32_t)irq14, 0x08, IDT_GATE_INTERRUPT);
     idt_set_gate(47, (uint32_t)irq15, 0x08, IDT_GATE_INTERRUPT);
+
+    /* IRQ (48-55, I/O APIC 扩展) */
+    idt_set_gate(48, (uint32_t)irq16, 0x08, IDT_GATE_INTERRUPT);
+    idt_set_gate(49, (uint32_t)irq17, 0x08, IDT_GATE_INTERRUPT);
+    idt_set_gate(50, (uint32_t)irq18, 0x08, IDT_GATE_INTERRUPT);
+    idt_set_gate(51, (uint32_t)irq19, 0x08, IDT_GATE_INTERRUPT);
+    idt_set_gate(52, (uint32_t)irq20, 0x08, IDT_GATE_INTERRUPT);
+    idt_set_gate(53, (uint32_t)irq21, 0x08, IDT_GATE_INTERRUPT);
+    idt_set_gate(54, (uint32_t)irq22, 0x08, IDT_GATE_INTERRUPT);
+    idt_set_gate(55, (uint32_t)irq23, 0x08, IDT_GATE_INTERRUPT);
+
+    /* IPI 向量 */
+    idt_set_gate(0xF0, (uint32_t)ipi_0xF0, 0x08, IDT_GATE_INTERRUPT); /* RESCHED */
+    idt_set_gate(0xF1, (uint32_t)ipi_0xF1, 0x08, IDT_GATE_INTERRUPT); /* TLB */
+    idt_set_gate(0xF2, (uint32_t)ipi_0xF2, 0x08, IDT_GATE_INTERRUPT); /* PANIC */
 
     /* 系统调用 (0x80) - DPL 3 (User) */
     /* 0xEE = Present(1) | DPL(11) | Storage(0) | Type(1110 = 32-bit Interrupt Gate) */

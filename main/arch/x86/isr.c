@@ -4,6 +4,8 @@
  * @author XiaoXiu
  */
 
+#include <asm/apic.h>
+#include <asm/irq.h>
 #include <asm/irq_defs.h>
 #include <kernel/irq/irq.h>
 #include <xnix/debug.h>
@@ -65,4 +67,41 @@ void isr_handler(struct irq_frame *frame) {
 void irq_handler(struct irq_frame *frame) {
     uint8_t irq = frame->int_no - 32;
     irq_dispatch(irq, frame);
+}
+
+/*
+ * IPI 处理函数
+ *
+ * 处理核间中断:
+ * - RESCHED: 触发调度 (阶段 3 实现)
+ * - TLB: TLB shootdown (阶段 4 实现)
+ * - PANIC: 停止当前核
+ */
+void ipi_handler(struct irq_frame *frame) {
+    uint8_t vector = (uint8_t)frame->int_no;
+
+    switch (vector) {
+    case IPI_VECTOR_RESCHED:
+        /* 调度 IPI: 阶段 3 实现 */
+        break;
+
+    case IPI_VECTOR_TLB:
+        /* TLB shootdown: 阶段 4 实现 */
+        break;
+
+    case IPI_VECTOR_PANIC:
+        /* Panic IPI: 停止当前核 */
+        kprintf("CPU halted by panic IPI\n");
+        for (;;) {
+            __asm__ volatile("cli; hlt");
+        }
+        break;
+
+    default:
+        pr_warn("Unknown IPI vector 0x%02x", vector);
+        break;
+    }
+
+    /* 发送 EOI */
+    lapic_eoi();
 }
