@@ -1,6 +1,7 @@
 #include <arch/mmu.h>
 #include <arch/smp.h>
 
+#include <asm/irq_defs.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
@@ -482,7 +483,13 @@ void vmm_switch_pd(void *pd_phys) {
     }
 }
 
-void vmm_page_fault(uint32_t err_code, vaddr_t vaddr) {
+/* 声明进程终止函数 */
+void process_terminate_current(int signal);
+
+void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr) {
+    uint32_t err_code  = frame->err_code;
+    bool     from_user = (frame->cs & 0x03) == 3;
+
     uint32_t cr3;
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
 
@@ -501,7 +508,14 @@ void vmm_page_fault(uint32_t err_code, vaddr_t vaddr) {
         reason = "Unknown";
     }
 
-    panic("Page Fault at 0x%x\n"
+    if (from_user) {
+        klog(LOG_ERR, "User page fault at 0x%x (%s)", vaddr, reason);
+        process_terminate_current(14); /* SIGSEGV */
+        /* 不返回 */
+    }
+
+    /* 内核态页错误 → panic */
+    panic("Kernel Page Fault at 0x%x\n"
           "Error Code: 0x%x (%s)\n"
           "CR3: 0x%x",
           vaddr, err_code, reason, cr3);

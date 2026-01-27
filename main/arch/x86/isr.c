@@ -9,6 +9,7 @@
 #include <xnix/debug.h>
 #include <xnix/stdio.h>
 #include <xnix/types.h>
+#include <xnix/vmm.h>
 
 /* x86 中断帧定义 (使用 asm/irq_defs.h 中的定义) */
 #define irq_frame irq_regs
@@ -22,18 +23,30 @@ static const char *exception_names[] = {
     "Reserved",         "Reserved",       "Reserved",    "Reserved",      "Reserved",
     "Security",         "Reserved"};
 
-/* 声明 vmm_page_fault */
-#include <xnix/vmm.h>
+/* 声明进程终止函数 */
+void process_terminate_current(int signal);
 
 /* CPU 异常处理 */
 void isr_handler(struct irq_frame *frame) {
-    /* 如果是页错误 (Page Fault, #14), 调用 vmm_page_fault */
+    /* 页错误特殊处理 */
     if (frame->int_no == 14) {
         uint32_t cr2;
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
-        vmm_page_fault(frame->err_code, cr2);
-        return; /* 如果 vmm_page_fault 返回,说明已处理(目前是 panic,所以不会返回) */
+        vmm_page_fault(frame, cr2);
+        return;
     }
+
+    /* 判断异常来源: CS 低 2 位是 RPL */
+    bool from_user = (frame->cs & 0x03) == 3;
+
+    if (from_user) {
+        /* 用户态异常 → 终止进程 */
+        klog(LOG_ERR, "User exception: %s at EIP=0x%x", exception_names[frame->int_no], frame->eip);
+        process_terminate_current(frame->int_no);
+        /* 不返回 */
+    }
+
+    /* 内核态异常 → panic(保留现有逻辑) */
 
     /* 打印通用寄存器 */
     klog(LOG_ERR, "--- Register Dump ---");
@@ -44,14 +57,7 @@ void isr_handler(struct irq_frame *frame) {
     klog(LOG_ERR, "DS:  0x%04x      CS:  0x%04x      EFLAGS: 0x%08x", frame->ds, frame->cs,
          frame->eflags);
 
-    /* 如果是页错误 (Page Fault, #14),打印 CR2 */
-    if (frame->int_no == 14) {
-        uint32_t cr2;
-        __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
-        klog(LOG_ERR, "CR2: 0x%08x (Page Fault Address)", cr2);
-    }
-
-    panic("EXCEPTION: %s (int=%d, err=0x%x) at EIP=0x%x", exception_names[frame->int_no],
+    panic("KERNEL EXCEPTION: %s (int=%d, err=0x%x) at EIP=0x%x", exception_names[frame->int_no],
           frame->int_no, frame->err_code, frame->eip);
 }
 

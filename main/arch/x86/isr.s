@@ -125,6 +125,11 @@ isr_common:
     add $4, %esp
 
     pop %ds
+    /* 返回用户态前设置 ES/FS/GS 为用户数据段 */
+    mov %ds, %ax
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
     popa
     add $8, %esp        /* 跳过中断号和错误码 */
     iret
@@ -145,6 +150,11 @@ irq_common:
     add $4, %esp
 
     pop %ds
+    /* 返回用户态前设置 ES/FS/GS 为用户数据段 */
+    mov %ds, %ax
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
     popa
     add $8, %esp
     iret
@@ -154,7 +164,7 @@ irq_common:
 isr_syscall:
     push $0             /* 假错误码 */
     push $0x80          /* 中断号 */
-    
+
     pusha               /* 保存通用寄存器 */
     push %ds
 
@@ -169,6 +179,11 @@ isr_syscall:
     add $4, %esp
 
     pop %ds
+    /* 返回用户态前设置 ES/FS/GS 为用户数据段 */
+    mov %ds, %ax
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
     popa
     add $8, %esp        /* 跳过中断号和错误码 */
     iret
