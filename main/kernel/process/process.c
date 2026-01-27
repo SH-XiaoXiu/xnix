@@ -60,7 +60,7 @@ void process_subsystem_init(void) {
 }
 
 static void free_pid(pid_t pid) {
-    if (pid == 0 || pid >= pid_capacity) {
+    if (pid == 0 || pid >= (int32_t)pid_capacity) {
         return;
     }
 

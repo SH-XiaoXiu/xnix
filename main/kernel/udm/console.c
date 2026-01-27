@@ -15,8 +15,8 @@
 static cap_handle_t g_console_ep = CAP_HANDLE_INVALID;
 
 /* 行缓冲区 */
-static char g_line_buf[UDM_CONSOLE_WRITE_MAX];
-static int  g_line_len = 0;
+static char     g_line_buf[UDM_CONSOLE_WRITE_MAX];
+static uint32_t g_line_len = 0;
 
 /**
  * 设置 UDM 控制台 endpoint
@@ -46,7 +46,7 @@ static void udm_console_flush(void) {
 
     /* 将字符串打包到 data[1..7] */
     char *dst = (char *)&msg.regs.data[1];
-    for (int i = 0; i < g_line_len; i++) {
+    for (uint32_t i = 0; i < g_line_len; i++) {
         dst[i] = g_line_buf[i];
     }
     dst[g_line_len] = '\0';

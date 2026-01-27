@@ -21,7 +21,7 @@ static int console_handler(struct ipc_message *msg) {
     case UDM_CONSOLE_WRITE: {
         /* 字符串从 data[1] 开始，最多 24 字节 */
         const char *str = (const char *)&msg->regs.data[1];
-        for (int i = 0; i < UDM_CONSOLE_WRITE_MAX && str[i]; i++) {
+        for (uint32_t i = 0; i < UDM_CONSOLE_WRITE_MAX && str[i]; i++) {
             serial_putc(str[i]);
         }
         break;

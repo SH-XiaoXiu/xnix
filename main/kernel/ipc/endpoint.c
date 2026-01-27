@@ -103,6 +103,8 @@ cap_handle_t endpoint_create(void) {
 /* 从 Sender 拷贝消息到 Receiver (包括寄存器和 Buffer) */
 static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_message *src_msg,
                          struct ipc_message *dst_msg) {
+    (void)src;
+    (void)dst;
     if (!src_msg || !dst_msg) {
         return;
     }

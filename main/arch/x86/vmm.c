@@ -213,7 +213,6 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
     uint32_t  pt_idx = PT_INDEX(vaddr);
     uint32_t *pd_virt;
     uint32_t *pt_virt;
-    uint32_t  flags_mask;
 
     /* 判断是否操作当前 PD */
     uint32_t current_cr3;

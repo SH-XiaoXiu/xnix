@@ -63,22 +63,6 @@ static int itoa_buf(int32_t num, char *buf) {
     return utoa_buf((uint32_t)num, 10, buf);
 }
 
-static void print_uint(uint32_t num, int base) {
-    char buf[32];
-    int len = utoa_buf(num, base, buf);
-    for (int i = 0; i < len; i++) {
-        kputc(buf[i]);
-    }
-}
-
-static void print_int(int32_t num) {
-    char buf[32];
-    int len = itoa_buf(num, buf);
-    for (int i = 0; i < len; i++) {
-        kputc(buf[i]);
-    }
-}
-
 static inline void print_hex_padded(uint32_t num, int width) {
     static const char digits[] = "0123456789abcdef";
     for (int i = width - 1; i >= 0; i--) {

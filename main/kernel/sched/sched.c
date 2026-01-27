@@ -51,7 +51,7 @@ static struct thread *blocked_list = NULL;
 static spinlock_t sched_lock = SPINLOCK_INIT;
 
 static void free_tid(tid_t tid) {
-    if (tid == 0 || tid >= tid_capacity) {
+    if (tid == 0 || tid >= (int32_t)tid_capacity) {
         return;
     }
 
