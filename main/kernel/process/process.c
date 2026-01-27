@@ -267,9 +267,52 @@ void process_destroy(process_t proc) {
         return;
     }
 
-    /* TODO: 终止所有线程 */
-
     process_unref(proc);
+}
+
+/**
+ * 终止进程的所有其他线程
+ */
+static void process_terminate_threads(struct process *proc, struct thread *except) {
+    mutex_lock(proc->thread_lock);
+
+    struct thread *t = proc->threads;
+    while (t) {
+        struct thread *next = t->proc_next;
+        if (t != except) {
+            thread_force_exit(t);
+        }
+        t = next;
+    }
+
+    mutex_unlock(proc->thread_lock);
+}
+
+void process_terminate_current(int signal) {
+    struct process *proc    = process_get_current();
+    struct thread  *current = sched_current();
+
+    /* 不能终止内核进程 */
+    if (!proc || proc->pid == 0) {
+        panic("Attempt to terminate kernel process!");
+    }
+
+    /* init 进程终止是致命的 */
+    if (proc->pid == 1) {
+        panic("Init process terminated by signal %d!", signal);
+    }
+
+    klog(LOG_ERR, "Process %d '%s' terminated (signal %d)", proc->pid, proc->name, signal);
+
+    proc->state     = PROCESS_ZOMBIE;
+    proc->exit_code = -signal;
+
+    /* 终止进程的所有其他线程 */
+    process_terminate_threads(proc, current);
+
+    /* 当前线程退出(会触发调度) */
+    thread_exit(-signal);
+    __builtin_unreachable();
 }
 
 void process_add_thread(struct process *proc, struct thread *t) {

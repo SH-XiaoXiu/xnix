@@ -609,6 +609,40 @@ thread_t thread_create_with_owner(const char *name, void (*entry)(void *), void 
     return sched_spawn(name, entry, arg, owner);
 }
 
+void thread_force_exit(struct thread *t) {
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
+    if (t->state == THREAD_EXITED) {
+        spin_unlock_irqrestore(&sched_lock, flags);
+        return;
+    }
+
+    t->state     = THREAD_EXITED;
+    t->exit_code = -1;
+
+    /* 从运行队列移除 */
+    if (current_policy && current_policy->dequeue) {
+        current_policy->dequeue(t);
+    }
+
+    /* 从阻塞链表移除 */
+    struct thread **pp = &blocked_list;
+    while (*pp) {
+        if (*pp == t) {
+            *pp = t->next;
+            break;
+        }
+        pp = &(*pp)->next;
+    }
+
+    /* 加入僵尸链表 */
+    cpu_id_t cpu        = cpu_current_id();
+    t->next             = per_cpu_zombie[cpu];
+    per_cpu_zombie[cpu] = t;
+
+    spin_unlock_irqrestore(&sched_lock, flags);
+}
+
 void thread_exit(int code) {
     /* 关中断,防止在挂链过程中发生调度 */
     cpu_irq_disable();

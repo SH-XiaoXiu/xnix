@@ -124,7 +124,13 @@ struct spawn_inherit_cap {
 };
 
 pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
-                             const struct spawn_inherit_cap *inherit_caps,
-                             uint32_t inherit_count);
+                              const struct spawn_inherit_cap *inherit_caps, uint32_t inherit_count);
+
+/**
+ * 终止当前进程
+ * 用于处理用户态异常,会终止进程的所有线程
+ * @param signal 导致终止的信号号(用于日志和 exit_code)
+ */
+void process_terminate_current(int signal);
 
 #endif

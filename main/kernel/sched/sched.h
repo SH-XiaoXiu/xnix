@@ -174,6 +174,12 @@ void sched_wakeup_thread(struct thread *t);
  */
 struct thread *sched_lookup_blocked(tid_t tid);
 
+/**
+ * 强制终止线程
+ * 从运行队列和阻塞链表移除,设置状态为 EXITED,加入僵尸链表
+ */
+void thread_force_exit(struct thread *t);
+
 /*
  * 内置策略声明
  **/
