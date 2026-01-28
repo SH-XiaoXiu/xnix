@@ -114,26 +114,29 @@ static void serial_init(void) {
     console_register_emergency_putc(serial_putc_hw);
 }
 
+static void serial_start_consumer(void);
+
 static struct console serial_console = {
-    .name        = "serial",
-    .flags       = CONSOLE_SYNC, /* 启动时同步输出,之后切换为异步 */
-    .init        = serial_init,
-    .putc        = serial_putc_sync,
-    .puts        = serial_puts_sync,
-    .set_color   = serial_set_color_sync,
-    .reset_color = serial_reset_color_sync,
-    .clear       = NULL,
+    .name           = "serial",
+    .flags          = CONSOLE_SYNC, /* 启动时同步输出,之后切换为异步 */
+    .init           = serial_init,
+    .putc           = serial_putc_sync,
+    .puts           = serial_puts_sync,
+    .set_color      = serial_set_color_sync,
+    .reset_color    = serial_reset_color_sync,
+    .clear          = NULL,
+    .start_consumer = serial_start_consumer,
 };
 
-void serial_console_register(void) {
-    console_register(&serial_console);
-}
-
-void serial_consumer_start(void) {
+static void serial_start_consumer(void) {
     /* 切换为异步模式: 禁用同步回调,改由消费者线程输出 */
     serial_console.flags = CONSOLE_ASYNC;
     serial_console.putc  = NULL;
     serial_console.puts  = NULL;
 
     thread_create("serial_out", serial_consumer_thread, NULL);
+}
+
+void serial_console_register(void) {
+    console_register(&serial_console);
 }

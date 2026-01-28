@@ -15,25 +15,28 @@
  */
 static inline int syscall0(int num) {
     int ret;
-    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(num));
+    __asm__ volatile("int $0x80" : "=a"(ret) : "0"(num) : "cc", "memory");
     return ret;
 }
 
 static inline int syscall1(int num, uint32_t arg1) {
     int ret;
-    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(num), "b"(arg1));
+    __asm__ volatile("int $0x80" : "=a"(ret) : "0"(num), "b"(arg1) : "cc", "memory");
     return ret;
 }
 
 static inline int syscall2(int num, uint32_t arg1, uint32_t arg2) {
     int ret;
-    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(num), "b"(arg1), "c"(arg2));
+    __asm__ volatile("int $0x80" : "=a"(ret) : "0"(num), "b"(arg1), "c"(arg2) : "cc", "memory");
     return ret;
 }
 
 static inline int syscall3(int num, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
     int ret;
-    __asm__ volatile("int $0x80" : "=a"(ret) : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3));
+    __asm__ volatile("int $0x80"
+                     : "=a"(ret)
+                     : "0"(num), "b"(arg1), "c"(arg2), "d"(arg3)
+                     : "cc", "memory");
     return ret;
 }
 
@@ -41,7 +44,8 @@ static inline int syscall4(int num, uint32_t arg1, uint32_t arg2, uint32_t arg3,
     int ret;
     __asm__ volatile("int $0x80"
                      : "=a"(ret)
-                     : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3), "S"(arg4));
+                     : "0"(num), "b"(arg1), "c"(arg2), "d"(arg3), "S"(arg4)
+                     : "cc", "memory");
     return ret;
 }
 
@@ -50,7 +54,8 @@ static inline int syscall5(int num, uint32_t arg1, uint32_t arg2, uint32_t arg3,
     int ret;
     __asm__ volatile("int $0x80"
                      : "=a"(ret)
-                     : "a"(num), "b"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5));
+                     : "0"(num), "b"(arg1), "c"(arg2), "d"(arg3), "S"(arg4), "D"(arg5)
+                     : "cc", "memory");
     return ret;
 }
 

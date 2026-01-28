@@ -3,14 +3,13 @@
  * @brief 进程相关系统调用
  */
 
-#include <kernel/sys/syscall.h>
 #include <kernel/process/process.h>
+#include <kernel/sys/syscall.h>
 #include <xnix/boot.h>
 #include <xnix/errno.h>
 #include <xnix/process.h>
 #include <xnix/syscall.h>
 #include <xnix/usraccess.h>
-#include <xnix/vmm.h>
 
 extern void thread_exit(int code);
 
@@ -45,10 +44,12 @@ static int32_t sys_spawn(const uint32_t *args) {
         return ret;
     }
 
+    kargs.name[sizeof(kargs.name) - 1] = '\0';
+
     /* 获取模块数据 */
     void    *mod_addr = NULL;
     uint32_t mod_size = 0;
-    ret = boot_get_module(kargs.module_index, &mod_addr, &mod_size);
+    ret               = boot_get_module(kargs.module_index, &mod_addr, &mod_size);
     if (ret < 0) {
         return -EINVAL;
     }
@@ -66,25 +67,7 @@ static int32_t sys_spawn(const uint32_t *args) {
         inherit_caps[i].expected_dst = (cap_handle_t)kargs.caps[i].dst_hint;
     }
 
-    /* 确保进程名以 NUL 结尾 */
-    kargs.name[sizeof(kargs.name) - 1] = '\0';
-
-    /*
-     * 切换到内核页表执行 spawn
-     *
-     * process_spawn_module_ex 需要访问:
-     * 1. 模块 ELF 数据(通过恒等映射)
-     * 2. vmm_create_pd 中的临时映射
-     */
-    uint32_t user_cr3;
-    __asm__ volatile("mov %%cr3, %0" : "=r"(user_cr3));
-    void *kernel_pd = vmm_get_kernel_pd();
-    vmm_switch_pd(kernel_pd);
-
     pid_t pid = process_spawn_module_ex(kargs.name, mod_addr, mod_size, inherit_caps, cap_count);
-
-    /* 切换回用户页表 */
-    vmm_switch_pd((void *)(uintptr_t)user_cr3);
 
     if (pid == PID_INVALID) {
         return -ENOMEM;
@@ -96,6 +79,6 @@ static int32_t sys_spawn(const uint32_t *args) {
  * 注册进程系统调用
  */
 void sys_process_init(void) {
-    syscall_register(SYS_EXIT,  sys_exit,  1, "exit");
+    syscall_register(SYS_EXIT, sys_exit, 1, "exit");
     syscall_register(SYS_SPAWN, sys_spawn, 1, "spawn");
 }

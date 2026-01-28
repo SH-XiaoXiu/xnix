@@ -66,6 +66,14 @@ void console_init(void) {
     }
 }
 
+void console_start_consumers(void) {
+    for (int i = 0; i < console_count; i++) {
+        if (consoles[i]->start_consumer) {
+            consoles[i]->start_consumer();
+        }
+    }
+}
+
 void console_async_enable(void) {
     g_async_enabled = true;
 }

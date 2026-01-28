@@ -235,7 +235,6 @@ process_t process_create(const char *name) {
         kfree(proc);
         return NULL;
     }
-
     proc->cap_table    = cap_table_create();
     proc->threads      = NULL;
     proc->thread_count = 0;

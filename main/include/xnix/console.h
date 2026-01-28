@@ -34,6 +34,7 @@ struct console {
     void (*set_color)(kcolor_t color);
     void (*reset_color)(void);
     void (*clear)(void);
+    void (*start_consumer)(void); /* 启动异步消费者线程(可选) */
 };
 
 /**
@@ -82,6 +83,14 @@ void console_reset_color(void);
  * 清屏(对所有后端调用 clear)
  */
 void console_clear(void);
+
+/**
+ * 启动异步消费者线程
+ *
+ * 遍历所有驱动,调用其 start_consumer 回调.
+ * 需要在调度器初始化后调用.
+ */
+void console_start_consumers(void);
 
 /**
  * 启用异步输出

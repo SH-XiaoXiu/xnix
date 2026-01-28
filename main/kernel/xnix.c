@@ -20,17 +20,9 @@
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
-
-/* UDM 控制台接口 */
-extern void            udm_console_set_endpoint(cap_handle_t ep);
-extern struct console *udm_console_get_driver(void);
-
-/* 串口消费者线程 */
-extern void serial_consumer_start(void);
+#include <xnix/udm/console.h>
 
 static void boot_print_banner(void) {
-    extern struct hal_features g_hal_features;
-
     kprintf("\n");
     kprintf("%C========================================%N\n");
     kprintf("%C        Xnix Kernel Loaded!%N\n");
@@ -55,7 +47,6 @@ static void boot_phase_early(uint32_t magic, struct multiboot_info *mb_info) {
     console_clear();
 
     boot_init(magic, mb_info);
-    boot_print_banner();
 
     if (magic != MULTIBOOT_BOOTLOADER_MAGIC) {
         pr_warn("Invalid Multiboot magic: 0x%x", magic);
@@ -73,6 +64,9 @@ static void boot_phase_core(void) {
 
     mm_init();
     pr_ok("Memory manager.");
+
+    hal_probe_smp_late();
+    boot_print_banner();
 
     irq_init();
     pr_ok("IRQ subsystem.");
@@ -97,7 +91,7 @@ static void boot_phase_subsys(void) {
 }
 
 /**
- * SMP - 启动其他 CPU 核心
+ * SMP - 切换到 APIC 并启动其他 CPU 核心
  */
 static void boot_phase_smp(void) {
     arch_smp_init();
@@ -111,8 +105,8 @@ static void boot_phase_late(void) {
     timer_init(CFG_SCHED_HZ);
     pr_ok("Timer (%d Hz)", CFG_SCHED_HZ);
 
-    /* 启动串口消费者线程并启用异步输出 */
-    serial_consumer_start();
+    /* 启动异步消费者线程并启用异步输出 */
+    console_start_consumers();
     console_async_enable();
     pr_ok("Async console output enabled");
 }
@@ -170,13 +164,6 @@ static void boot_start_services(void) {
             {.src = io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 1},
         };
         process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 2);
-
-        /*
-         * 不切换到 UDM 控制台
-         *
-         * 异步 IPC 队列有限(64 条),高频输出会溢出丢消息.
-         * 串口保持直接输出,更可靠.UDM 可用于其他低频场景.
-         */
     } else {
         process_spawn_module("init", mod_addr, mod_size);
     }

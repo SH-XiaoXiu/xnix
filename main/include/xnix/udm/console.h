@@ -7,7 +7,15 @@
 #define XNIX_UDM_CONSOLE_H
 
 #include <xnix/abi/ipc.h>
+#include <xnix/abi/types.h>
 #include <xnix/udm/protocol.h>
+
+/* 前向声明 */
+struct console;
+
+/* UDM 控制台驱动接口 */
+void            udm_console_set_endpoint(cap_handle_t ep);
+struct console *udm_console_get_driver(void);
 
 /* 控制台操作码 */
 enum udm_console_op {

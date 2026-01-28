@@ -24,6 +24,9 @@ struct hal_features {
     char     cpu_model[48];  /* CPU 型号字符串 */
 };
 
+/* 全局 HAL 特性 */
+extern struct hal_features g_hal_features;
+
 /**
  * @brief 探测硬件特性
  *
@@ -41,7 +44,6 @@ void hal_force_disable_smp(void);
  * @brief 检查特定特性是否支持
  */
 static inline bool hal_has_feature(uint32_t feature_mask) {
-    extern struct hal_features g_hal_features;
     return (g_hal_features.flags & feature_mask) != 0;
 }
 
