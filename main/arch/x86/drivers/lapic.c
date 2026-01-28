@@ -9,10 +9,10 @@
  */
 
 #include <arch/cpu.h>
+#include <arch/smp.h>
 
 #include <asm/apic.h>
 #include <asm/smp_defs.h>
-#include <xnix/debug.h>
 #include <xnix/stdio.h>
 #include <xnix/vmm.h>
 
@@ -82,16 +82,17 @@ void lapic_init(void) {
         wrmsr(MSR_IA32_APIC_BASE, apic_base_msr | APIC_BASE_ENABLE);
     }
 
-    /* 映射 LAPIC MMIO 区域 (恒等映射,强制使用标准地址) */
     paddr_t lapic_phys = LAPIC_BASE_DEFAULT;
-    if (vmm_map_page(NULL, lapic_phys, lapic_phys,
-                     VMM_PROT_READ | VMM_PROT_WRITE | VMM_PROT_NOCACHE) < 0) {
-        pr_err("LAPIC: Failed to map LAPIC at 0x%x", lapic_phys);
-        return;
+    bool    mapped     = false;
+    if (!lapic_base) {
+        if (vmm_map_page(NULL, lapic_phys, lapic_phys,
+                         VMM_PROT_READ | VMM_PROT_WRITE | VMM_PROT_NOCACHE) < 0) {
+            pr_err("LAPIC: Failed to map LAPIC at 0x%x", lapic_phys);
+            return;
+        }
+        lapic_base = (volatile uint32_t *)lapic_phys;
+        mapped     = true;
     }
-
-    /* 设置 LAPIC 基地址 */
-    lapic_base = (volatile uint32_t *)lapic_phys;
 
     /* 启用 LAPIC */
     uint32_t svr = lapic_read(LAPIC_SVR);
@@ -118,15 +119,23 @@ void lapic_init(void) {
     /* 发送 EOI 清除任何挂起的中断 */
     lapic_eoi();
 
-    pr_ok("LAPIC: Initialized (ID=%u, ver=%u)", lapic_get_id(), lapic_read(LAPIC_VER) & 0xFF);
+    if (mapped) {
+        pr_ok("LAPIC: Initialized (ID=%u, ver=%u)", lapic_get_id(), lapic_read(LAPIC_VER) & 0xFF);
+    }
 }
 
 /**
  * 等待 IPI 发送完成
  */
 static void lapic_wait_icr(void) {
+    uint32_t spins = 0;
     while (lapic_read(LAPIC_ICR_LO) & ICR_SEND_PENDING) {
         cpu_pause();
+        spins++;
+        if (spins == 10000000) {
+            pr_err("LAPIC: ICR send pending stuck (cpu=%u)", cpu_current_id());
+            break;
+        }
     }
 }
 
@@ -209,14 +218,61 @@ void lapic_send_sipi(uint8_t lapic_id, uint8_t vector) {
     lapic_wait_icr();
 }
 
-/* 用于校准 LAPIC 定时器的 tick 计数 */
-static volatile uint32_t calibration_ticks = 0;
+/* BSP 校准后保存的定时器频率 (分频后,AP 复用) */
+static volatile uint32_t lapic_timer_freq = 0;
+
+/*
+ * 虚拟化环境下的默认 LAPIC 定时器频率 (分频后)
+ * QEMU/KVM 通常使用 1GHz 总线频率,分频 16 后约 62.5MHz
+ */
+#define LAPIC_TIMER_DEFAULT_FREQ 62500000
+
+/* PIT 校准函数声明 */
+extern void pit_calibration_start(uint16_t count);
+extern bool pit_calibration_done(void);
 
 /**
- * PIT 校准回调 (临时使用 PIT 进行校准)
+ * 使用 PIT Channel 2 校准 LAPIC Timer 频率
+ *
+ * PIT 频率固定为 1193182 Hz,用作精确时间参考.
+ * 校准周期约 10ms (1/100 秒),所以 LAPIC 频率 ≈ elapsed * 100.
+ *
+ * @return LAPIC Timer 频率 (分频后), 失败返回 0
  */
-void lapic_calibration_tick(void) {
-    calibration_ticks++;
+static uint32_t lapic_calibrate_with_pit(void) {
+    /*
+     * 使用约 10ms 的校准周期: 1193182 / 100 ≈ 11932 ticks
+     * 精确计算: 11932 / 1193182 = 0.010001... 秒
+     * 误差约 0.01%,可忽略
+     */
+    const uint16_t pit_count = 11932;
+
+    /* 启动 PIT Channel 2 计时 */
+    pit_calibration_start(pit_count);
+
+    /* 启动 LAPIC Timer 全量倒计数 */
+    lapic_write(LAPIC_LVT_TIMER, LVT_MASKED);
+    lapic_write(LAPIC_TIMER_DCR, TIMER_DIV_16);
+    lapic_write(LAPIC_TIMER_ICR, 0xFFFFFFFF);
+
+    /* 等待 PIT 计数完成 */
+    while (!pit_calibration_done()) {
+        cpu_pause();
+    }
+
+    /* 读取 LAPIC Timer 已消耗的计数值 */
+    uint32_t lapic_elapsed = 0xFFFFFFFF - lapic_read(LAPIC_TIMER_CCR);
+
+    /* 停止 LAPIC Timer */
+    lapic_write(LAPIC_LVT_TIMER, LVT_MASKED);
+
+    /*
+     * 计算 LAPIC Timer 频率
+     * 校准周期为 10ms (1/100 秒),所以频率 = elapsed * 100
+     */
+    uint32_t lapic_freq = lapic_elapsed * 100;
+
+    return lapic_freq;
 }
 
 /**
@@ -229,58 +285,36 @@ void lapic_timer_init(uint32_t freq) {
         return;
     }
 
-    /*
-     * 校准 LAPIC 定时器
-     *
-     * 使用 PIT Channel 2 进行校准:
-     * 1. 设置 LAPIC 定时器为最大值
-     * 2. 等待固定时间 (使用 PIT)
-     * 3. 读取 LAPIC 定时器剩余值
-     * 4. 计算 LAPIC 定时器频率
-     *
-     * 简化实现: 假设 LAPIC 定时器频率约为 1GHz / 16 = 62.5MHz
-     * 对于 100Hz, 初始计数 = 62500000 / 100 = 625000
-     */
+    uint32_t timer_freq;
+
+    /* 检查是否已有校准值 (AP 复用 BSP 的校准结果) */
+    if (lapic_timer_freq != 0) {
+        timer_freq = lapic_timer_freq;
+    } else {
+        /* BSP 首次校准:使用 PIT Channel 2 进行精确测量 */
+        timer_freq = lapic_calibrate_with_pit();
+
+        /*
+         * 合理性检查:如果校准结果不合理,使用默认值
+         * 正常范围: 1MHz ~ 1GHz
+         */
+        if (timer_freq < 1000000 || timer_freq > 1000000000) {
+            pr_warn("LAPIC Timer: calibration failed (%u Hz), using default", timer_freq);
+            timer_freq = LAPIC_TIMER_DEFAULT_FREQ;
+        }
+
+        /* 保存校准结果供 AP 使用 */
+        lapic_timer_freq = timer_freq;
+        pr_ok("LAPIC Timer: %u Hz (calibrated)", timer_freq);
+    }
+
+    /* 计算目标频率需要的初始计数值 */
+    uint32_t init_count = timer_freq / freq;
 
     /* 设置分频为 16 */
     lapic_write(LAPIC_TIMER_DCR, TIMER_DIV_16);
 
-    /*
-     * 简单校准: 使用 PIT 进行 10ms 测量
-     * PIT 频率: 1193182 Hz
-     * 10ms = 11931 个 PIT tick
-     */
-
-    /* 设置 PIT Channel 0 为单次模式 */
-    outb(0x43, 0x30);           /* Channel 0, lobyte/hibyte, Mode 0 */
-    uint16_t pit_count = 11932; /* ~10ms */
-    outb(0x40, pit_count & 0xFF);
-    outb(0x40, (pit_count >> 8) & 0xFF);
-
-    /* 启动 LAPIC 定时器 (单次模式, 最大计数) */
-    lapic_write(LAPIC_TIMER_ICR, 0xFFFFFFFF);
-
-    /* 等待 PIT 倒计时完成 */
-    uint8_t status;
-    do {
-        outb(0x43, 0xE2); /* 读回命令: Channel 0 */
-        status = inb(0x40);
-    } while (!(status & 0x80)); /* 等待 OUT 引脚变高 */
-
-    /* 停止 LAPIC 定时器 */
-    lapic_write(LAPIC_LVT_TIMER, LVT_MASKED);
-
-    /* 计算 LAPIC 定时器频率 */
-    uint32_t elapsed    = 0xFFFFFFFF - lapic_read(LAPIC_TIMER_CCR);
-    uint32_t lapic_freq = elapsed * 100; /* 10ms -> 1s */
-
-    /* 计算目标频率需要的初始计数值 */
-    uint32_t init_count = lapic_freq / freq;
-    if (init_count == 0) {
-        init_count = 1;
-    }
-
-    /* 配置 LAPIC 定时器: 周期模式, 向量 0x20 (与 PIT 相同) */
+    /* 配置 LAPIC 定时器: 周期模式, 向量 0x20 */
     lapic_write(LAPIC_LVT_TIMER, 0x20 | LVT_TIMER_PERIODIC);
     lapic_write(LAPIC_TIMER_ICR, init_count);
 }

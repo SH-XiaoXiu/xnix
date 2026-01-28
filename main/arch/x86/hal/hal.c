@@ -2,6 +2,7 @@
 #include <arch/hal/feature.h>
 
 #include <asm/smp_defs.h>
+#include <xnix/stdio.h>
 #include <xnix/string.h>
 
 /* 全局特性变量 */
@@ -9,6 +10,8 @@ struct hal_features g_hal_features = {0};
 
 /* SMP 信息 (由 lapic.c 定义) */
 extern struct smp_info g_smp_info;
+
+static bool g_smp_forced_off = false;
 
 /*
  * x86 CPUID 检测辅助函数
@@ -23,6 +26,7 @@ void hal_probe_features(struct hal_features *features) {
     }
 
     memset(features, 0, sizeof(struct hal_features));
+    g_smp_forced_off = false;
 
     uint32_t eax, ebx, ecx, edx;
 
@@ -62,11 +66,7 @@ void hal_probe_features(struct hal_features *features) {
 
 /* 解析 MP Table 获取 SMP 信息 */
 #ifdef ENABLE_SMP
-    if (acpi_madt_parse(&g_smp_info) == 0 && g_smp_info.cpu_count > 1) {
-        features->flags |= HAL_FEATURE_ACPI;
-        features->flags |= HAL_FEATURE_SMP;
-        features->cpu_count = g_smp_info.cpu_count;
-    } else if (mp_table_parse(&g_smp_info) == 0 && g_smp_info.cpu_count > 1) {
+    if (mp_table_parse(&g_smp_info) == 0 && g_smp_info.cpu_count > 1) {
         features->flags |= HAL_FEATURE_SMP;
         features->cpu_count = g_smp_info.cpu_count;
     } else {
@@ -74,11 +74,7 @@ void hal_probe_features(struct hal_features *features) {
     }
 #else
     /* 非 SMP 构建也解析 MP Table 以获取 APIC 信息 */
-    if (acpi_madt_parse(&g_smp_info) == 0) {
-        features->flags |= HAL_FEATURE_ACPI;
-    } else {
-        mp_table_parse(&g_smp_info);
-    }
+    mp_table_parse(&g_smp_info);
     features->cpu_count = 1;
 #endif
 
@@ -93,6 +89,32 @@ void hal_probe_features(struct hal_features *features) {
     //        !!(features->flags & HAL_FEATURE_MMU),
     //        !!(features->flags & HAL_FEATURE_FPU),
     //        !!(features->flags & HAL_FEATURE_APIC));
+}
+
+void hal_probe_smp_late(void) {
+#ifdef ENABLE_SMP
+    if (g_smp_forced_off) {
+        return;
+    }
+
+    struct smp_info new_info;
+    memset(&new_info, 0, sizeof(new_info));
+
+    if (acpi_madt_parse(&new_info) == 0 && new_info.cpu_count > 1) {
+        memcpy(&g_smp_info, &new_info, sizeof(new_info));
+        g_hal_features.flags |= (HAL_FEATURE_ACPI | HAL_FEATURE_SMP);
+        g_hal_features.cpu_count = g_smp_info.cpu_count;
+        pr_info("HAL: ACPI MADT detected %u CPUs (bsp=%u)", g_smp_info.cpu_count,
+                g_smp_info.bsp_id);
+    }
+#endif
+}
+
+void hal_force_disable_smp(void) {
+    g_smp_forced_off         = true;
+    g_smp_info.cpu_count     = 1;
+    g_hal_features.cpu_count = 1;
+    g_hal_features.flags &= ~HAL_FEATURE_SMP;
 }
 
 /*

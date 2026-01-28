@@ -13,6 +13,7 @@
  */
 
 #include <arch/cpu.h>
+#include <arch/smp.h>
 
 #include <drivers/timer.h>
 
@@ -21,9 +22,17 @@
 
 /**
  * 检查并唤醒睡眠到期的线程
- * 由 sched_tick() 每次 tick 调用
+ *
+ * 只在 BSP (CPU 0) 上执行
+ * tick 计数是全局的,由 BSP 维护
+ * blocked_list 是全局的,需要避免多核竞争
  */
 void sleep_check_wakeup(void) {
+    /* 只在 BSP 上检查睡眠唤醒 */
+    if (cpu_current_id() != 0) {
+        return;
+    }
+
     struct sched_policy *policy = sched_get_policy();
     if (!policy) {
         return;

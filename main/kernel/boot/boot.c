@@ -161,6 +161,7 @@ __attribute__((weak)) void boot_init(uint32_t magic, const struct multiboot_info
     if (boot_cmdline_has_kv(cmdline, "xnix.smp", "off")) {
         features.flags &= ~HAL_FEATURE_SMP;
         features.cpu_count = 1;
+        hal_force_disable_smp();
         pr_info("Boot: forced SMP off via cmdline");
     }
 

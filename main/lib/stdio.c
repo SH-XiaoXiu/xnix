@@ -6,12 +6,11 @@
  */
 
 #include <xnix/console.h>
-#include <xnix/sync.h>
-
 #include <xnix/stdio.h>
+#include <xnix/sync.h>
 #include <xnix/types.h>
 
-/* 输出锁，保证多核输出不交错 */
+/* 输出锁,保证多核输出不交错 */
 static spinlock_t kprintf_lock = SPINLOCK_INIT;
 
 void kputc(char c) {
@@ -39,7 +38,7 @@ static void print_padding(int width, int len, int pad_zero) {
 
 static int utoa_buf(uint32_t num, int base, char *buf) {
     static const char digits[] = "0123456789abcdef";
-    int i = 0;
+    int               i        = 0;
 
     if (num == 0) {
         buf[i++] = '0';
@@ -52,8 +51,8 @@ static int utoa_buf(uint32_t num, int base, char *buf) {
     }
 
     for (int j = 0; j < i / 2; j++) {
-        char t = buf[j];
-        buf[j] = buf[i - j - 1];
+        char t         = buf[j];
+        buf[j]         = buf[i - j - 1];
         buf[i - j - 1] = t;
     }
     return i;
@@ -87,7 +86,7 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
 
         fmt++;
         /* 处理宽度修饰符*/
-        int width = 0;
+        int width    = 0;
         int pad_zero = 0;
         if (*fmt == '0') {
             pad_zero = 1;
@@ -100,9 +99,11 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
 
         switch (*fmt) {
         case 's': {
-            const char *s = __builtin_va_arg(args, const char *) ?: "(null)";
-            int len = 0;
-            while (s[len]) len++;
+            const char *s   = __builtin_va_arg(args, const char *) ?: "(null)";
+            int         len = 0;
+            while (s[len]) {
+                len++;
+            }
             print_padding(width, len, 0);
             kputs(s);
             break;
@@ -115,25 +116,31 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
         }
         case 'd':
         case 'i': {
-            char buf[32];
-            int32_t v = __builtin_va_arg(args, int32_t);
-            int len = itoa_buf(v, buf);
+            char    buf[32];
+            int32_t v   = __builtin_va_arg(args, int32_t);
+            int     len = itoa_buf(v, buf);
 
             if (pad_zero && buf[0] == '-') {
                 kputc('-');
                 print_padding(width, len, 1);
-                for (int i = 1; i < len; i++) kputc(buf[i]);
+                for (int i = 1; i < len; i++) {
+                    kputc(buf[i]);
+                }
             } else {
                 print_padding(width, len, pad_zero);
-                for (int i = 0; i < len; i++) kputc(buf[i]);
+                for (int i = 0; i < len; i++) {
+                    kputc(buf[i]);
+                }
             }
             break;
         }
         case 'u': {
             char buf[32];
-            int len = utoa_buf(__builtin_va_arg(args, uint32_t), 10, buf);
+            int  len = utoa_buf(__builtin_va_arg(args, uint32_t), 10, buf);
             print_padding(width, len, pad_zero);
-            for (int i = 0; i < len; i++) kputc(buf[i]);
+            for (int i = 0; i < len; i++) {
+                kputc(buf[i]);
+            }
             break;
         }
         case 'x': {
@@ -142,9 +149,11 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
                 print_hex_padded(v, width);
             } else {
                 char buf[32];
-                int len = utoa_buf(v, 16, buf);
+                int  len = utoa_buf(v, 16, buf);
                 print_padding(width, len, pad_zero);
-                for (int i = 0; i < len; i++) kputc(buf[i]);
+                for (int i = 0; i < len; i++) {
+                    kputc(buf[i]);
+                }
             }
             break;
         }

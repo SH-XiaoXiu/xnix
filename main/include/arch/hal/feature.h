@@ -33,6 +33,10 @@ struct hal_features {
  */
 void hal_probe_features(struct hal_features *features);
 
+void hal_probe_smp_late(void);
+
+void hal_force_disable_smp(void);
+
 /**
  * @brief 检查特定特性是否支持
  */

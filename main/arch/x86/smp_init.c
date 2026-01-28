@@ -96,12 +96,6 @@ static void smp_setup_trampoline(void) {
     uint32_t *cr3_ptr = (uint32_t *)(AP_TRAMPOLINE_ADDR +
                                      ((uint32_t)&ap_kernel_cr3 - (uint32_t)ap_trampoline_start));
 
-    /* 填充内核 GDT 指针 */
-    uint16_t limit;
-    uint32_t base;
-    __asm__ volatile("sgdt %0" : "=m"(limit));
-    __asm__ volatile("sgdt %0" : "=m"(base) : : "memory");
-
     /* 直接读取 GDTR */
     struct {
         uint16_t limit;
@@ -235,6 +229,7 @@ void ap_main(uint32_t cpu_id) {
     }
 
     /* 启用中断并进入调度循环 */
+    pr_info("CPU%u entering scheduler", cpu_id);
     cpu_irq_enable();
     schedule();
 
@@ -261,6 +256,10 @@ void arch_smp_init(void) {
     lapic_init();
 
     pr_info("SMP: Starting %u CPUs...", g_smp_info.cpu_count);
+    pr_info("SMP: bsp_id=%u", g_smp_info.bsp_id);
+    for (uint32_t i = 0; i < g_smp_info.cpu_count; i++) {
+        pr_info("SMP: cpu%u lapic_id=%u", i, g_smp_info.lapic_ids[i]);
+    }
 
     /* 初始化 BSP 的 Per-CPU 数据 */
     g_per_cpu[g_smp_info.bsp_id].cpu_id   = g_smp_info.bsp_id;

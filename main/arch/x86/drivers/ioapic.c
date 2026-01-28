@@ -182,5 +182,7 @@ void apic_register(void) {
 
     if (g_smp_info.apic_available) {
         irq_set_chip(&apic_chip);
+        /* 初始化 APIC 芯片 (禁用 PIC,初始化 LAPIC/IOAPIC) */
+        apic_chip_init();
     }
 }
