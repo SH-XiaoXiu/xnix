@@ -6,10 +6,11 @@
 #include <xnix/types.h>
 
 /* VMM 标志位 */
-#define VMM_PROT_READ  (1 << 0)
-#define VMM_PROT_WRITE (1 << 1)
-#define VMM_PROT_USER  (1 << 2) /* 用户态可访问 */
-#define VMM_PROT_NONE  0
+#define VMM_PROT_READ    (1 << 0)
+#define VMM_PROT_WRITE   (1 << 1)
+#define VMM_PROT_USER    (1 << 2) /* 用户态可访问 */
+#define VMM_PROT_NOCACHE (1 << 3) /* 不可缓存 (用于 MMIO) */
+#define VMM_PROT_NONE    0
 
 /* 架构无关的 VMM 接口 */
 

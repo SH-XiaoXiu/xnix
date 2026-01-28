@@ -14,6 +14,8 @@
 #define PTE_PRESENT  0x01
 #define PTE_RW       0x02
 #define PTE_USER     0x04
+#define PTE_PWT      0x08 /* Page Write-Through */
+#define PTE_PCD      0x10 /* Page Cache Disable (用于 MMIO) */
 #define PTE_ACCESSED 0x20
 #define PTE_DIRTY    0x40
 
@@ -43,8 +45,10 @@ static uint32_t *kernel_pd = NULL;
  * TEMP_WINDOW_1: 0xFFBFF000 (PT[1023]) - 用于映射 PD
  * TEMP_WINDOW_2: 0xFFBFE000 (PT[1022]) - 用于映射 PT
  *
- * 注意:这只是一个简单的实现,如果是真正的多核系统,应该使用 per-CPU 窗口 //TODO per cpu模块
+ * 注意:这只是一个简单的实现,如果是真正的多核系统,应该使用 per-CPU 窗口
  * 或者更复杂的分配器.目前我们加全局锁.
+ *
+ * TODO: 实现 per-CPU 临时映射窗口
  */
 #define TEMP_PT_PD_IDX 1022
 #define TEMP_WINDOW_1  (0xFF800000 + (1023 * 4096))
@@ -68,6 +72,9 @@ static uint32_t vmm_flags_to_x86(uint32_t flags) {
     }
     if (flags & VMM_PROT_USER) {
         x86_flags |= PTE_USER;
+    }
+    if (flags & VMM_PROT_NOCACHE) {
+        x86_flags |= PTE_PCD | PTE_PWT; /* MMIO 需要禁用缓存 */
     }
     return x86_flags;
 }
@@ -121,7 +128,8 @@ void *vmm_kmap(paddr_t paddr) {
 
     /* 手动获取锁以复用 map_temp_page 逻辑 */
 
-    spin_lock(&temp_map_lock); // TODO: irq save? map_temp_page callers use irqsave
+    /* TODO: 考虑使用 irqsave,因为 map_temp_page 的调用者使用 irqsave */
+    spin_lock(&temp_map_lock);
 
     return map_temp_page(2, paddr);
 }
