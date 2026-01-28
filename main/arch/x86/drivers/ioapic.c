@@ -5,12 +5,13 @@
  * I/O APIC 负责将外部中断路由到各个 CPU 的 LAPIC
  */
 
+#include <arch/cpu.h>
+
 #include <asm/apic.h>
 #include <asm/smp_defs.h>
-
-#include <arch/cpu.h>
 #include <kernel/irq/irq.h>
 #include <xnix/stdio.h>
+#include <xnix/vmm.h>
 
 /* I/O APIC 映射的虚拟地址 */
 static volatile uint32_t *ioapic_base = NULL;
@@ -62,18 +63,24 @@ void ioapic_init(void) {
         return;
     }
 
-    /* 设置 I/O APIC 基地址 */
-    ioapic_base = (volatile uint32_t *)g_smp_info.ioapic_base;
-    if (!ioapic_base) {
-        ioapic_base = (volatile uint32_t *)IOAPIC_BASE_DEFAULT;
+    /* 获取 I/O APIC 基地址 */
+    paddr_t ioapic_phys = g_smp_info.ioapic_base;
+    if (!ioapic_phys) {
+        ioapic_phys = IOAPIC_BASE_DEFAULT;
     }
 
-    /* 读取 I/O APIC 版本和最大重定向条目 */
-    uint32_t ver = ioapic_read(IOAPIC_VER);
-    ioapic_max_redir = ((ver >> 16) & 0xFF) + 1;
+    /* 映射 I/O APIC MMIO 区域 (必须禁用缓存) */
+    if (vmm_map_page(NULL, ioapic_phys, ioapic_phys,
+                     VMM_PROT_READ | VMM_PROT_WRITE | VMM_PROT_NOCACHE) < 0) {
+        pr_err("IOAPIC: Failed to map IOAPIC at 0x%x", ioapic_phys);
+        return;
+    }
 
-    pr_debug("IOAPIC: ID=%u, ver=%u, max_irq=%u",
-             ioapic_read(IOAPIC_ID) >> 24, ver & 0xFF, ioapic_max_redir);
+    ioapic_base = (volatile uint32_t *)ioapic_phys;
+
+    /* 读取 I/O APIC 版本和最大重定向条目 */
+    uint32_t ver     = ioapic_read(IOAPIC_VER);
+    ioapic_max_redir = ((ver >> 16) & 0xFF) + 1;
 
     /* 屏蔽所有中断 */
     for (uint8_t i = 0; i < ioapic_max_redir; i++) {
@@ -108,8 +115,6 @@ void ioapic_enable_irq(uint8_t irq, uint8_t vector, uint8_t dest) {
     /* 某些 IRQ (如 PCI) 可能需要电平触发 */
 
     ioapic_write_redir(irq, redir);
-
-    pr_debug("IOAPIC: IRQ%u -> vector 0x%02x, dest=%u", irq, vector, dest);
 }
 
 void ioapic_disable_irq(uint8_t irq) {
@@ -131,6 +136,10 @@ static void apic_chip_init(void) {
     outb(0x21, 0xFF); /* PIC1 */
     outb(0xA1, 0xFF); /* PIC2 */
 
+    /* 如果存在 IMCR,将外部中断从 PIC 重定向到 APIC */
+    outb(0x22, 0x70);
+    outb(0x23, inb(0x23) | 0x01);
+
     /* 初始化 LAPIC 和 I/O APIC */
     lapic_init();
     ioapic_init();
@@ -146,7 +155,7 @@ static void apic_chip_enable(uint8_t irq) {
     /* 将 IRQ 路由到 BSP (LAPIC ID 0) */
     /* 中断向量 = 0x20 + IRQ (与 PIC 兼容) */
     uint8_t vector = 0x20 + irq;
-    uint8_t dest = g_smp_info.lapic_ids[0]; /* BSP */
+    uint8_t dest   = g_smp_info.lapic_ids[g_smp_info.bsp_id];
 
     ioapic_enable_irq(irq, vector, dest);
 }
@@ -173,6 +182,5 @@ void apic_register(void) {
 
     if (g_smp_info.apic_available) {
         irq_set_chip(&apic_chip);
-        pr_debug("APIC: Registered as IRQ chip");
     }
 }

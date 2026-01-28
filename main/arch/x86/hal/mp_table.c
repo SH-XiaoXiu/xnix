@@ -5,25 +5,24 @@
  * 解析 MP 浮点结构和配置表,获取 CPU 数量和 APIC 信息
  */
 
+#include <arch/hal/feature.h>
+
 #include <asm/apic.h>
 #include <asm/smp_defs.h>
-
-#include <arch/hal/feature.h>
-#include <xnix/debug.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 
 /* BIOS 搜索区域 */
-#define EBDA_PTR_ADDR   0x40E  /* EBDA 指针地址 */
-#define BIOS_ROM_START  0xE0000
-#define BIOS_ROM_END    0xFFFFF
+#define EBDA_PTR_ADDR  0x40E /* EBDA 指针地址 */
+#define BIOS_ROM_START 0xE0000
+#define BIOS_ROM_END   0xFFFFF
 
 /**
  * 计算校验和
  */
 static uint8_t checksum(const void *data, size_t len) {
-    uint8_t sum = 0;
-    const uint8_t *p = data;
+    uint8_t        sum = 0;
+    const uint8_t *p   = data;
     for (size_t i = 0; i < len; i++) {
         sum += p[i];
     }
@@ -76,7 +75,7 @@ static const struct mp_fps *mp_find_fps(void) {
     uint16_t ebda_seg = *(uint16_t *)EBDA_PTR_ADDR;
     if (ebda_seg) {
         paddr_t ebda_base = (paddr_t)ebda_seg << 4;
-        fps = mp_search_range(ebda_base, ebda_base + 1024);
+        fps               = mp_search_range(ebda_base, ebda_base + 1024);
         if (fps) {
             return fps;
         }
@@ -104,13 +103,13 @@ static int mp_parse_config(const struct mp_config *cfg, struct smp_info *info) {
     }
 
     /* 获取 LAPIC 基地址 */
-    info->lapic_base = cfg->lapic_addr;
-    if (info->lapic_base == 0) {
-        info->lapic_base = LAPIC_BASE_DEFAULT;
-    }
+    /* 注意: 某些 BIOS/虚拟机的 MP Table 中 lapic_addr 可能不正确 */
+    /* 标准 x86 LAPIC 地址始终是 0xFEE00000,直接使用默认值更可靠 */
+    info->lapic_base = LAPIC_BASE_DEFAULT;
+    (void)cfg->lapic_addr; /* 忽略 MP Table 中的值 */
 
-    pr_debug("MP: OEM='%.8s', Product='%.12s', LAPIC=0x%x",
-             cfg->oem_id, cfg->product_id, info->lapic_base);
+    /* 重置 CPU 计数 (之前初始化为 1 作为默认值) */
+    info->cpu_count = 0;
 
     /* 遍历配置表条目 */
     const uint8_t *entry = (const uint8_t *)(cfg + 1);
@@ -118,15 +117,14 @@ static int mp_parse_config(const struct mp_config *cfg, struct smp_info *info) {
         switch (*entry) {
         case MP_ENTRY_PROCESSOR: {
             const struct mp_processor *proc = (const struct mp_processor *)entry;
-            if ((proc->flags & MP_PROC_ENABLED) && info->cpu_count < CFG_MAX_CPUS) {
-                uint32_t cpu_id = info->cpu_count;
+
+            /* 只检查 MAX CPUs 限制 */
+            if (info->cpu_count < CFG_MAX_CPUS) {
+                uint32_t cpu_id         = info->cpu_count;
                 info->lapic_ids[cpu_id] = proc->lapic_id;
 
                 if (proc->flags & MP_PROC_BSP) {
                     info->bsp_id = cpu_id;
-                    pr_debug("MP: CPU%u (BSP): LAPIC_ID=%u", cpu_id, proc->lapic_id);
-                } else {
-                    pr_debug("MP: CPU%u (AP):  LAPIC_ID=%u", cpu_id, proc->lapic_id);
                 }
                 info->cpu_count++;
             }
@@ -135,8 +133,6 @@ static int mp_parse_config(const struct mp_config *cfg, struct smp_info *info) {
         }
 
         case MP_ENTRY_BUS: {
-            const struct mp_bus *bus = (const struct mp_bus *)entry;
-            pr_debug("MP: Bus %u: '%.6s'", bus->bus_id, bus->bus_type);
             entry += sizeof(struct mp_bus);
             break;
         }
@@ -145,8 +141,7 @@ static int mp_parse_config(const struct mp_config *cfg, struct smp_info *info) {
             const struct mp_ioapic *ioapic = (const struct mp_ioapic *)entry;
             if (ioapic->flags & MP_IOAPIC_ENABLED) {
                 info->ioapic_base = ioapic->addr;
-                info->ioapic_id = ioapic->id;
-                pr_debug("MP: IOAPIC %u at 0x%x", ioapic->id, ioapic->addr);
+                info->ioapic_id   = ioapic->id;
             }
             entry += sizeof(struct mp_ioapic);
             break;
@@ -178,10 +173,10 @@ int mp_table_parse(struct smp_info *info) {
 
     /* 初始化默认值 */
     memset(info, 0, sizeof(*info));
-    info->cpu_count = 1;
-    info->bsp_id = 0;
-    info->lapic_base = LAPIC_BASE_DEFAULT;
-    info->ioapic_base = IOAPIC_BASE_DEFAULT;
+    info->cpu_count      = 1;
+    info->bsp_id         = 0;
+    info->lapic_base     = LAPIC_BASE_DEFAULT;
+    info->ioapic_base    = IOAPIC_BASE_DEFAULT;
     info->apic_available = false;
 
     /* 检查 CPUID 是否支持 APIC */
@@ -193,23 +188,19 @@ int mp_table_parse(struct smp_info *info) {
     /* 搜索 MP 浮点结构 */
     const struct mp_fps *fps = mp_find_fps();
     if (!fps) {
-        pr_debug("MP: No MP table found, assuming single CPU");
         /* 即使没有 MP Table, 如果 CPUID 报告支持 APIC, 仍可使用 */
-        info->lapic_ids[0] = 0;
+        /* 即使没有 MP Table, 如果 CPUID 报告支持 APIC, 仍可使用 */
+        info->lapic_ids[0]   = 0;
         info->apic_available = true;
         return 0;
     }
 
-    pr_debug("MP: Found MP FPS at 0x%x, spec rev 1.%u",
-             (uint32_t)fps, fps->spec_rev);
-
     /* 检查是否使用默认配置 */
     if (fps->features[0] != 0) {
         /* 使用默认配置表 (简化处理) */
-        pr_debug("MP: Using default config type %u", fps->features[0]);
-        info->cpu_count = 2; /* 默认配置假设 2 个 CPU */
-        info->lapic_ids[0] = 0;
-        info->lapic_ids[1] = 1;
+        info->cpu_count      = 2; /* 默认配置假设 2 个 CPU */
+        info->lapic_ids[0]   = 0;
+        info->lapic_ids[1]   = 1;
         info->apic_available = true;
         return 0;
     }
@@ -244,8 +235,7 @@ void mp_table_dump(const struct smp_info *info) {
     }
 
     for (uint32_t i = 0; i < info->cpu_count; i++) {
-        kprintf("  CPU%u: LAPIC_ID=%u%s\n",
-                i, info->lapic_ids[i],
+        kprintf("  CPU%u: LAPIC_ID=%u%s\n", i, info->lapic_ids[i],
                 i == info->bsp_id ? " [BSP]" : "");
     }
 

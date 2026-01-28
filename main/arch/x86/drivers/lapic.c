@@ -8,15 +8,27 @@
  * - 中断优先级管理
  */
 
+#include <arch/cpu.h>
+
 #include <asm/apic.h>
 #include <asm/smp_defs.h>
-
-#include <arch/cpu.h>
 #include <xnix/debug.h>
 #include <xnix/stdio.h>
+#include <xnix/vmm.h>
 
 /* LAPIC 映射的虚拟地址 (使用恒等映射) */
 static volatile uint32_t *lapic_base = NULL;
+
+/* MSR 读写 */
+static inline uint64_t rdmsr(uint32_t msr) {
+    uint32_t lo, hi;
+    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+    return ((uint64_t)hi << 32) | lo;
+}
+
+static inline void wrmsr(uint32_t msr, uint64_t val) {
+    __asm__ volatile("wrmsr" ::"c"(msr), "a"((uint32_t)val), "d"((uint32_t)(val >> 32)));
+}
 
 /* 全局 SMP 信息 (由 MP Table 解析填充) */
 struct smp_info g_smp_info = {0};
@@ -57,8 +69,29 @@ void lapic_init(void) {
         return;
     }
 
-    /* 设置 LAPIC 基地址 (恒等映射) */
-    lapic_base = (volatile uint32_t *)g_smp_info.lapic_base;
+    /*
+     * 检查并强制切换到 xAPIC 模式
+     * 如果 x2APIC 启用,MMIO 访问不工作,必须切换回 xAPIC
+     */
+    uint64_t apic_base_msr = rdmsr(MSR_IA32_APIC_BASE);
+    if (apic_base_msr & APIC_BASE_X2APIC) {
+        /* 先禁用 APIC,再重新启用为 xAPIC 模式 */
+        wrmsr(MSR_IA32_APIC_BASE, apic_base_msr & ~(APIC_BASE_ENABLE | APIC_BASE_X2APIC));
+        wrmsr(MSR_IA32_APIC_BASE, (apic_base_msr & ~APIC_BASE_X2APIC) | APIC_BASE_ENABLE);
+    } else if (!(apic_base_msr & APIC_BASE_ENABLE)) {
+        wrmsr(MSR_IA32_APIC_BASE, apic_base_msr | APIC_BASE_ENABLE);
+    }
+
+    /* 映射 LAPIC MMIO 区域 (恒等映射,强制使用标准地址) */
+    paddr_t lapic_phys = LAPIC_BASE_DEFAULT;
+    if (vmm_map_page(NULL, lapic_phys, lapic_phys,
+                     VMM_PROT_READ | VMM_PROT_WRITE | VMM_PROT_NOCACHE) < 0) {
+        pr_err("LAPIC: Failed to map LAPIC at 0x%x", lapic_phys);
+        return;
+    }
+
+    /* 设置 LAPIC 基地址 */
+    lapic_base = (volatile uint32_t *)lapic_phys;
 
     /* 启用 LAPIC */
     uint32_t svr = lapic_read(LAPIC_SVR);
@@ -72,7 +105,7 @@ void lapic_init(void) {
 
     /* 屏蔽所有 LVT 条目 */
     lapic_write(LAPIC_LVT_TIMER, LVT_MASKED);
-    lapic_write(LAPIC_LVT_LINT0, LVT_MASKED);
+    lapic_write(LAPIC_LVT_LINT0, 0x700);
     lapic_write(LAPIC_LVT_LINT1, LVT_MASKED);
     lapic_write(LAPIC_LVT_ERR, LVT_MASKED);
     if ((lapic_read(LAPIC_VER) >> 16) >= 4) {
@@ -85,8 +118,7 @@ void lapic_init(void) {
     /* 发送 EOI 清除任何挂起的中断 */
     lapic_eoi();
 
-    pr_ok("LAPIC: Initialized (ID=%u, ver=%u)",
-          lapic_get_id(), lapic_read(LAPIC_VER) & 0xFF);
+    pr_ok("LAPIC: Initialized (ID=%u, ver=%u)", lapic_get_id(), lapic_read(LAPIC_VER) & 0xFF);
 }
 
 /**
@@ -220,7 +252,7 @@ void lapic_timer_init(uint32_t freq) {
      */
 
     /* 设置 PIT Channel 0 为单次模式 */
-    outb(0x43, 0x30); /* Channel 0, lobyte/hibyte, Mode 0 */
+    outb(0x43, 0x30);           /* Channel 0, lobyte/hibyte, Mode 0 */
     uint16_t pit_count = 11932; /* ~10ms */
     outb(0x40, pit_count & 0xFF);
     outb(0x40, (pit_count >> 8) & 0xFF);
@@ -239,7 +271,7 @@ void lapic_timer_init(uint32_t freq) {
     lapic_write(LAPIC_LVT_TIMER, LVT_MASKED);
 
     /* 计算 LAPIC 定时器频率 */
-    uint32_t elapsed = 0xFFFFFFFF - lapic_read(LAPIC_TIMER_CCR);
+    uint32_t elapsed    = 0xFFFFFFFF - lapic_read(LAPIC_TIMER_CCR);
     uint32_t lapic_freq = elapsed * 100; /* 10ms -> 1s */
 
     /* 计算目标频率需要的初始计数值 */
@@ -247,9 +279,6 @@ void lapic_timer_init(uint32_t freq) {
     if (init_count == 0) {
         init_count = 1;
     }
-
-    pr_debug("LAPIC Timer: freq=%u Hz, init_count=%u (target=%u Hz)",
-             lapic_freq, init_count, freq);
 
     /* 配置 LAPIC 定时器: 周期模式, 向量 0x20 (与 PIT 相同) */
     lapic_write(LAPIC_LVT_TIMER, 0x20 | LVT_TIMER_PERIODIC);

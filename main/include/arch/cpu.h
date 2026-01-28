@@ -15,6 +15,7 @@ struct thread; /* 前向声明 */
 /* 架构初始化(由各架构实现)*/
 void arch_early_init(void);
 void arch_init(void);
+void arch_smp_init(void);
 
 /**
  * 架构特定的线程切换钩子

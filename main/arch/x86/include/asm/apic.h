@@ -8,11 +8,19 @@
 #ifndef ASM_X86_APIC_H
 #define ASM_X86_APIC_H
 
-#include <xnix/types.h>
 #include <arch/mmu.h>
+
+#include <xnix/types.h>
 
 /* LAPIC 默认物理地址 */
 #define LAPIC_BASE_DEFAULT 0xFEE00000
+
+/* IA32_APIC_BASE MSR */
+#define MSR_IA32_APIC_BASE  0x1B
+#define APIC_BASE_BSP       (1 << 8)  /* Bootstrap Processor */
+#define APIC_BASE_X2APIC    (1 << 10) /* x2APIC 模式 */
+#define APIC_BASE_ENABLE    (1 << 11) /* APIC 全局使能 */
+#define APIC_BASE_ADDR_MASK 0xFFFFF000
 
 /* LAPIC 寄存器偏移 */
 #define LAPIC_ID        0x020 /* Local APIC ID */
@@ -46,34 +54,34 @@
 #define LAPIC_SVR_ENABLE (1 << 8)
 
 /* ICR Delivery Mode */
-#define ICR_FIXED         (0 << 8)
-#define ICR_LOWEST        (1 << 8)
-#define ICR_SMI           (2 << 8)
-#define ICR_NMI           (4 << 8)
-#define ICR_INIT          (5 << 8)
-#define ICR_STARTUP       (6 << 8)
+#define ICR_FIXED   (0 << 8)
+#define ICR_LOWEST  (1 << 8)
+#define ICR_SMI     (2 << 8)
+#define ICR_NMI     (4 << 8)
+#define ICR_INIT    (5 << 8)
+#define ICR_STARTUP (6 << 8)
 
 /* ICR Destination Mode */
-#define ICR_PHYSICAL      (0 << 11)
-#define ICR_LOGICAL       (1 << 11)
+#define ICR_PHYSICAL (0 << 11)
+#define ICR_LOGICAL  (1 << 11)
 
 /* ICR Delivery Status */
-#define ICR_IDLE          (0 << 12)
-#define ICR_SEND_PENDING  (1 << 12)
+#define ICR_IDLE         (0 << 12)
+#define ICR_SEND_PENDING (1 << 12)
 
 /* ICR Level */
-#define ICR_DEASSERT      (0 << 14)
-#define ICR_ASSERT        (1 << 14)
+#define ICR_DEASSERT (0 << 14)
+#define ICR_ASSERT   (1 << 14)
 
 /* ICR Trigger Mode */
-#define ICR_EDGE          (0 << 15)
-#define ICR_LEVEL         (1 << 15)
+#define ICR_EDGE  (0 << 15)
+#define ICR_LEVEL (1 << 15)
 
 /* ICR Destination Shorthand */
-#define ICR_NO_SHORTHAND  (0 << 18)
-#define ICR_SELF          (1 << 18)
-#define ICR_ALL_INC_SELF  (2 << 18)
-#define ICR_ALL_EXC_SELF  (3 << 18)
+#define ICR_NO_SHORTHAND (0 << 18)
+#define ICR_SELF         (1 << 18)
+#define ICR_ALL_INC_SELF (2 << 18)
+#define ICR_ALL_EXC_SELF (3 << 18)
 
 /* LVT Timer 模式 */
 #define LVT_TIMER_ONESHOT  (0 << 17)
@@ -97,20 +105,20 @@
 #define IOAPIC_BASE_DEFAULT 0xFEC00000
 
 /* I/O APIC 寄存器选择 */
-#define IOAPIC_REGSEL  0x00
-#define IOAPIC_REGWIN  0x10
+#define IOAPIC_REGSEL 0x00
+#define IOAPIC_REGWIN 0x10
 
 /* I/O APIC 寄存器索引 */
-#define IOAPIC_ID      0x00
-#define IOAPIC_VER     0x01
-#define IOAPIC_ARB     0x02
-#define IOAPIC_REDTBL  0x10 /* 重定向表, 每个 IRQ 占 2 个 32 位寄存器 */
+#define IOAPIC_ID     0x00
+#define IOAPIC_VER    0x01
+#define IOAPIC_ARB    0x02
+#define IOAPIC_REDTBL 0x10 /* 重定向表, 每个 IRQ 占 2 个 32 位寄存器 */
 
 /* I/O APIC 重定向表项标志 */
-#define IOAPIC_INT_MASKED     (1 << 16)
-#define IOAPIC_TRIGGER_LEVEL  (1 << 15)
-#define IOAPIC_ACTIVE_LOW     (1 << 13)
-#define IOAPIC_DEST_LOGICAL   (1 << 11)
+#define IOAPIC_INT_MASKED    (1 << 16)
+#define IOAPIC_TRIGGER_LEVEL (1 << 15)
+#define IOAPIC_ACTIVE_LOW    (1 << 13)
+#define IOAPIC_DEST_LOGICAL  (1 << 11)
 
 /* IPI 向量定义 */
 #define IPI_VECTOR_RESCHED 0xF0
@@ -123,6 +131,9 @@ void     lapic_eoi(void);
 uint8_t  lapic_get_id(void);
 void     lapic_send_ipi(uint8_t lapic_id, uint8_t vector);
 void     lapic_send_ipi_all(uint8_t vector);
+void     lapic_send_init(uint8_t lapic_id);
+void     lapic_send_init_deassert(void);
+void     lapic_send_sipi(uint8_t lapic_id, uint8_t vector);
 void     lapic_timer_init(uint32_t freq);
 void     lapic_timer_stop(void);
 uint32_t lapic_read(uint32_t reg);

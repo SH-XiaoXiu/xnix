@@ -6,7 +6,6 @@
  */
 
 #include <arch/cpu.h>
-#include <arch/hal/feature.h>
 
 #include <asm/smp_defs.h>
 
@@ -44,10 +43,8 @@ void arch_init(void) {
     idt_init();
 
     /*
-     * 如果 APIC 可用, 切换到 APIC 中断控制器
-     * (hal_probe_features 在 boot_init 中已调用, g_smp_info 已填充)
+     * 外部 IRQ 先使用 8259 PIC (PIT/键盘等 ISA IRQ 更稳定)
+     * LAPIC 初始化在 smp_init 中进行,用于 IPI 拉起 AP
      */
-    if (g_smp_info.apic_available) {
-        apic_register();
-    }
+    (void)g_smp_info;
 }

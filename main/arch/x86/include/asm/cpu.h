@@ -40,7 +40,8 @@ static inline void cpu_halt(void) {
 }
 
 static inline void cpu_pause(void) {
-    __asm__ volatile("pause");
+    /* rep; nop 在支持 PAUSE 的 CPU 上等同于 PAUSE,在老 CPU 上等同于 NOP */
+    __asm__ volatile("rep; nop");
 }
 
 static inline void cpu_stop(void) {

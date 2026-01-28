@@ -89,3 +89,6 @@ enter_user_mode:
 
     /* 切换! */
     iret
+
+/* 栈保护标记 */
+.section .note.GNU-stack, "", @progbits

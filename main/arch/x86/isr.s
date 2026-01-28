@@ -235,3 +235,6 @@ isr_syscall:
     popa
     add $8, %esp        /* 跳过中断号和错误码 */
     iret
+
+/* 栈保护标记 */
+.section .note.GNU-stack, "", @progbits

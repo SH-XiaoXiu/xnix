@@ -2,7 +2,6 @@
 #include <arch/hal/feature.h>
 
 #include <asm/smp_defs.h>
-#include <xnix/stdio.h>
 #include <xnix/string.h>
 
 /* 全局特性变量 */
@@ -58,9 +57,16 @@ void hal_probe_features(struct hal_features *features) {
         features->flags |= HAL_FEATURE_MMU;
     }
 
+    /* 先更新全局变量,供 mp_table_parse() 中的 hal_has_feature() 使用 */
+    g_hal_features.flags = features->flags;
+
 /* 解析 MP Table 获取 SMP 信息 */
 #ifdef ENABLE_SMP
-    if (mp_table_parse(&g_smp_info) == 0 && g_smp_info.cpu_count > 1) {
+    if (acpi_madt_parse(&g_smp_info) == 0 && g_smp_info.cpu_count > 1) {
+        features->flags |= HAL_FEATURE_ACPI;
+        features->flags |= HAL_FEATURE_SMP;
+        features->cpu_count = g_smp_info.cpu_count;
+    } else if (mp_table_parse(&g_smp_info) == 0 && g_smp_info.cpu_count > 1) {
         features->flags |= HAL_FEATURE_SMP;
         features->cpu_count = g_smp_info.cpu_count;
     } else {
@@ -68,7 +74,11 @@ void hal_probe_features(struct hal_features *features) {
     }
 #else
     /* 非 SMP 构建也解析 MP Table 以获取 APIC 信息 */
-    mp_table_parse(&g_smp_info);
+    if (acpi_madt_parse(&g_smp_info) == 0) {
+        features->flags |= HAL_FEATURE_ACPI;
+    } else {
+        mp_table_parse(&g_smp_info);
+    }
     features->cpu_count = 1;
 #endif
 
