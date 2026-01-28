@@ -34,13 +34,28 @@ struct tss_entry {
     uint16_t iomap_base;
 } __attribute__((packed));
 
-/* 更新内核栈指针 (上下文切换时调用) */
+/* 初始化所有 TSS (BSP 调用) */
+void tss_init(void);
+
+/* 初始化指定 CPU 的 TSS (AP 调用) */
+void tss_init_cpu(uint32_t cpu_id);
+
+/* 更新当前 CPU 的内核栈指针 (上下文切换时调用) */
 void tss_set_stack(uint32_t ss0, uint32_t esp0);
 
-/* 获取 TSS 结构的地址和大小 (供 GDT 初始化使用) */
-void tss_get_desc(uint32_t *base, uint32_t *limit);
+/* 更新指定 CPU 的内核栈指针 */
+void tss_set_stack_cpu(uint32_t cpu_id, uint32_t ss0, uint32_t esp0);
 
-/* 初始化 TSS */
-void tss_init(void);
+/* 获取指定 CPU 的 TSS 结构的地址和大小 (供 GDT 初始化使用) */
+void tss_get_desc(uint32_t cpu_id, uint32_t *base, uint32_t *limit);
+
+/* 获取指定 CPU 的 TSS 段选择子 */
+uint16_t gdt_get_tss_selector(uint32_t cpu_id);
+
+/* 设置指定 CPU 的 TSS 描述符 */
+void gdt_set_tss(uint32_t cpu_id, uint32_t tss_base, uint32_t tss_limit);
+
+/* AP 初始化 GDT */
+void gdt_init_ap(uint32_t cpu_id);
 
 #endif
