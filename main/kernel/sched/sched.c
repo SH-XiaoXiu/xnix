@@ -173,6 +173,12 @@ static void sched_cleanup_zombie(void) {
     /* 释放链表上所有 zombie 线程 */
     while (z) {
         struct thread *next = z->next;
+
+        /* 从所属进程的线程列表中移除 */
+        if (z->owner) {
+            process_remove_thread(z->owner, z);
+        }
+
         free_tid(z->tid);
         kfree(z->stack);
         kfree(z);
