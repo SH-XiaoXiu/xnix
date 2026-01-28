@@ -392,12 +392,13 @@ void *vmm_create_pd(void) {
         }
     }
 
+    /* 拷贝 Temp PT 映射 (PD[1022]) 以便新进程也能使用临时映射 */
+    /* 必须在 unmap kpd_virt 之前完成 */
+    pd_virt[TEMP_PT_PD_IDX] = kpd_virt[TEMP_PT_PD_IDX];
+
     if (!kernel_is_current) {
         unmap_temp_page(2);
     }
-
-    /* 拷贝 Temp PT 映射 (PD[1022]) 以便新进程也能使用临时映射 */
-    pd_virt[TEMP_PT_PD_IDX] = kpd_virt[TEMP_PT_PD_IDX];
 
     /* 递归映射: 最后一项指向自己 */
     pd_virt[1023] = ((uint32_t)pd_phys) | PDE_PRESENT | PDE_RW;
