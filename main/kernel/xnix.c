@@ -69,13 +69,13 @@ static void boot_phase_early(uint32_t magic, struct multiboot_info *mb_info) {
  */
 static void boot_phase_core(void) {
     arch_init();
-    pr_ok("GDT/IDT initialized");
+    pr_ok("GDT/IDT");
 
     mm_init();
-    pr_ok("Memory manager initialized");
+    pr_ok("Memory manager.");
 
     irq_init();
-    pr_ok("IRQ subsystem initialized");
+    pr_ok("IRQ subsystem.");
 }
 
 /**
@@ -83,17 +83,24 @@ static void boot_phase_core(void) {
  */
 static void boot_phase_subsys(void) {
     process_init();
-    pr_ok("Process manager initialized");
+    pr_ok("Process manager.");
 
     ipc_init();
-    pr_ok("IPC subsystem initialized");
+    pr_ok("IPC subsystem.");
 
     ioport_init();
 
     syscall_init();
 
     sched_init();
-    pr_ok("Scheduler initialized");
+    pr_ok("Scheduler.");
+}
+
+/**
+ * SMP - 启动其他 CPU 核心
+ */
+static void boot_phase_smp(void) {
+    arch_smp_init();
 }
 
 /**
@@ -102,7 +109,7 @@ static void boot_phase_subsys(void) {
 static void boot_phase_late(void) {
     timer_set_callback(sched_tick);
     timer_init(CFG_SCHED_HZ);
-    pr_ok("Timer initialized (%d Hz)", CFG_SCHED_HZ);
+    pr_ok("Timer (%d Hz)", CFG_SCHED_HZ);
 
     /* 启动串口消费者线程并启用异步输出 */
     serial_consumer_start();
@@ -182,13 +189,12 @@ void kernel_main(uint32_t magic, struct multiboot_info *mb_info) {
     boot_phase_early(magic, mb_info);
     boot_phase_core();
     boot_phase_subsys();
+    boot_phase_smp();
     boot_phase_late();
     boot_start_services();
 
     pr_info("Starting scheduler...");
     cpu_irq_enable();
-
-    while (1) {
-        cpu_halt();
-    }
+    schedule();
+    __builtin_unreachable();
 }

@@ -8,8 +8,8 @@
 struct thread;
 struct ipc_kmsg;
 
-/* 异步消息队列大小 */
-#define IPC_ASYNC_QUEUE_SIZE 64 //TODO 将换成动态实现
+/* 异步消息队列大小 (TODO: 换成动态实现) */
+#define IPC_ASYNC_QUEUE_SIZE 64
 
 /* 异步消息队列节点 */
 struct ipc_async_msg {

@@ -41,8 +41,8 @@ static volatile bool in_interrupt = false;
 static struct thread *per_cpu_zombie[CFG_MAX_CPUS] = {NULL};
 #define zombie_thread per_cpu_zombie[0]
 
-/* Idle 线程 */
-static struct thread *idle_thread = NULL;
+/* Idle 线程 (Per-CPU) */
+static struct thread *idle_threads[CFG_MAX_CPUS] = {NULL};
 
 /* 阻塞线程链表(等待唤醒) */
 static struct thread *blocked_list = NULL;
@@ -153,8 +153,10 @@ struct sched_policy *sched_get_policy(void) {
 }
 
 struct runqueue *sched_get_runqueue(cpu_id_t cpu) {
-    (void)cpu; /* 单核忽略参数 */
-    return &runqueues[0];
+    if (cpu >= CFG_MAX_CPUS) {
+        return &runqueues[0];
+    }
+    return &runqueues[cpu];
 }
 
 /*
@@ -291,11 +293,12 @@ void schedule(void) {
 
     if (!next) {
         /* 如果运行队列为空, 切换到 idle 线程 */
-        if (!idle_thread) {
+        struct thread *idle = idle_threads[cpu];
+        if (!idle) {
             /* 尚未初始化 idle 线程, 这是一个严重错误 */
-            panic("idle_thread not initialized!");
+            panic("idle_thread for CPU%u not initialized!", cpu);
         }
-        next = idle_thread;
+        next = idle;
     }
 
     if (next == prev) {
@@ -308,7 +311,7 @@ void schedule(void) {
     /* 更新状态 */
     if (prev) {
         /* 如果上一个线程是 idle 线程, 不要修改它的状态 (它永远是 READY) */
-        if (prev != idle_thread) {
+        if (prev != idle_threads[cpu]) {
             if (prev->state == THREAD_RUNNING) {
                 prev->state = THREAD_READY;
             }
@@ -317,7 +320,7 @@ void schedule(void) {
     }
 
     /* 如果下一个线程是 idle 线程, 保持其状态为 READY (或者是特殊的 IDLE 状态) */
-    if (next != idle_thread) {
+    if (next != idle_threads[cpu]) {
         next->state      = THREAD_RUNNING;
         next->running_on = cpu;
     }
@@ -375,26 +378,31 @@ void sched_init(void) {
     sched_set_policy(&sched_policy_rr);
     pr_info("Scheduler initialized");
 
-    /* 创建 idle 线程 */
+    /* 创建 idle 线程 (为每个 CPU 创建一个) */
     /* 注意: idle 线程不加入运行队列, 也不需要策略 */
-    idle_thread = kzalloc(sizeof(struct thread));
-    if (idle_thread) {
-        idle_thread->tid           = 0; /* TID 0 保留给 idle */
-        idle_thread->name          = "idle";
-        idle_thread->state         = THREAD_READY;
-        idle_thread->priority      = 255;
-        idle_thread->stack_size    = CFG_THREAD_STACK_SIZE;
-        idle_thread->stack         = kmalloc(CFG_THREAD_STACK_SIZE);
-        idle_thread->cpus_workable = CPUS_ALL;
-        idle_thread->running_on    = CPU_ID_INVALID;
+    for (int i = 0; i < CFG_MAX_CPUS; i++) {
+        struct thread *idle = kzalloc(sizeof(struct thread));
+        if (idle) {
+            idle->tid = 0; /* TID 0 保留给 idle (所有 idle 线程共享 TID 0) */
+            /* 为了调试方便, 也可以给不同的 TID, 但 TID 0 通常是特殊的 */
 
-        if (idle_thread->stack) {
-            thread_init_stack(idle_thread, idle_task, NULL);
+            idle->name          = "idle";
+            idle->state         = THREAD_READY;
+            idle->priority      = 255;
+            idle->stack_size    = CFG_THREAD_STACK_SIZE;
+            idle->stack         = kmalloc(CFG_THREAD_STACK_SIZE);
+            idle->cpus_workable = (1 << i); /* 绑定到特定 CPU */
+            idle->running_on    = CPU_ID_INVALID;
+
+            if (idle->stack) {
+                thread_init_stack(idle, idle_task, NULL);
+                idle_threads[i] = idle;
+            } else {
+                panic("Failed to allocate idle stack for CPU%d", i);
+            }
         } else {
-            panic("Failed to allocate idle stack");
+            panic("Failed to allocate idle thread for CPU%d", i);
         }
-    } else {
-        panic("Failed to allocate idle thread");
     }
 }
 
@@ -415,6 +423,10 @@ struct thread *sched_current(void) {
 }
 
 void sched_yield(void) {
+    struct thread *current = sched_current();
+    if (current && current_policy) {
+        current->time_slice = 0;
+    }
     schedule();
 }
 
@@ -553,7 +565,7 @@ void sched_tick(void) {
     }
 
     /* 特殊处理 idle 线程 */
-    if (current == idle_thread) {
+    if (current == idle_threads[cpu_current_id()]) {
         /* 检查是否有可运行线程 */
         if (current_policy) {
             struct thread *next = current_policy->pick_next();
@@ -650,7 +662,7 @@ void thread_exit(int code) {
     struct thread *current = sched_current();
     if (current) {
         /* 安全检查:绝不允许 idle 线程退出 */
-        if (current == idle_thread) {
+        if (current == idle_threads[cpu_current_id()]) {
             panic("Idle thread tried to exit!");
         }
 

@@ -6,9 +6,13 @@
  */
 
 #include <xnix/console.h>
+#include <xnix/sync.h>
 
 #include <xnix/stdio.h>
 #include <xnix/types.h>
+
+/* 输出锁，保证多核输出不交错 */
+static spinlock_t kprintf_lock = SPINLOCK_INIT;
 
 void kputc(char c) {
     if (c == '\n') {
@@ -196,6 +200,8 @@ void kprintf(const char *fmt, ...) {
 }
 
 void klog(int level, const char *fmt, ...) {
+    uint32_t flags = spin_lock_irqsave(&kprintf_lock);
+
     switch (level) {
     case LOG_ERR:
         console_set_color(KCOLOR_RED);
@@ -226,7 +232,10 @@ void klog(int level, const char *fmt, ...) {
     __builtin_va_start(args, fmt);
     vkprintf(fmt, args);
     __builtin_va_end(args);
+
     /* 重置颜色并确保换行 */
     console_reset_color();
     kputc('\n');
+
+    spin_unlock_irqrestore(&kprintf_lock, flags);
 }

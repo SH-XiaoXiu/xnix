@@ -27,7 +27,7 @@ set(CFG_MAX_CONSOLES 4)
 
 # CPU 配置
 set(CFG_MAX_CPUS 1)
-option(ENABLE_SMP "Enable SMP support" OFF)
+option(ENABLE_SMP "Enable SMP support" ON)
 if(ENABLE_SMP)
     set(CFG_MAX_CPUS 8)
     add_definitions(-DENABLE_SMP)
@@ -66,8 +66,9 @@ file(GLOB_RECURSE KERNEL_C "${CMAKE_SOURCE_DIR}/main/kernel/*.c")
 file(GLOB_RECURSE LIB_C "${CMAKE_SOURCE_DIR}/main/lib/*.c")
 file(GLOB_RECURSE DRIVERS_C "${CMAKE_SOURCE_DIR}/main/drivers/*.c")
 file(GLOB_RECURSE ARCH_C "${ARCH_DIR}/*.c")
-file(GLOB_RECURSE ARCH_ASM "${ARCH_DIR}/*.s")
-set(KERNEL_SOURCES ${KERNEL_C} ${LIB_C} ${DRIVERS_C} ${ARCH_C} ${ARCH_ASM})
+file(GLOB_RECURSE ARCH_ASM_LOWER "${ARCH_DIR}/*.s")
+file(GLOB_RECURSE ARCH_ASM_UPPER "${ARCH_DIR}/*.S")
+set(KERNEL_SOURCES ${KERNEL_C} ${LIB_C} ${DRIVERS_C} ${ARCH_C} ${ARCH_ASM_LOWER} ${ARCH_ASM_UPPER})
 
 # ============================================
 # 创建 ELF 内核目标
@@ -141,7 +142,7 @@ add_custom_target(iso DEPENDS ${CMAKE_BINARY_DIR}/xnix.iso)
 # QEMU 运行/调试
 # ============================================
 add_custom_target(run
-        COMMAND qemu-system-i386 -cdrom ${CMAKE_BINARY_DIR}/xnix.iso
+        COMMAND qemu-system-i386 -cdrom ${CMAKE_BINARY_DIR}/xnix.iso -serial stdio -no-reboot -smp ${CFG_MAX_CPUS}
         DEPENDS iso
         COMMENT "在 QEMU 中运行 Xnix..."
         VERBATIM

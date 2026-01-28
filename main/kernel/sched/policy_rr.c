@@ -124,20 +124,43 @@ static bool rr_tick(struct thread *current) {
     return false;
 }
 
+/**
+ * 选择负载最轻的 CPU
+ */
 static cpu_id_t rr_select_cpu(struct thread *t) {
-    /* 简单负载均衡:选负载最低的 CPU */
+    uint32_t total_cpus = cpu_count();
+    if (total_cpus <= 1) {
+        return 0;
+    }
+
+    /* 检查线程的 CPU 亲和性 */
+    if (t->cpus_workable != CPUS_ALL) {
+        /* 在允许的 CPU 中选择负载最轻的 */
+        cpu_id_t  best_cpu  = CPU_ID_INVALID;
+        uint32_t  min_load  = ~0u;
+
+        for (cpu_id_t i = 0; i < total_cpus; i++) {
+            if (!(t->cpus_workable & (1 << i))) {
+                continue;
+            }
+            struct runqueue *rq = sched_get_runqueue(i);
+            if (rq->nr_running < min_load) {
+                min_load = rq->nr_running;
+                best_cpu = i;
+            }
+        }
+        return (best_cpu != CPU_ID_INVALID) ? best_cpu : 0;
+    }
+
+    /* 选择负载最轻的 CPU */
     cpu_id_t best_cpu = 0;
     uint32_t min_load = sched_get_runqueue(0)->nr_running;
 
-    for (cpu_id_t cpu = 0; cpu < cpu_count(); cpu++) {
-        if (!CPUS_TEST(t->cpus_workable, cpu)) {
-            continue; /* 线程不能在这个 CPU 运行 */
-        }
-
-        uint32_t load = sched_get_runqueue(cpu)->nr_running;
-        if (load < min_load) {
-            min_load = load;
-            best_cpu = cpu;
+    for (cpu_id_t i = 1; i < total_cpus; i++) {
+        struct runqueue *rq = sched_get_runqueue(i);
+        if (rq->nr_running < min_load) {
+            min_load = rq->nr_running;
+            best_cpu = i;
         }
     }
 
