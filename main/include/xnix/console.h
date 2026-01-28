@@ -109,4 +109,12 @@ int console_ringbuf_get(char *c);
  */
 void console_flush(void);
 
+/**
+ * 进入紧急模式
+ *
+ * 禁用异步输出,所有输出直接写入硬件.
+ * 用于 panic 等中断已禁用,调度器不可用的场景.
+ */
+void console_emergency_mode(void);
+
 #endif

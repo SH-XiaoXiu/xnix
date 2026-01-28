@@ -27,7 +27,11 @@ static int             console_count = 0;
 /* Ring buffer for async drivers */
 static char           g_ringbuf_data[CONSOLE_RINGBUF_SIZE];
 static struct ringbuf g_ringbuf;
-static bool           g_async_enabled = false;
+static bool           g_async_enabled  = false;
+static bool           g_emergency_mode = false;
+
+/* 紧急直接输出函数 (由 serial 驱动注册) */
+static void (*g_emergency_putc)(char c) = NULL;
 
 int console_register(struct console *c) {
     if (console_count >= MAX_CONSOLES || !c) {
@@ -66,6 +70,15 @@ void console_async_enable(void) {
     g_async_enabled = true;
 }
 
+void console_emergency_mode(void) {
+    g_emergency_mode = true;
+    g_async_enabled  = false;
+}
+
+void console_register_emergency_putc(void (*putc)(char c)) {
+    g_emergency_putc = putc;
+}
+
 int console_ringbuf_get(char *c) {
     uint32_t flags = spin_lock_irqsave(&g_ringbuf.lock);
     int      ret   = ringbuf_get(&g_ringbuf, c);
@@ -91,25 +104,59 @@ static void ringbuf_puts_locked(const char *s) {
     }
 }
 
+extern struct thread *sched_current(void);
+
 void console_putc(char c) {
     /* 同步驱动立即调用 */
+    bool has_sync_output = false;
     for (int i = 0; i < console_count; i++) {
         if ((consoles[i]->flags & CONSOLE_ASYNC) == 0 && consoles[i]->putc) {
             consoles[i]->putc(c);
+            has_sync_output = true;
         }
     }
 
+    /* 紧急模式: 直接输出到串口 */
+    if (g_emergency_mode) {
+        if (g_emergency_putc) {
+            if (c == '\n') {
+                g_emergency_putc('\r');
+            }
+            g_emergency_putc(c);
+        }
+        return;
+    }
+
     /* 异步驱动: 写入 buffer */
-    if (g_async_enabled) {
+    if (!g_async_enabled) {
+        return;
+    }
+
+    if (sched_current()) {
         uint32_t flags = spin_lock_irqsave(&g_ringbuf.lock);
         while (ringbuf_full(&g_ringbuf)) {
-            /* Buffer 满: 短暂让出,等待消费者 */
             spin_unlock_irqrestore(&g_ringbuf.lock, flags);
             thread_yield();
             flags = spin_lock_irqsave(&g_ringbuf.lock);
         }
         ringbuf_put(&g_ringbuf, c);
         spin_unlock_irqrestore(&g_ringbuf.lock, flags);
+        return;
+    }
+
+    uint32_t flags = spin_lock_irqsave(&g_ringbuf.lock);
+    if (!ringbuf_full(&g_ringbuf)) {
+        ringbuf_put(&g_ringbuf, c);
+        spin_unlock_irqrestore(&g_ringbuf.lock, flags);
+        return;
+    }
+    spin_unlock_irqrestore(&g_ringbuf.lock, flags);
+
+    if (!has_sync_output && g_emergency_putc) {
+        if (c == '\n') {
+            g_emergency_putc('\r');
+        }
+        g_emergency_putc(c);
     }
 }
 
@@ -120,7 +167,24 @@ void console_puts(const char *s) {
         }
     }
 
-    if (g_async_enabled) {
+    /* 紧急模式: 直接输出到串口 */
+    if (g_emergency_mode) {
+        if (g_emergency_putc) {
+            while (*s) {
+                if (*s == '\n') {
+                    g_emergency_putc('\r');
+                }
+                g_emergency_putc(*s++);
+            }
+        }
+        return;
+    }
+
+    if (!g_async_enabled) {
+        return;
+    }
+
+    if (sched_current()) {
         while (*s) {
             uint32_t flags = spin_lock_irqsave(&g_ringbuf.lock);
             while (ringbuf_full(&g_ringbuf)) {
@@ -131,7 +195,14 @@ void console_puts(const char *s) {
             ringbuf_put(&g_ringbuf, *s++);
             spin_unlock_irqrestore(&g_ringbuf.lock, flags);
         }
+        return;
     }
+
+    uint32_t flags = spin_lock_irqsave(&g_ringbuf.lock);
+    while (*s && !ringbuf_full(&g_ringbuf)) {
+        ringbuf_put(&g_ringbuf, *s++);
+    }
+    spin_unlock_irqrestore(&g_ringbuf.lock, flags);
 }
 
 void console_set_color(kcolor_t color) {
