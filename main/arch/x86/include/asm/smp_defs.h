@@ -161,6 +161,9 @@ struct smp_info {
     bool     apic_available;          /* APIC 是否可用 */
 };
 
+/* 全局 SMP 信息 */
+extern struct smp_info g_smp_info;
+
 /* MP Table 解析接口 */
 int  mp_table_parse(struct smp_info *info);
 void mp_table_dump(const struct smp_info *info);
@@ -175,8 +178,7 @@ extern struct per_cpu_data g_per_cpu[CFG_MAX_CPUS];
  */
 static inline struct per_cpu_data *get_cpu_data(void) {
     /* 通过 LAPIC ID 查找对应的 per_cpu 数据 */
-    extern uint8_t         lapic_get_id(void);
-    extern struct smp_info g_smp_info;
+    extern uint8_t lapic_get_id(void);
 
     uint8_t lapic_id = lapic_get_id();
     for (uint32_t i = 0; i < g_smp_info.cpu_count; i++) {

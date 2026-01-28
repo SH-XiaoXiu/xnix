@@ -150,4 +150,7 @@ void     ioapic_write(uint8_t reg, uint32_t val);
 /* APIC 芯片注册 */
 void apic_register(void);
 
+/* LAPIC Timer 驱动注册 */
+void lapic_timer_register(void);
+
 #endif /* ASM_X86_APIC_H */

@@ -37,9 +37,6 @@ extern struct {
 
 extern uint32_t ap_kernel_cr3;
 
-/* SMP 信息 */
-extern struct smp_info g_smp_info;
-
 /* Per-CPU 数据 */
 extern struct per_cpu_data g_per_cpu[];
 
@@ -243,12 +240,18 @@ void ap_main(uint32_t cpu_id) {
  * 启动所有 AP 核心,此函数作为强符号覆盖 lib/arch_stubs.c 中的弱符号
  */
 void arch_smp_init(void) {
-    if (g_smp_info.cpu_count <= 1) {
+    if (!g_smp_info.apic_available) {
         return;
     }
 
-    if (!g_smp_info.apic_available) {
-        pr_warn("SMP: APIC not available");
+    /* 注册 APIC 中断芯片(从 PIC 切换到 APIC) */
+    apic_register();
+
+    /* 注册 LAPIC Timer 驱动 */
+    lapic_timer_register();
+
+    /* 如果只有单核则返回 */
+    if (g_smp_info.cpu_count <= 1) {
         return;
     }
 
