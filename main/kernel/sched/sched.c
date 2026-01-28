@@ -240,6 +240,9 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
         return NULL;
     }
 
+    /* 在栈底设置 canary,用于检测栈溢出 */
+    *(uint32_t *)t->stack = 0xDEADBEEF;
+
     t->tid = alloc_tid();
     if (t->tid == TID_INVALID) {
         pr_err("Failed to allocate TID");
@@ -295,6 +298,14 @@ void schedule(void) {
     cpu_id_t         cpu  = cpu_current_id();
     struct runqueue *rq   = sched_get_runqueue(cpu);
     struct thread   *prev = rq->current;
+
+    /* 检查当前线程的栈 canary */
+    if (prev && prev->stack && *(uint32_t *)prev->stack != 0xDEADBEEF) {
+        spin_unlock(&sched_lock);
+        cpu_irq_restore(flags);
+        panic("Stack overflow detected! Thread '%s' (tid=%d) canary corrupted",
+              prev->name ? prev->name : "?", prev->tid);
+    }
     struct thread   *next = current_policy->pick_next();
 
     if (!next) {
@@ -347,6 +358,19 @@ void schedule(void) {
     if (prev) {
         /* 切换后在新线程栈上运行,此时清理 zombie 是安全的 */
         context_switch(&prev->ctx, &next->ctx);
+
+        /*
+         * context_switch 返回后,当前在恢复的线程上下文中运行.
+         * 必须重新设置 TSS ESP0 为当前线程的内核栈,否则下次从用户态
+         * 进入内核态时会使用错误的栈.
+         */
+        struct thread *current = sched_current();
+        if (current && current->stack) {
+            extern void tss_set_stack(uint32_t ss0, uint32_t esp0);
+            uint32_t    esp0 = (uint32_t)current->stack + current->stack_size;
+            tss_set_stack(0x10, esp0); /* KERNEL_DS = 0x10 */
+        }
+
         sched_cleanup_zombie();
     } else {
         /* context_switch_first 不返回,zombie 会在下次 context_switch 返回时清理 */
@@ -401,6 +425,8 @@ void sched_init(void) {
             idle->running_on    = CPU_ID_INVALID;
 
             if (idle->stack) {
+                /* 在栈底设置 canary */
+                *(uint32_t *)idle->stack = 0xDEADBEEF;
                 thread_init_stack(idle, idle_task, NULL);
                 idle_threads[i] = idle;
             } else {
