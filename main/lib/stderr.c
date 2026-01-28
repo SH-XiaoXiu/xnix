@@ -38,6 +38,9 @@ void panic(const char *fmt, ...) {
     /* 立即关中断,防止干扰 */
     cpu_irq_disable();
 
+    /* 进入紧急模式,直接输出到串口 */
+    console_emergency_mode();
+
     /* 红色分割线 */
     console_set_color(KCOLOR_RED);
     kputs("\n\n");
