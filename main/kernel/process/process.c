@@ -189,6 +189,11 @@ void process_unref(struct process *proc) {
         spin_unlock(&process_list_lock);
         cpu_irq_restore(flags);
 
+        /* 释放进程名 */
+        if (proc->name) {
+            kfree((void *)proc->name);
+        }
+
         free_pid(proc->pid);
         kfree(proc);
         return;
@@ -208,7 +213,14 @@ process_t process_create(const char *name) {
         return NULL;
     }
 
-    proc->name      = name;
+    /* 复制进程名(防止外部字符串被释放或覆盖) */
+    const char *src       = name ? name : "?";
+    size_t      len       = strlen(src);
+    char       *name_copy = kmalloc(len + 1);
+    if (name_copy) {
+        memcpy(name_copy, src, len + 1);
+    }
+    proc->name      = name_copy; /* NULL 表示分配失败 */
     proc->state     = PROCESS_RUNNING;
     proc->exit_code = 0;
 
@@ -302,7 +314,8 @@ void process_terminate_current(int signal) {
         panic("Init process terminated by signal %d!", signal);
     }
 
-    klog(LOG_ERR, "Process %d '%s' terminated (signal %d)", proc->pid, proc->name, signal);
+    klog(LOG_ERR, "Process %d '%s' terminated (signal %d)", proc->pid,
+         proc->name ? proc->name : "?", signal);
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = -signal;
