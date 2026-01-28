@@ -8,6 +8,7 @@
 
 #include <arch/hal/feature.h>
 
+#include <kernel/process/process.h>
 #include <xnix/errno.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
@@ -94,10 +95,14 @@ int copy_from_user(void *dst, const void *user_src, size_t n) {
         return -ENOSYS;
     }
 
+    /* 获取当前进程的页目录,不依赖 CR3 寄存器 */
+    struct process *cur = process_get_current();
+    void           *pd  = (cur && cur->page_dir_phys) ? cur->page_dir_phys : NULL;
+
     size_t copied = 0;
     while (copied < n) {
         uintptr_t uaddr = (uintptr_t)user_src + copied;
-        uintptr_t paddr = mm->query(NULL, uaddr);
+        uintptr_t paddr = mm->query(pd, uaddr);
         if (!paddr) {
             return -EFAULT;
         }
@@ -110,6 +115,7 @@ int copy_from_user(void *dst, const void *user_src, size_t n) {
 
         void *page = vmm_kmap((paddr_t)(paddr & PAGE_MASK));
         memcpy((uint8_t *)dst + copied, (uint8_t *)page + page_off, chunk_size);
+
         vmm_kunmap(page);
 
         copied += chunk_size;
@@ -134,10 +140,14 @@ int copy_to_user(void *user_dst, const void *src, size_t n) {
         return -ENOSYS;
     }
 
+    /* 获取当前进程的页目录,不依赖 CR3 寄存器 */
+    struct process *cur = process_get_current();
+    void           *pd  = (cur && cur->page_dir_phys) ? cur->page_dir_phys : NULL;
+
     size_t copied = 0;
     while (copied < n) {
         uintptr_t uaddr = (uintptr_t)user_dst + copied;
-        uintptr_t paddr = mm->query(NULL, uaddr);
+        uintptr_t paddr = mm->query(pd, uaddr);
         if (!paddr) {
             return -EFAULT;
         }
