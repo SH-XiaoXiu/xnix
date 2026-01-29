@@ -24,8 +24,8 @@ extern void context_switch_first(struct thread_context *new);
  * 全局变量
  **/
 
-/* Per-CPU 运行队列(当前单核,数组大小为 1) */
-static struct runqueue runqueues[CFG_MAX_CPUS];
+/* Per-CPU 运行队列 */
+static DEFINE_PER_CPU(struct runqueue, runqueue);
 
 /* 当前调度策略 */
 static struct sched_policy *current_policy = NULL;
@@ -38,11 +38,10 @@ static uint32_t  tid_capacity = 0;
 static volatile bool in_interrupt = false;
 
 /* 待清理的已退出线程(切换后释放) */
-static struct thread *per_cpu_zombie[CFG_MAX_CPUS] = {NULL};
-#define zombie_thread per_cpu_zombie[0]
+static DEFINE_PER_CPU(struct thread *, zombie_thread);
 
 /* Idle 线程 (Per-CPU) */
-static struct thread *idle_threads[CFG_MAX_CPUS] = {NULL};
+static DEFINE_PER_CPU(struct thread *, idle_thread);
 
 /* 阻塞线程链表(等待唤醒) */
 static struct thread *blocked_list = NULL;
@@ -154,9 +153,9 @@ struct sched_policy *sched_get_policy(void) {
 
 struct runqueue *sched_get_runqueue(cpu_id_t cpu) {
     if (cpu >= CFG_MAX_CPUS) {
-        return &runqueues[0];
+        return per_cpu_ptr(runqueue, 0);
     }
-    return &runqueues[cpu];
+    return per_cpu_ptr(runqueue, cpu);
 }
 
 /*
@@ -164,11 +163,9 @@ struct runqueue *sched_get_runqueue(cpu_id_t cpu) {
  **/
 
 static void sched_cleanup_zombie(void) {
-    cpu_id_t cpu = cpu_current_id();
-
     /* 取出整个链表并清空头指针 */
-    struct thread *z    = per_cpu_zombie[cpu];
-    per_cpu_zombie[cpu] = NULL;
+    struct thread *z = this_cpu_read(zombie_thread);
+    this_cpu_write(zombie_thread, NULL);
 
     /* 释放链表上所有 zombie 线程 */
     while (z) {
@@ -310,7 +307,7 @@ void schedule(void) {
 
     if (!next) {
         /* 如果运行队列为空, 切换到 idle 线程 */
-        struct thread *idle = idle_threads[cpu];
+        struct thread *idle = per_cpu(idle_thread, cpu);
         if (!idle) {
             /* 尚未初始化 idle 线程, 这是一个严重错误 */
             panic("idle_thread for CPU%u not initialized!", cpu);
@@ -328,7 +325,7 @@ void schedule(void) {
     /* 更新状态 */
     if (prev) {
         /* 如果上一个线程是 idle 线程, 不要修改它的状态 (它永远是 READY) */
-        if (prev != idle_threads[cpu]) {
+        if (prev != per_cpu(idle_thread, cpu)) {
             if (prev->state == THREAD_RUNNING) {
                 prev->state = THREAD_READY;
             }
@@ -337,7 +334,7 @@ void schedule(void) {
     }
 
     /* 如果下一个线程是 idle 线程, 保持其状态为 READY (或者是特殊的 IDLE 状态) */
-    if (next != idle_threads[cpu]) {
+    if (next != per_cpu(idle_thread, cpu)) {
         next->state      = THREAD_RUNNING;
         next->running_on = cpu;
     }
@@ -399,10 +396,11 @@ void sched_init(void) {
 
     /* 初始化运行队列 */
     for (int i = 0; i < CFG_MAX_CPUS; i++) {
-        runqueues[i].head       = NULL;
-        runqueues[i].tail       = NULL;
-        runqueues[i].current    = NULL;
-        runqueues[i].nr_running = 0;
+        struct runqueue *rq = per_cpu_ptr(runqueue, i);
+        rq->head            = NULL;
+        rq->tail            = NULL;
+        rq->current         = NULL;
+        rq->nr_running      = 0;
     }
 
     sched_set_policy(&sched_policy_rr);
@@ -428,7 +426,7 @@ void sched_init(void) {
                 /* 在栈底设置 canary */
                 *(uint32_t *)idle->stack = 0xDEADBEEF;
                 thread_init_stack(idle, idle_task, NULL);
-                idle_threads[i] = idle;
+                per_cpu(idle_thread, i) = idle;
             } else {
                 panic("Failed to allocate idle stack for CPU%d", i);
             }
@@ -597,7 +595,7 @@ void sched_tick(void) {
     }
 
     /* 特殊处理 idle 线程 */
-    if (current == idle_threads[cpu_current_id()]) {
+    if (current == this_cpu_read(idle_thread)) {
         /* 检查是否有可运行线程 */
         if (current_policy) {
             struct thread *next = current_policy->pick_next();
@@ -680,9 +678,9 @@ void thread_force_exit(struct thread *t) {
     }
 
     /* 加入僵尸链表 */
-    cpu_id_t cpu        = cpu_current_id();
-    t->next             = per_cpu_zombie[cpu];
-    per_cpu_zombie[cpu] = t;
+    cpu_id_t cpu                = cpu_current_id();
+    t->next                     = per_cpu(zombie_thread, cpu);
+    per_cpu(zombie_thread, cpu) = t;
 
     spin_unlock_irqrestore(&sched_lock, flags);
 }
@@ -694,7 +692,7 @@ void thread_exit(int code) {
     struct thread *current = sched_current();
     if (current) {
         /* 安全检查:绝不允许 idle 线程退出 */
-        if (current == idle_threads[cpu_current_id()]) {
+        if (current == this_cpu_read(idle_thread)) {
             panic("Idle thread tried to exit!");
         }
 
@@ -709,9 +707,8 @@ void thread_exit(int code) {
         }
 
         /* 挂入 per-cpu 僵尸链表 */
-        cpu_id_t cpu        = cpu_current_id();
-        current->next       = per_cpu_zombie[cpu];
-        per_cpu_zombie[cpu] = current;
+        current->next = this_cpu_read(zombie_thread);
+        this_cpu_write(zombie_thread, current);
     }
 
     schedule();

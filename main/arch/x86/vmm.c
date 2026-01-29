@@ -32,7 +32,7 @@
 /* 内核页目录 (物理地址) */
 static uint32_t *kernel_pd = NULL;
 
-static uint32_t kmap_irq_flags[CFG_MAX_CPUS];
+static DEFINE_PER_CPU(uint32_t, kmap_irq_flags);
 
 /*
  * 临时映射窗口管理
@@ -125,22 +125,16 @@ static void unmap_temp_page(int window_id) {
  * 使用 irqsave 版本防止中断期间重入.
  */
 void *vmm_kmap(paddr_t paddr) {
-    cpu_id_t cpu = cpu_current_id();
-    if (cpu >= CFG_MAX_CPUS) {
-        cpu = 0;
-    }
-    kmap_irq_flags[cpu] = spin_lock_irqsave(&temp_map_lock);
+    uint32_t flags = spin_lock_irqsave(&temp_map_lock);
+    this_cpu_write(kmap_irq_flags, flags);
     return map_temp_page(2, paddr);
 }
 
 void vmm_kunmap(void *vaddr) {
     (void)vaddr;
     unmap_temp_page(2);
-    cpu_id_t cpu = cpu_current_id();
-    if (cpu >= CFG_MAX_CPUS) {
-        cpu = 0;
-    }
-    spin_unlock_irqrestore(&temp_map_lock, kmap_irq_flags[cpu]);
+    uint32_t flags = this_cpu_read(kmap_irq_flags);
+    spin_unlock_irqrestore(&temp_map_lock, flags);
 }
 
 void vmm_init(void) {
