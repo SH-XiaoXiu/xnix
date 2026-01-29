@@ -13,7 +13,6 @@
  */
 
 #include <arch/cpu.h>
-#include <arch/smp.h>
 
 #include <drivers/timer.h>
 

@@ -9,8 +9,7 @@
 #ifndef KERNEL_SCHED_H
 #define KERNEL_SCHED_H
 
-#include <arch/smp.h>
-
+#include <xnix/percpu.h>
 #include <xnix/thread.h>
 #include <xnix/types.h>
 

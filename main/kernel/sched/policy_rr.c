@@ -8,8 +8,6 @@
  * - FIFO 队列,公平轮转
  */
 
-#include <arch/smp.h>
-
 #include <kernel/sched/sched.h>
 
 /* 时间片长度(tick 数) */
@@ -128,7 +126,7 @@ static bool rr_tick(struct thread *current) {
  * 选择负载最轻的 CPU
  */
 static cpu_id_t rr_select_cpu(struct thread *t) {
-    uint32_t total_cpus = cpu_count();
+    uint32_t total_cpus = percpu_cpu_count();
     if (total_cpus <= 1) {
         return 0;
     }

@@ -4,6 +4,11 @@
 #include <xnix/config.h>
 #include <xnix/types.h>
 
+/* CPU ID 类型 */
+typedef uint32_t cpu_id_t;
+
+#define CPU_ID_INVALID ((cpu_id_t) - 1)
+
 /**
  * Per-CPU 变量抽象
  *

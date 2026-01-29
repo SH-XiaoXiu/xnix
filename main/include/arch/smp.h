@@ -3,16 +3,15 @@
  * @brief 对称多处理器 (SMP) 抽象接口
  *
  * 多核系统需要的基本操作
+ *
+ * 注意: 内核子系统不应包含此头文件,应使用 <xnix/percpu.h>
+ * 此文件仅供 arch 层实现使用
  */
 
 #ifndef ARCH_SMP_H
 #define ARCH_SMP_H
 
-#include <xnix/types.h>
-
-typedef uint32_t cpu_id_t;
-
-#define CPU_ID_INVALID ((cpu_id_t) - 1)
+#include <xnix/percpu.h>
 
 /**
  * 获取当前 CPU ID
