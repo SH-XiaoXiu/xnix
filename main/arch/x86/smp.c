@@ -41,6 +41,10 @@ uint32_t cpu_count(void) {
 #endif
 }
 
+uint32_t percpu_cpu_count(void) {
+    return cpu_count();
+}
+
 bool cpu_is_online(cpu_id_t cpu) {
     if (cpu >= CFG_MAX_CPUS) {
         return false;
