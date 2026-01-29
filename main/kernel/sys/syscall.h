@@ -25,7 +25,7 @@ struct syscall_entry {
     const char  *name;    /* 名称(用于调试) */
 };
 
-#define NR_SYSCALLS 64
+#define NR_SYSCALLS 512
 
 /**
  * 注册系统调用

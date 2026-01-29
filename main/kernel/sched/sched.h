@@ -73,6 +73,14 @@ struct thread {
     uint32_t            notified_bits;  /* Notification 接收到的位图 */
     bool                pending_wakeup; /* 是否有挂起的唤醒信号 */
     tid_t               ipc_peer;       /* 通信对端 TID */
+
+    /* 用户线程支持(仅用户态线程使用) */
+    uint32_t ustack_top;      /* 用户态栈顶地址 */
+    void    *ustack_base;     /* 用户态栈基址,用于释放 */
+    void    *thread_retval;   /* pthread_exit 返回值 */
+    bool     is_detached;     /* 是否为 detached 模式 */
+    bool     has_been_joined; /* 是否已被 join 过,防止重复 join */
+    tid_t    joiner_tid;      /* 等待此线程的 joiner TID,TID_INVALID 表示无 */
 };
 
 /* CPU 位图操作 */
@@ -178,6 +186,10 @@ struct thread *sched_lookup_blocked(tid_t tid);
  * 从运行队列和阻塞链表移除,设置状态为 EXITED,加入僵尸链表
  */
 void thread_force_exit(struct thread *t);
+
+thread_t       thread_create_with_owner(const char *name, void (*entry)(void *), void *arg,
+                                        struct process *owner);
+struct thread *thread_find_by_tid(tid_t tid);
 
 /*
  * 内置策略声明

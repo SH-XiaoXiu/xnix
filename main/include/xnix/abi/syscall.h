@@ -41,6 +41,20 @@
 /* 进程管理 */
 #define SYS_SPAWN 11 /* 创建进程: ebx=spawn_args* */
 
+/* 线程管理(300-309) */
+#define SYS_THREAD_CREATE 300 /* 创建用户线程: ebx=entry, ecx=arg, edx=stack_top */
+#define SYS_THREAD_EXIT   301 /* 退出当前线程: ebx=retval */
+#define SYS_THREAD_JOIN   302 /* 等待线程退出: ebx=tid, ecx=retval_ptr */
+#define SYS_THREAD_SELF   303 /* 获取当前 tid */
+#define SYS_THREAD_YIELD  304 /* 主动让出 CPU */
+#define SYS_THREAD_DETACH 305 /* 分离线程: ebx=tid */
+
+/* 同步原语(310-319) */
+#define SYS_MUTEX_CREATE  310 /* 创建互斥锁 */
+#define SYS_MUTEX_DESTROY 311 /* 销毁互斥锁: ebx=handle */
+#define SYS_MUTEX_LOCK    312 /* 获取互斥锁: ebx=handle */
+#define SYS_MUTEX_UNLOCK  313 /* 释放互斥锁: ebx=handle */
+
 /*
  * 系统调用调用约定 (x86)
  *
