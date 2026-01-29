@@ -147,6 +147,55 @@ struct thread *sched_lookup_blocked(tid_t tid) {
     return NULL;
 }
 
+struct thread *thread_find_by_tid(tid_t tid) {
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
+    for (cpu_id_t cpu = 0; cpu < CFG_MAX_CPUS; cpu++) {
+        struct runqueue *rq = per_cpu_ptr(runqueue, cpu);
+
+        if (rq->current && rq->current->tid == tid) {
+            spin_unlock_irqrestore(&sched_lock, flags);
+            return rq->current;
+        }
+
+        struct thread *t = rq->head;
+        while (t) {
+            if (t->tid == tid) {
+                spin_unlock_irqrestore(&sched_lock, flags);
+                return t;
+            }
+            t = t->next;
+        }
+
+        t = per_cpu(idle_thread, cpu);
+        if (t && t->tid == tid) {
+            spin_unlock_irqrestore(&sched_lock, flags);
+            return t;
+        }
+
+        t = per_cpu(zombie_thread, cpu);
+        while (t) {
+            if (t->tid == tid) {
+                spin_unlock_irqrestore(&sched_lock, flags);
+                return t;
+            }
+            t = t->next;
+        }
+    }
+
+    struct thread *t = blocked_list;
+    while (t) {
+        if (t->tid == tid) {
+            spin_unlock_irqrestore(&sched_lock, flags);
+            return t;
+        }
+        t = t->next;
+    }
+
+    spin_unlock_irqrestore(&sched_lock, flags);
+    return NULL;
+}
+
 struct sched_policy *sched_get_policy(void) {
     return current_policy;
 }
@@ -163,15 +212,20 @@ struct runqueue *sched_get_runqueue(cpu_id_t cpu) {
  **/
 
 static void sched_cleanup_zombie(void) {
-    /* 取出整个链表并清空头指针 */
-    struct thread *z = this_cpu_read(zombie_thread);
-    this_cpu_write(zombie_thread, NULL);
+    cpu_id_t        cpu   = cpu_current_id();
+    struct thread **headp = per_cpu_ptr(zombie_thread, cpu);
+    struct thread **pp    = headp;
 
-    /* 释放链表上所有 zombie 线程 */
-    while (z) {
-        struct thread *next = z->next;
+    while (*pp) {
+        struct thread *z = *pp;
+        if (!(z->is_detached || z->has_been_joined)) {
+            pp = &z->next;
+            continue;
+        }
 
-        /* 从所属进程的线程列表中移除 */
+        *pp     = z->next;
+        z->next = NULL;
+
         if (z->owner) {
             process_remove_thread(z->owner, z);
         }
@@ -179,7 +233,6 @@ static void sched_cleanup_zombie(void) {
         free_tid(z->tid);
         kfree(z->stack);
         kfree(z);
-        z = next;
     }
 }
 
@@ -260,6 +313,8 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
     t->wait_chan     = NULL;
     t->exit_code     = 0;
     t->owner         = owner;
+    t->joiner_tid    = TID_INVALID;
+    t->ipc_peer      = TID_INVALID;
 
     thread_init_stack(t, entry, arg);
 
@@ -659,8 +714,9 @@ void thread_force_exit(struct thread *t) {
         return;
     }
 
-    t->state     = THREAD_EXITED;
-    t->exit_code = -1;
+    t->state       = THREAD_EXITED;
+    t->exit_code   = -1;
+    t->is_detached = true;
 
     /* 从运行队列移除 */
     if (current_policy && current_policy->dequeue) {

@@ -48,11 +48,17 @@ void process_subsystem_init(void) {
     kernel_process.threads       = NULL;
     kernel_process.thread_count  = 0;
     kernel_process.thread_lock   = mutex_create();
+    kernel_process.sync_table    = kzalloc(sizeof(struct sync_table));
     kernel_process.parent        = NULL;
     kernel_process.children      = NULL;
     kernel_process.next_sibling  = NULL;
     kernel_process.next          = NULL;
     kernel_process.refcount      = 1;
+
+    if (kernel_process.sync_table) {
+        spin_init(&kernel_process.sync_table->lock);
+        kernel_process.sync_table->mutex_bitmap = 0;
+    }
 
     process_list = &kernel_process;
 
@@ -172,6 +178,16 @@ void process_unref(struct process *proc) {
         if (proc->thread_lock) {
             mutex_destroy(proc->thread_lock);
         }
+        if (proc->sync_table) {
+            for (uint32_t i = 0; i < 32; i++) {
+                if (proc->sync_table->mutexes[i]) {
+                    mutex_destroy(proc->sync_table->mutexes[i]);
+                    proc->sync_table->mutexes[i] = NULL;
+                }
+            }
+            kfree(proc->sync_table);
+            proc->sync_table = NULL;
+        }
 
         /* 从进程链表移除 */
         flags = cpu_irq_save();
@@ -239,12 +255,18 @@ process_t process_create(const char *name) {
     proc->threads      = NULL;
     proc->thread_count = 0;
     proc->thread_lock  = mutex_create();
+    proc->sync_table   = kzalloc(sizeof(struct sync_table));
     proc->parent       = NULL;
     proc->children     = NULL;
     proc->next_sibling = NULL;
     proc->refcount     = 1;
 
-    if (!proc->cap_table || !proc->thread_lock) {
+    if (proc->sync_table) {
+        spin_init(&proc->sync_table->lock);
+        proc->sync_table->mutex_bitmap = 0;
+    }
+
+    if (!proc->cap_table || !proc->thread_lock || !proc->sync_table) {
         if (proc->page_dir_phys) {
             if (mm->destroy_as) {
                 mm->destroy_as(proc->page_dir_phys);
@@ -255,6 +277,9 @@ process_t process_create(const char *name) {
         }
         if (proc->thread_lock) {
             mutex_destroy(proc->thread_lock);
+        }
+        if (proc->sync_table) {
+            kfree(proc->sync_table);
         }
         kfree(proc);
         return NULL;
