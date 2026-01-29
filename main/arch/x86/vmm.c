@@ -32,6 +32,8 @@
 /* 内核页目录 (物理地址) */
 static uint32_t *kernel_pd = NULL;
 
+static uint32_t kmap_irq_flags[CFG_MAX_CPUS];
+
 /*
  * 临时映射窗口管理
  *
@@ -119,25 +121,26 @@ static void unmap_temp_page(int window_id) {
  *
  * 借用 TEMP_WINDOW_2 (窗口2) 来映射任意物理页,以便内核访问.
  * 注意:这只是一个简单的实现,每次只能映射一页,且必须在临界区内使用.
+ *
+ * 使用 irqsave 版本防止中断期间重入.
  */
 void *vmm_kmap(paddr_t paddr) {
-    /* 获取锁,必须配对使用 vmm_kunmap 来释放锁 */
-    /* 注意:这是一个自旋锁,持有期间不能睡眠 */
-    /* 这里我们复用 map_temp_page(2, ...) */
-    /* map_temp_page 假设已经持有锁,所以我们需要手动加锁 */
-
-    /* 手动获取锁以复用 map_temp_page 逻辑 */
-
-    /* TODO: 考虑使用 irqsave,因为 map_temp_page 的调用者使用 irqsave */
-    spin_lock(&temp_map_lock);
-
+    cpu_id_t cpu = cpu_current_id();
+    if (cpu >= CFG_MAX_CPUS) {
+        cpu = 0;
+    }
+    kmap_irq_flags[cpu] = spin_lock_irqsave(&temp_map_lock);
     return map_temp_page(2, paddr);
 }
 
 void vmm_kunmap(void *vaddr) {
-    (void)vaddr; /* 我们总是 unmap 窗口 2 */
+    (void)vaddr;
     unmap_temp_page(2);
-    spin_unlock(&temp_map_lock);
+    cpu_id_t cpu = cpu_current_id();
+    if (cpu >= CFG_MAX_CPUS) {
+        cpu = 0;
+    }
+    spin_unlock_irqrestore(&temp_map_lock, kmap_irq_flags[cpu]);
 }
 
 void vmm_init(void) {
@@ -165,20 +168,16 @@ void vmm_init(void) {
 
     uint32_t pt_count = map_end >> 22;
 
-    if (pt_count == 0) {
-        pt_count = 1; /* 至少映射 4MB */
-    }
-
-    /* 确保映射范围在内核页目录限制内 (假设内核空间足够大) */
-    if (pt_count > 768) { /* 3GB */
-        pt_count = 768;
-        pr_warn("Physical memory too large, truncating mapping to 3GB");
+    if (pt_count > 1024) { /* 最大 4GB */
+        pt_count = 1024;
+        pr_warn("Physical memory too large, truncating mapping to 4GB");
     }
 
     for (uint32_t i = 0; i < pt_count; i++) {
         uint32_t *pt = (uint32_t *)alloc_page();
         if (!pt) {
-            panic("Failed to allocate kernel PT");
+            pr_warn("Partial kernel PT allocated, memory beyond mapped may cause page fault");
+            break;
         }
 
         memset(pt, 0, PAGE_SIZE);
@@ -217,6 +216,12 @@ void vmm_init(void) {
 }
 
 int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
+    /* 禁止映射 NULL 页面(虚拟地址 0)到用户空间 */
+    if (vaddr < PAGE_SIZE && (flags & VMM_PROT_USER)) {
+        pr_err("vmm_map_page: attempted to map NULL page (vaddr=0x%x, paddr=0x%x)", vaddr, paddr);
+        return -1;
+    }
+
     uint32_t  pd_idx = PD_INDEX(vaddr);
     uint32_t  pt_idx = PT_INDEX(vaddr);
     uint32_t *pd_virt;
@@ -274,6 +279,18 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
         }
 
         pd_virt[pd_idx] = ((uint32_t)new_pt_phys) | pde_flags;
+    } else {
+        /* PDE 已存在,确保权限足够 */
+        uint32_t need = PDE_PRESENT;
+        if (flags & VMM_PROT_USER) {
+            need |= PDE_USER;
+        }
+        if (flags & VMM_PROT_WRITE) {
+            need |= PDE_RW;
+        }
+        if ((pd_virt[pd_idx] & need) != need) {
+            pd_virt[pd_idx] |= need;
+        }
     }
 
     /* 获取 PT 物理地址 */
@@ -362,40 +379,41 @@ void *vmm_create_pd(void) {
     memset(pd_virt, 0, PAGE_SIZE);
 
     /*
-     * 动态拷贝内核映射
-     * 遍历 kernel_pd,复制所有 Present 且非用户态的 PDE
-     * 这样可以自适应内核大小变化
+     * 访问 kernel_pd 以拷贝内核映射
+     * kernel_pd 是物理地址,需要正确映射才能访问
      */
-    /* 我们需要映射 kernel_pd 吗?
-       如果当前是内核线程,kernel_pd 已经加载到 CR3 (或通过递归映射访问)
-       kernel_pd 总是驻留内存.如果它不是当前 PD,我们怎么访问?
-       kernel_pd 是全局变量,存的是物理地址.
-
-       如果 kernel_pd == current_pd,可以通过递归映射访问 (0xFFFFF000).
-       如果 kernel_pd != current_pd,我们需要把它映射到窗口 2.
-    */
-
     uint32_t current_cr3;
     asm volatile("mov %%cr3, %0" : "=r"(current_cr3));
-    bool kernel_is_current = ((uint32_t)kernel_pd == current_cr3);
-
+    bool      kernel_is_current = ((uint32_t)kernel_pd == current_cr3);
     uint32_t *kpd_virt;
+
     if (kernel_is_current) {
+        /* 当前 CR3 就是 kernel_pd,通过递归映射访问 */
         kpd_virt = (uint32_t *)0xFFFFF000;
+        pr_debug("vmm_create_pd: using recursive mapping (CR3=kernel_pd=0x%x)", current_cr3);
     } else {
+        /* 当前 CR3 是其他页目录,需要映射 kernel_pd 到窗口 2 */
         kpd_virt = (uint32_t *)map_temp_page(2, (paddr_t)kernel_pd);
+        pr_debug("vmm_create_pd: mapped kernel_pd (phys=0x%x) to virt=0x%x (CR3=0x%x)",
+                 (uint32_t)kernel_pd, (uint32_t)kpd_virt, current_cr3);
+        pr_debug("vmm_create_pd: kpd_virt[0]=0x%x kpd_virt[1022]=0x%x", kpd_virt[0],
+                 kpd_virt[1022]);
     }
 
+    /* 拷贝内核映射 */
+    int copied_count = 0;
     for (int i = 0; i < 1022; i++) {
         if ((kpd_virt[i] & PDE_PRESENT) && !(kpd_virt[i] & PDE_USER)) {
             pd_virt[i] = kpd_virt[i];
+            copied_count++;
         }
     }
+    pr_debug("vmm_create_pd: copied %d kernel PDEs, pd_virt[0]=0x%x", copied_count, pd_virt[0]);
 
     /* 拷贝 Temp PT 映射 (PD[1022]) 以便新进程也能使用临时映射 */
-    /* 必须在 unmap kpd_virt 之前完成 */
     pd_virt[TEMP_PT_PD_IDX] = kpd_virt[TEMP_PT_PD_IDX];
 
+    /* 如果映射了 kernel_pd,需要解除映射 */
     if (!kernel_is_current) {
         unmap_temp_page(2);
     }
@@ -405,6 +423,7 @@ void *vmm_create_pd(void) {
 
     unmap_temp_page(1);
     spin_unlock_irqrestore(&temp_map_lock, irq_flags);
+    pr_debug("vmm_create_pd: returning pd_phys=0x%x", (uint32_t)pd_phys);
     return pd_phys;
 }
 
@@ -483,41 +502,72 @@ paddr_t vmm_get_paddr(void *pd_phys, vaddr_t vaddr) {
 }
 
 void vmm_switch_pd(void *pd_phys) {
-    uint32_t current_cr3;
-    asm volatile("mov %%cr3, %0" : "=r"(current_cr3));
-
-    if (current_cr3 != (uint32_t)pd_phys) {
-        load_cr3((uint32_t)pd_phys);
+    if (!pd_phys) {
+        return;
     }
+    load_cr3((uint32_t)pd_phys);
 }
 
 /* 声明进程终止函数 */
 void process_terminate_current(int signal);
 
+extern void console_emergency_mode(void);
+
+/* 声明外部函数以获取当前进程信息 */
+extern void       *process_get_current(void);
+extern int         process_get_pid(void *proc);
+extern const char *process_get_name(void *proc);
+extern void       *process_get_page_dir(void *proc);
+
 void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr) {
+    /* 进入紧急模式,确保同步输出 */
+    console_emergency_mode();
+
     uint32_t err_code  = frame->err_code;
     bool     from_user = (frame->cs & 0x03) == 3;
 
     uint32_t cr3;
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
 
+    /* 获取当前进程信息 */
+    void       *proc         = process_get_current();
+    const char *proc_name    = proc ? process_get_name(proc) : "?";
+    int         proc_pid     = proc ? process_get_pid(proc) : -1;
+    uint32_t    expected_cr3 = (uint32_t)process_get_page_dir(proc);
+
     const char *reason;
     if (!(err_code & 0x01)) {
         reason = "Not Present";
-    } else if (err_code & 0x02) {
-        reason = "Write Violation";
-    } else if (err_code & 0x04) {
-        reason = "User Access Violation";
     } else if (err_code & 0x08) {
         reason = "Reserved Bit Violation";
     } else if (err_code & 0x10) {
         reason = "Instruction Fetch";
+    } else if (err_code & 0x04) {
+        reason = "User Access Violation";
+    } else if (err_code & 0x02) {
+        reason = "Write Violation";
     } else {
-        reason = "Unknown";
+        reason = "Protection Violation";
     }
 
+    /* 读取 PDE 和 PTE(通过递归映射) */
+    uint32_t pd_idx = PD_INDEX(vaddr);
+    uint32_t pt_idx = PT_INDEX(vaddr);
+    uint32_t pde    = ((uint32_t *)0xFFFFF000)[pd_idx];
+    uint32_t pte    = 0;
+    if (pde & PDE_PRESENT) {
+        pte = ((uint32_t *)(0xFFC00000 + (pd_idx << 12)))[pt_idx];
+    }
+
+    kprintf("%R[PAGE FAULT]%N vaddr=0x%x EIP=0x%x err=0x%x (%s)\n", vaddr, frame->eip, err_code,
+            reason);
+    kprintf("  Process: %s (PID %d), expected_CR3=0x%x, actual_CR3=0x%x %s\n", proc_name, proc_pid,
+            expected_cr3, cr3, (expected_cr3 && cr3 != expected_cr3) ? "** CR3 MISMATCH **" : "");
+    kprintf("  CR3=0x%x PDE[%u]=0x%x PTE[%u]=0x%x\n", cr3, pd_idx, pde, pt_idx, pte);
+    kprintf("  PDE flags: P=%d RW=%d U=%d | PTE flags: P=%d RW=%d U=%d\n", (pde & 1),
+            (pde >> 1) & 1, (pde >> 2) & 1, (pte & 1), (pte >> 1) & 1, (pte >> 2) & 1);
+
     if (from_user) {
-        klog(LOG_ERR, "User page fault at 0x%x (%s)", vaddr, reason);
         process_terminate_current(14); /* SIGSEGV */
         /* 不返回 */
     }
@@ -525,8 +575,8 @@ void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr) {
     /* 内核态页错误 → panic */
     panic("Kernel Page Fault at 0x%x\n"
           "Error Code: 0x%x (%s)\n"
-          "CR3: 0x%x",
-          vaddr, err_code, reason, cr3);
+          "CR3: 0x%x PDE=0x%x PTE=0x%x",
+          vaddr, err_code, reason, cr3, pde, pte);
 }
 
 void *vmm_get_kernel_pd(void) {
