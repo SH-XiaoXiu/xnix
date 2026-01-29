@@ -45,5 +45,6 @@
 #define SYS_SLEEP        10
 #define SYS_SPAWN        11
 #define SYS_MODULE_COUNT 12
+#define SYS_WRITE        13
 
 #endif

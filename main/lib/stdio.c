@@ -202,10 +202,12 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
 }
 
 void kprintf(const char *fmt, ...) {
+    uint32_t          flags = spin_lock_irqsave(&kprintf_lock);
     __builtin_va_list args;
     __builtin_va_start(args, fmt);
     vkprintf(fmt, args);
     __builtin_va_end(args);
+    spin_unlock_irqrestore(&kprintf_lock, flags);
 }
 
 void klog(int level, const char *fmt, ...) {

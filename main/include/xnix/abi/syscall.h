@@ -25,6 +25,7 @@
 #define SYS_EXIT         2  /* 退出进程: ebx=exit_code */
 #define SYS_SLEEP        10 /* 睡眠: ebx=ms */
 #define SYS_MODULE_COUNT 12 /* 获取模块数量 */
+#define SYS_WRITE        13 /* 写文件描述符: ebx=fd, ecx=buf, edx=len */
 
 /* IPC 系统调用 */
 #define SYS_ENDPOINT_CREATE 3 /* 创建 endpoint */

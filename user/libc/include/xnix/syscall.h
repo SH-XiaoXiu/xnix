@@ -6,6 +6,7 @@
 #ifndef _XNIX_SYSCALL_H
 #define _XNIX_SYSCALL_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <xnix/abi/capability.h>
 #include <xnix/abi/syscall.h>
@@ -69,6 +70,10 @@ static inline void sys_exit(int code) {
 
 static inline void sys_putc(char c) {
     syscall1(SYS_PUTC, (uint32_t)(uint8_t)c);
+}
+
+static inline int sys_write(int fd, const void *buf, size_t len) {
+    return syscall3(SYS_WRITE, (uint32_t)fd, (uint32_t)(uintptr_t)buf, (uint32_t)len);
 }
 
 static inline int sys_ioport_outb(uint32_t io_cap, uint16_t port, uint8_t val) {

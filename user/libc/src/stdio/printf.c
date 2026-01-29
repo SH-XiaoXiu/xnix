@@ -22,10 +22,10 @@ static int  stdout_len = 0;
 
 /* 刷新 stdout 缓冲区 */
 static void stdout_flush(void) {
-    for (int i = 0; i < stdout_len; i++) {
-        sys_putc(stdout_buf[i]);
+    if (stdout_len > 0) {
+        sys_write(1, stdout_buf, stdout_len); /* STDOUT */
+        stdout_len = 0;
     }
-    stdout_len = 0;
 }
 
 /* 向 stdout 缓冲区写入一个字符 */
