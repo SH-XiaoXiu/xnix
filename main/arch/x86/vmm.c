@@ -151,11 +151,10 @@ void vmm_init(void) {
     }
     memset(kernel_pd, 0, PAGE_SIZE);
 
-    /* 恒等映射所有可用物理内存 */
+    /* 恒等映射：只映射低地址区域，避免与用户空间冲突 */
     paddr_t start, end;
     arch_get_memory_range(&start, &end);
 
-    /* 对齐到 4MB 边界 (每个页表 4MB) */
     uint32_t max_idmap = (uint32_t)CFG_KERNEL_IDMAP_MB * 1024u * 1024u;
     if (max_idmap && end > max_idmap) {
         end = max_idmap;
@@ -390,25 +389,33 @@ void *vmm_create_pd(void) {
     if (kernel_is_current) {
         /* 当前 CR3 就是 kernel_pd,通过递归映射访问 */
         kpd_virt = (uint32_t *)0xFFFFF000;
-        pr_debug("vmm_create_pd: using recursive mapping (CR3=kernel_pd=0x%x)", current_cr3);
     } else {
         /* 当前 CR3 是其他页目录,需要映射 kernel_pd 到窗口 2 */
         kpd_virt = (uint32_t *)map_temp_page(2, (paddr_t)kernel_pd);
-        pr_debug("vmm_create_pd: mapped kernel_pd (phys=0x%x) to virt=0x%x (CR3=0x%x)",
-                 (uint32_t)kernel_pd, (uint32_t)kpd_virt, current_cr3);
-        pr_debug("vmm_create_pd: kpd_virt[0]=0x%x kpd_virt[1022]=0x%x", kpd_virt[0],
-                 kpd_virt[1022]);
     }
 
-    /* 拷贝内核映射 */
+    /*
+     * 拷贝内核映射
+     * 内核当前在 1MB，通过恒等映射访问。用户进程陷入内核时（中断/系统调用）
+     * 也需要访问内核代码，所以必须拷贝包含内核的 PDE。
+     * 但我们只拷贝**真正包含内核代码**的 PDE，而不是整个恒等映射范围。
+     * 内核在 1-2MB 范围，只需拷贝 PDE[0] 即可。
+     */
     int copied_count = 0;
-    for (int i = 0; i < 1022; i++) {
-        if ((kpd_virt[i] & PDE_PRESENT) && !(kpd_virt[i] & PDE_USER)) {
+
+    /* 拷贝 PDE[0]：包含内核代码（1MB） */
+    if (kpd_virt[0] & PDE_PRESENT) {
+        pd_virt[0] = kpd_virt[0];
+        copied_count++;
+    }
+
+    /* 拷贝高地址内核空间（>=3GB） */
+    for (int i = 768; i < 1022; i++) {
+        if (kpd_virt[i] & PDE_PRESENT) {
             pd_virt[i] = kpd_virt[i];
             copied_count++;
         }
     }
-    pr_debug("vmm_create_pd: copied %d kernel PDEs, pd_virt[0]=0x%x", copied_count, pd_virt[0]);
 
     /* 拷贝 Temp PT 映射 (PD[1022]) 以便新进程也能使用临时映射 */
     pd_virt[TEMP_PT_PD_IDX] = kpd_virt[TEMP_PT_PD_IDX];
@@ -423,7 +430,6 @@ void *vmm_create_pd(void) {
 
     unmap_temp_page(1);
     spin_unlock_irqrestore(&temp_map_lock, irq_flags);
-    pr_debug("vmm_create_pd: returning pd_phys=0x%x", (uint32_t)pd_phys);
     return pd_phys;
 }
 
@@ -533,7 +539,6 @@ void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr) {
     void       *proc         = process_get_current();
     const char *proc_name    = proc ? process_get_name(proc) : "?";
     int         proc_pid     = proc ? process_get_pid(proc) : -1;
-    uint32_t    expected_cr3 = (uint32_t)process_get_page_dir(proc);
 
     const char *reason;
     if (!(err_code & 0x01)) {
@@ -561,8 +566,7 @@ void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr) {
 
     kprintf("%R[PAGE FAULT]%N vaddr=0x%x EIP=0x%x err=0x%x (%s)\n", vaddr, frame->eip, err_code,
             reason);
-    kprintf("  Process: %s (PID %d), expected_CR3=0x%x, actual_CR3=0x%x %s\n", proc_name, proc_pid,
-            expected_cr3, cr3, (expected_cr3 && cr3 != expected_cr3) ? "** CR3 MISMATCH **" : "");
+    kprintf("  Process: %s (PID %d)\n", proc_name, proc_pid);
     kprintf("  CR3=0x%x PDE[%u]=0x%x PTE[%u]=0x%x\n", cr3, pd_idx, pde, pt_idx, pte);
     kprintf("  PDE flags: P=%d RW=%d U=%d | PTE flags: P=%d RW=%d U=%d\n", (pde & 1),
             (pde >> 1) & 1, (pde >> 2) & 1, (pte & 1), (pte >> 1) & 1, (pte >> 2) & 1);
