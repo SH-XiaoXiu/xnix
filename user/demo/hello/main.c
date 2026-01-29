@@ -9,8 +9,8 @@
 int main(void) {
     printf("[hello] Hello from user space!\n");
 
-    for (int i = 1; i <= 1000000; i++) {
-        usleep(50);
+    for (int i = 1; i <= 100; i++) {
+        sleep(2);
         printf("[hello] tick %d\n", i);
     }
 
