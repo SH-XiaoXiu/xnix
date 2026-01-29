@@ -156,6 +156,11 @@ void schedule(void);
 struct thread *sched_current(void);
 
 /**
+ * 主动让出 CPU
+ */
+void sched_yield(void);
+
+/**
  * 将线程加入阻塞链表
  */
 void sched_blocked_list_add(struct thread *t);
@@ -199,8 +204,34 @@ struct thread *thread_find_by_tid(tid_t tid);
 extern struct sched_policy sched_policy_rr;
 
 /*
+ * 线程模块内部函数(thread.c)
+ * 这些函数主要供调度器核心使用
+ */
+
+/**
+ * 初始化 idle 线程(由 sched_init 调用)
+ */
+void thread_init_idle(void);
+
+/**
+ * 清理已退出的僵尸线程
+ * 从僵尸链表中移除已经 detached 或 joined 的线程并释放资源
+ */
+void sched_cleanup_zombie(void);
+
+/**
+ * 获取指定 CPU 的 idle 线程
+ */
+struct thread *sched_get_idle_thread(cpu_id_t cpu);
+
+/**
+ * 获取指定 CPU 的 zombie 线程链表头指针
+ */
+struct thread **sched_get_zombie_list(cpu_id_t cpu);
+
+/*
  * 睡眠模块(sleep.c)
- **/
+ */
 
 /**
  * 检查并唤醒睡眠到期的线程(由 sched_tick 调用)
