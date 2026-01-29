@@ -21,7 +21,7 @@ static int ipc_msg_copy_in(struct ipc_message **out_kmsg, struct ipc_message *us
     }
 
     struct ipc_message umsg;
-    int ret = copy_from_user(&umsg, user_msg, sizeof(umsg));
+    int                ret = copy_from_user(&umsg, user_msg, sizeof(umsg));
     if (ret < 0) {
         return ret;
     }
@@ -110,7 +110,7 @@ static void ipc_msg_free(struct ipc_message *kmsg) {
 static int ipc_msg_alloc_recv(struct ipc_message **out_kmsg, struct ipc_message *user_msg,
                               void **out_user_buf, size_t *out_user_buf_size) {
     struct ipc_message umsg;
-    int ret = copy_from_user(&umsg, user_msg, sizeof(umsg));
+    int                ret = copy_from_user(&umsg, user_msg, sizeof(umsg));
     if (ret < 0) {
         return ret;
     }
@@ -162,7 +162,7 @@ static int32_t sys_ipc_send(const uint32_t *args) {
     uint32_t            timeout  = args[2];
 
     struct ipc_message *kmsg = NULL;
-    int ret = ipc_msg_copy_in(&kmsg, user_msg, true);
+    int                 ret  = ipc_msg_copy_in(&kmsg, user_msg, true);
     if (ret < 0) {
         return ret;
     }
@@ -178,9 +178,9 @@ static int32_t sys_ipc_recv(const uint32_t *args) {
     struct ipc_message *user_msg = (struct ipc_message *)(uintptr_t)args[1];
     uint32_t            timeout  = args[2];
 
-    void  *user_buf_ptr  = NULL;
-    size_t user_buf_size = 0;
-    struct ipc_message *kmsg = NULL;
+    void               *user_buf_ptr  = NULL;
+    size_t              user_buf_size = 0;
+    struct ipc_message *kmsg          = NULL;
 
     int ret = ipc_msg_alloc_recv(&kmsg, user_msg, &user_buf_ptr, &user_buf_size);
     if (ret < 0) {
@@ -203,14 +203,14 @@ static int32_t sys_ipc_call(const uint32_t *args) {
     uint32_t            timeout    = args[3];
 
     struct ipc_message *kreq = NULL;
-    int ret = ipc_msg_copy_in(&kreq, user_req, true);
+    int                 ret  = ipc_msg_copy_in(&kreq, user_req, true);
     if (ret < 0) {
         return ret;
     }
 
-    void  *user_buf_ptr  = NULL;
-    size_t user_buf_size = 0;
-    struct ipc_message *kreply = NULL;
+    void               *user_buf_ptr  = NULL;
+    size_t              user_buf_size = 0;
+    struct ipc_message *kreply        = NULL;
 
     ret = ipc_msg_alloc_recv(&kreply, user_reply, &user_buf_ptr, &user_buf_size);
     if (ret < 0) {
@@ -233,7 +233,7 @@ static int32_t sys_ipc_reply(const uint32_t *args) {
     struct ipc_message *user_reply = (struct ipc_message *)(uintptr_t)args[0];
 
     struct ipc_message *kreply = NULL;
-    int ret = ipc_msg_copy_in(&kreply, user_reply, true);
+    int                 ret    = ipc_msg_copy_in(&kreply, user_reply, true);
     if (ret < 0) {
         return ret;
     }
@@ -248,8 +248,8 @@ static int32_t sys_ipc_reply(const uint32_t *args) {
  */
 void sys_ipc_init(void) {
     syscall_register(SYS_ENDPOINT_CREATE, sys_endpoint_create, 0, "endpoint_create");
-    syscall_register(SYS_IPC_SEND,        sys_ipc_send,        3, "ipc_send");
-    syscall_register(SYS_IPC_RECV,        sys_ipc_recv,        3, "ipc_recv");
-    syscall_register(SYS_IPC_CALL,        sys_ipc_call,        4, "ipc_call");
-    syscall_register(SYS_IPC_REPLY,       sys_ipc_reply,       1, "ipc_reply");
+    syscall_register(SYS_IPC_SEND, sys_ipc_send, 3, "ipc_send");
+    syscall_register(SYS_IPC_RECV, sys_ipc_recv, 3, "ipc_recv");
+    syscall_register(SYS_IPC_CALL, sys_ipc_call, 4, "ipc_call");
+    syscall_register(SYS_IPC_REPLY, sys_ipc_reply, 1, "ipc_reply");
 }

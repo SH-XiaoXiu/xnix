@@ -2,13 +2,13 @@
  * @file stdint.h
  * @brief 标准整数类型定义
  *
- * 基础类型来自 ABI 层，保证与内核一致。
+ * 基础类型来自 ABI 层,保证与内核一致.
  */
 
 #ifndef _STDINT_H
 #define _STDINT_H
 
-/* 精确宽度整数类型（从 ABI 层导入） */
+/* 精确宽度整数类型(从 ABI 层导入) */
 #include <xnix/abi/stdint.h>
 
 /* 最小宽度整数类型 */
@@ -33,7 +33,7 @@ typedef uint32_t uint_fast16_t;
 typedef uint32_t uint_fast32_t;
 typedef uint64_t uint_fast64_t;
 
-/* 指针相关整数类型（32 位架构） */
+/* 指针相关整数类型(32 位架构) */
 typedef int32_t  intptr_t;
 typedef uint32_t uintptr_t;
 

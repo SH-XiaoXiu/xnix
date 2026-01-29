@@ -151,7 +151,7 @@ void vmm_init(void) {
     }
     memset(kernel_pd, 0, PAGE_SIZE);
 
-    /* 恒等映射：只映射低地址区域，避免与用户空间冲突 */
+    /* 恒等映射:只映射低地址区域,避免与用户空间冲突 */
     paddr_t start, end;
     arch_get_memory_range(&start, &end);
 
@@ -396,20 +396,20 @@ void *vmm_create_pd(void) {
 
     /*
      * 拷贝内核映射
-     * 内核当前在 1MB，通过恒等映射访问。用户进程陷入内核时（中断/系统调用）
-     * 也需要访问内核代码，所以必须拷贝包含内核的 PDE。
-     * 但我们只拷贝**真正包含内核代码**的 PDE，而不是整个恒等映射范围。
-     * 内核在 1-2MB 范围，只需拷贝 PDE[0] 即可。
+     * 内核当前在 1MB,通过恒等映射访问.用户进程陷入内核时(中断/系统调用)
+     * 也需要访问内核代码,所以必须拷贝包含内核的 PDE.
+     * 但我们只拷贝**真正包含内核代码**的 PDE,而不是整个恒等映射范围.
+     * 内核在 1-2MB 范围,只需拷贝 PDE[0] 即可.
      */
     int copied_count = 0;
 
-    /* 拷贝 PDE[0]：包含内核代码（1MB） */
+    /* 拷贝 PDE[0]:包含内核代码(1MB) */
     if (kpd_virt[0] & PDE_PRESENT) {
         pd_virt[0] = kpd_virt[0];
         copied_count++;
     }
 
-    /* 拷贝高地址内核空间（>=3GB） */
+    /* 拷贝高地址内核空间(>=3GB) */
     for (int i = 768; i < 1022; i++) {
         if (kpd_virt[i] & PDE_PRESENT) {
             pd_virt[i] = kpd_virt[i];
@@ -536,9 +536,9 @@ void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr) {
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
 
     /* 获取当前进程信息 */
-    void       *proc         = process_get_current();
-    const char *proc_name    = proc ? process_get_name(proc) : "?";
-    int         proc_pid     = proc ? process_get_pid(proc) : -1;
+    void       *proc      = process_get_current();
+    const char *proc_name = proc ? process_get_name(proc) : "?";
+    int         proc_pid  = proc ? process_get_pid(proc) : -1;
 
     const char *reason;
     if (!(err_code & 0x01)) {

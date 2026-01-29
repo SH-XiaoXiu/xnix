@@ -14,7 +14,7 @@
 #define IPC_MSG_REGS     ABI_IPC_MSG_REGS
 #define IPC_MSG_CAPS_MAX ABI_IPC_MSG_CAPS_MAX
 
-/* 消息结构（与 ABI 布局兼容） */
+/* 消息结构(与 ABI 布局兼容) */
 struct ipc_msg_regs {
     uint32_t data[IPC_MSG_REGS];
 };

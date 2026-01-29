@@ -27,15 +27,15 @@
 #define SYS_MODULE_COUNT 12 /* 获取模块数量 */
 
 /* IPC 系统调用 */
-#define SYS_ENDPOINT_CREATE 3  /* 创建 endpoint */
-#define SYS_IPC_SEND        4  /* 发送消息 */
-#define SYS_IPC_RECV        5  /* 接收消息 */
-#define SYS_IPC_CALL        6  /* RPC 调用 */
-#define SYS_IPC_REPLY       7  /* RPC 回复 */
+#define SYS_ENDPOINT_CREATE 3 /* 创建 endpoint */
+#define SYS_IPC_SEND        4 /* 发送消息 */
+#define SYS_IPC_RECV        5 /* 接收消息 */
+#define SYS_IPC_CALL        6 /* RPC 调用 */
+#define SYS_IPC_REPLY       7 /* RPC 回复 */
 
 /* I/O 端口访问(需要 IOPORT capability) */
-#define SYS_IOPORT_OUTB 8  /* 写端口: ebx=cap, ecx=port, edx=val */
-#define SYS_IOPORT_INB  9  /* 读端口: ebx=cap, ecx=port */
+#define SYS_IOPORT_OUTB 8 /* 写端口: ebx=cap, ecx=port, edx=val */
+#define SYS_IOPORT_INB  9 /* 读端口: ebx=cap, ecx=port */
 
 /* 进程管理 */
 #define SYS_SPAWN 11 /* 创建进程: ebx=spawn_args* */

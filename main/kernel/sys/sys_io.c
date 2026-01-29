@@ -4,6 +4,7 @@
  */
 
 #include <arch/cpu.h>
+
 #include <kernel/capability/capability.h>
 #include <kernel/io/ioport.h>
 #include <kernel/sys/syscall.h>
@@ -46,5 +47,5 @@ static int32_t sys_ioport_inb(const uint32_t *args) {
  */
 void sys_io_init(void) {
     syscall_register(SYS_IOPORT_OUTB, sys_ioport_outb, 3, "ioport_outb");
-    syscall_register(SYS_IOPORT_INB,  sys_ioport_inb,  2, "ioport_inb");
+    syscall_register(SYS_IOPORT_INB, sys_ioport_inb, 2, "ioport_inb");
 }

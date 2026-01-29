@@ -14,7 +14,7 @@
  * 能力句柄
  */
 typedef uint32_t cap_handle_t;
-#define CAP_HANDLE_INVALID ((cap_handle_t)-1)
+#define CAP_HANDLE_INVALID ((cap_handle_t) - 1)
 
 /*
  * 进程/线程 ID
@@ -23,7 +23,7 @@ typedef uint32_t cap_handle_t;
  */
 typedef int32_t pid_t;
 typedef int32_t tid_t;
-#define PID_INVALID ((pid_t)-1)
-#define TID_INVALID ((tid_t)-1)
+#define PID_INVALID ((pid_t) - 1)
+#define TID_INVALID ((tid_t) - 1)
 
 #endif /* XNIX_ABI_TYPES_H */

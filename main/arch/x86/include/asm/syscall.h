@@ -12,13 +12,14 @@
 #define ASM_X86_SYSCALL_H
 
 #include <arch/syscall.h>
+
 #include <asm/irq_defs.h>
 
 /**
  * 从中断帧提取系统调用参数
  */
 static inline void x86_extract_syscall_args(const struct irq_regs *regs,
-                                            struct syscall_args *args) {
+                                            struct syscall_args   *args) {
     args->nr     = regs->eax;
     args->arg[0] = regs->ebx;
     args->arg[1] = regs->ecx;
@@ -31,7 +32,7 @@ static inline void x86_extract_syscall_args(const struct irq_regs *regs,
 /**
  * 将系统调用结果写回中断帧
  */
-static inline void x86_set_syscall_result(struct irq_regs *regs,
+static inline void x86_set_syscall_result(struct irq_regs             *regs,
                                           const struct syscall_result *result) {
     regs->eax = (uint32_t)result->retval;
 }

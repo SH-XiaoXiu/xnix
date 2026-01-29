@@ -32,7 +32,7 @@ static int32_t sys_module_count(const uint32_t *args) {
  * 注册杂项系统调用
  */
 void sys_misc_init(void) {
-    syscall_register(SYS_PUTC,         sys_putc,         1, "putc");
-    syscall_register(SYS_SLEEP,        sys_sleep,        1, "sleep");
+    syscall_register(SYS_PUTC, sys_putc, 1, "putc");
+    syscall_register(SYS_SLEEP, sys_sleep, 1, "sleep");
     syscall_register(SYS_MODULE_COUNT, sys_module_count, 0, "module_count");
 }

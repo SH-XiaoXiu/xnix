@@ -73,8 +73,8 @@ typedef enum {
 } arch_mem_type_t;
 
 struct arch_mem_region {
-    paddr_t start;
-    paddr_t end;
+    paddr_t  start;
+    paddr_t  end;
     uint32_t type;
 };
 

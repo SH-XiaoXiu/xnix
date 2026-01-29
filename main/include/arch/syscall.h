@@ -16,8 +16,8 @@
  * 系统调用参数(由架构层从寄存器提取)
  */
 struct syscall_args {
-    uint32_t nr;                     /* 系统调用号 */
-    uint32_t arg[SYSCALL_MAX_ARGS];  /* 参数 0-5 */
+    uint32_t nr;                    /* 系统调用号 */
+    uint32_t arg[SYSCALL_MAX_ARGS]; /* 参数 0-5 */
 };
 
 /**

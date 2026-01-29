@@ -6,6 +6,7 @@
  */
 
 #include <arch/syscall.h>
+
 #include <asm/irq_defs.h>
 #include <asm/syscall.h>
 

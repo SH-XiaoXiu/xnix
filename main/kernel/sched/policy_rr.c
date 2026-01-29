@@ -136,8 +136,8 @@ static cpu_id_t rr_select_cpu(struct thread *t) {
     /* 检查线程的 CPU 亲和性 */
     if (t->cpus_workable != CPUS_ALL) {
         /* 在允许的 CPU 中选择负载最轻的 */
-        cpu_id_t  best_cpu  = CPU_ID_INVALID;
-        uint32_t  min_load  = ~0u;
+        cpu_id_t best_cpu = CPU_ID_INVALID;
+        uint32_t min_load = ~0u;
 
         for (cpu_id_t i = 0; i < total_cpus; i++) {
             if (!(t->cpus_workable & (1 << i))) {

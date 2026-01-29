@@ -2,7 +2,7 @@
  * @file printf.c
  * @brief 简易 printf 实现
  *
- * stdout 使用行缓冲，减少 syscall 次数。
+ * stdout 使用行缓冲,减少 syscall 次数.
  */
 
 #include <stdarg.h>
@@ -13,7 +13,7 @@
 /*
  * stdout 缓冲区
  *
- * 行缓冲模式：遇到 \n 或缓冲区满时刷新
+ * 行缓冲模式:遇到 \n 或缓冲区满时刷新
  */
 #define STDOUT_BUF_SIZE 256
 
@@ -57,7 +57,7 @@ int fflush(void *stream) {
     return 0;
 }
 
-/* 数字转字符串（内部函数） */
+/* 数字转字符串(内部函数) */
 static int print_num(char *buf, size_t size, unsigned int num, int base, int is_signed, int width,
                      int pad_zero) {
     char         tmp[32];
@@ -250,7 +250,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
             written++;
             break;
         default:
-            /* 未知格式，原样输出 */
+            /* 未知格式,原样输出 */
             if (buf) {
                 if (remain > 1) {
                     *p++ = '%';

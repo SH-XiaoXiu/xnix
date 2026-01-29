@@ -11,7 +11,7 @@
 #include <xnix/abi/syscall.h>
 
 /*
- * 系统调用内联包装（x86 调用约定）
+ * 系统调用内联包装(x86 调用约定)
  */
 static inline int syscall0(int num) {
     int ret;

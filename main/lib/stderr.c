@@ -5,9 +5,8 @@
  * @date 2026-01-25
  */
 
-#include <xnix/console.h>
-
 #include <asm/cpu.h>
+#include <xnix/console.h>
 #include <xnix/debug.h>
 #include <xnix/stdio.h>
 

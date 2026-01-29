@@ -10,10 +10,10 @@
 #define XNIX_ABI_STDINT_H
 
 /* 有符号整数 */
-typedef signed char        int8_t;
-typedef signed short       int16_t;
-typedef signed int         int32_t;
-typedef signed long long   int64_t;
+typedef signed char      int8_t;
+typedef signed short     int16_t;
+typedef signed int       int32_t;
+typedef signed long long int64_t;
 
 /* 无符号整数 */
 typedef unsigned char      uint8_t;

@@ -8,9 +8,9 @@
 
 #include <arch/mmu.h>
 
+#include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
-#include <xnix/config.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>

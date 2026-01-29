@@ -2,7 +2,7 @@
  * @file init.c
  * @brief 用户态 init 进程
  *
- * init 是第一个用户进程，负责启动系统服务。
+ * init 是第一个用户进程,负责启动系统服务.
  *
  * 内核传递的 cap:
  *   handle 0: serial_ep (串口 endpoint)

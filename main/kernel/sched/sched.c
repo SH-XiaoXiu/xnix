@@ -306,7 +306,7 @@ void schedule(void) {
         panic("Stack overflow detected! Thread '%s' (tid=%d) canary corrupted",
               prev->name ? prev->name : "?", prev->tid);
     }
-    struct thread   *next = current_policy->pick_next();
+    struct thread *next = current_policy->pick_next();
 
     if (!next) {
         /* 如果运行队列为空, 切换到 idle 线程 */
