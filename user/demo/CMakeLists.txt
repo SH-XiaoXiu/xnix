@@ -57,11 +57,15 @@ foreach(DEMO_DIR ${DEMO_DIRS})
     target_compile_options(${DEMO_ELF} PRIVATE ${USER_C_FLAGS})
     target_include_directories(${DEMO_ELF} PRIVATE
         ${CMAKE_SOURCE_DIR}/user/libc/include
+            ${CMAKE_SOURCE_DIR}/user/libpthread/include
         ${CMAKE_SOURCE_DIR}/user/libudm/include
         ${CMAKE_SOURCE_DIR}/main/include
         ${CMAKE_BINARY_DIR}/include
     )
     target_link_libraries(${DEMO_ELF} PRIVATE c)
+    if (TARGET pthread)
+        target_link_libraries(${DEMO_ELF} PRIVATE pthread)
+    endif ()
     target_link_options(${DEMO_ELF} PRIVATE
         -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/user.ld -nostdlib
     )

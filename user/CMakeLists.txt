@@ -25,6 +25,11 @@ target_include_directories(c PUBLIC
 )
 
 # ============================================
+# libpthread - 用户态多线程库
+# ============================================
+add_subdirectory(libpthread)
+
+# ============================================
 # libudm - UDM 框架库
 # ============================================
 file(GLOB_RECURSE LIBUDM_SOURCES
