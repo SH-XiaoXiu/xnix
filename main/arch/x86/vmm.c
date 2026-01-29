@@ -1,3 +1,4 @@
+#include <arch/cpu.h>
 #include <arch/mmu.h>
 #include <arch/smp.h>
 
@@ -32,31 +33,27 @@
 /* 内核页目录 (物理地址) */
 static uint32_t *kernel_pd = NULL;
 
-static DEFINE_PER_CPU(uint32_t, kmap_irq_flags);
-
 /*
- * 临时映射窗口管理
+ * Per-CPU 临时映射窗口管理
  *
- * PD[1022] 作为临时映射专用的页目录项.
+ * 每个 CPU 使用独立的 PD 项和虚拟地址空间,消除多核锁竞争:
+ * - CPU 0: PD[1020], 虚拟地址 0xFF780000-0xFF7FFFFF (4MB, 1024 页)
+ * - CPU 1: PD[1019], 虚拟地址 0xFF700000-0xFF77FFFF (4MB, 1024 页)
+ * - CPU 2: PD[1018], 虚拟地址 0xFF680000-0xFF6FFFFF (4MB, 1024 页)
+ * - 不拉不拉不拉
  *
- * 虚拟地址范围: 0xFF800000 - 0xFFBFFFFF (4MB)
+ * 每个 CPU 的窗口内有两个映射槽:
+ * - WINDOW_1: PT[1023] - 用于映射 PD
+ * - WINDOW_2: PT[1022] - 用于映射 PT (vmm_kmap 使用)
  *
- * 支持多个窗口,通过 spinlock 保护分配.
- * 为了简单,我们目前支持两个窗口,使用简单的位掩码或锁保护.
- *
- * TEMP_WINDOW_1: 0xFFBFF000 (PT[1023]) - 用于映射 PD
- * TEMP_WINDOW_2: 0xFFBFE000 (PT[1022]) - 用于映射 PT
- *
- * 注意:这只是一个简单的实现,如果是真正的多核系统,应该使用 per-CPU 窗口
- * 或者更复杂的分配器.目前我们加全局锁.
- *
- * TODO: 实现 per-CPU 临时映射窗口
+ * 虚拟地址计算:
+ * - PD 索引: BASE_PD_IDX - cpu_id
+ * - 虚拟地址基址: (BASE_PD_IDX - cpu_id) * 4MB
+ * - PT 访问地址(递归映射): 0xFFC00000 + (PD_IDX * 4096)
  */
-#define TEMP_PT_PD_IDX 1022
-#define TEMP_WINDOW_1  (0xFF800000 + (1023 * 4096))
-#define TEMP_WINDOW_2  (0xFF800000 + (1022 * 4096))
-
-static spinlock_t temp_map_lock = SPINLOCK_INIT;
+#define BASE_PD_IDX          1020 /* CPU 0 使用 PD[1020] */
+#define TEMP_VADDR_BASE(cpu) (((BASE_PD_IDX - (cpu)) << 22))
+#define TEMP_PT_VADDR(cpu)   (0xFFC00000 + ((BASE_PD_IDX - (cpu)) << 12))
 
 /* 汇编辅助函数 */
 extern void load_cr3(uint32_t cr3);
@@ -82,25 +79,24 @@ static uint32_t vmm_flags_to_x86(uint32_t flags) {
 }
 
 /*
- * 映射任意物理页到临时窗口
+ * 映射任意物理页到当前 CPU 的临时窗口
  * window_id: 1 或 2
  * 返回虚拟地址
- *
- * 注意:必须先持有 temp_map_lock!
  */
 static void *map_temp_page(int window_id, paddr_t paddr) {
-    /*
-     * 临时 PT 的虚拟地址
-     * PD[1022] -> temp_pt
-     * 通过递归映射访问 temp_pt:
-     * PD[1023] -> PD
-     * 访问 PD[1022] 对应的 PT -> 0xFFC00000 + (1022 * 4096) = 0xFFFFE000
-     */
-    uint32_t *temp_pt_virt = (uint32_t *)0xFFFFE000;
+    cpu_id_t cpu = cpu_current_id();
+    if (cpu >= CFG_MAX_CPUS) {
+        cpu = 0;
+    }
 
+    /* 当前 CPU 的临时 PT 虚拟地址 */
+    uint32_t *temp_pt_virt = (uint32_t *)TEMP_PT_VADDR(cpu);
+
+    /* 选择 PT 表项和虚拟地址 */
     uint32_t pt_idx = (window_id == 1) ? 1023 : 1022;
-    vaddr_t  vaddr  = (window_id == 1) ? TEMP_WINDOW_1 : TEMP_WINDOW_2;
+    vaddr_t  vaddr  = TEMP_VADDR_BASE(cpu) + (pt_idx << 12);
 
+    /* 映射物理页 */
     temp_pt_virt[pt_idx] = (paddr & PAGE_MASK) | PTE_PRESENT | PTE_RW;
     invlpg(vaddr);
 
@@ -108,24 +104,34 @@ static void *map_temp_page(int window_id, paddr_t paddr) {
 }
 
 static void unmap_temp_page(int window_id) {
-    uint32_t *temp_pt_virt = (uint32_t *)0xFFFFE000;
-    uint32_t  pt_idx       = (window_id == 1) ? 1023 : 1022;
-    vaddr_t   vaddr        = (window_id == 1) ? TEMP_WINDOW_1 : TEMP_WINDOW_2;
+    cpu_id_t cpu = cpu_current_id();
+    if (cpu >= CFG_MAX_CPUS) {
+        cpu = 0;
+    }
 
+    /* 当前 CPU 的临时 PT 虚拟地址 */
+    uint32_t *temp_pt_virt = (uint32_t *)TEMP_PT_VADDR(cpu);
+
+    /* 选择 PT 表项和虚拟地址 */
+    uint32_t pt_idx = (window_id == 1) ? 1023 : 1022;
+    vaddr_t  vaddr  = TEMP_VADDR_BASE(cpu) + (pt_idx << 12);
+
+    /* 清除映射 */
     temp_pt_virt[pt_idx] = 0;
     invlpg(vaddr);
 }
 
+/* Per-CPU 中断标志保存 */
+static DEFINE_PER_CPU(uint32_t, kmap_irq_flags);
+
 /*
  * 临时映射 (HighMem access)
  *
- * 借用 TEMP_WINDOW_2 (窗口2) 来映射任意物理页,以便内核访问.
- * 注意:这只是一个简单的实现,每次只能映射一页,且必须在临界区内使用.
- *
- * 使用 irqsave 版本防止中断期间重入.
+ * 使用当前 CPU 的 WINDOW_2 映射任意物理页,以便内核访问.
+ * 每个 CPU 使用独立的窗口,无需全局锁,只需禁用中断防止重入.
  */
 void *vmm_kmap(paddr_t paddr) {
-    uint32_t flags = spin_lock_irqsave(&temp_map_lock);
+    uint32_t flags = cpu_irq_save();
     this_cpu_write(kmap_irq_flags, flags);
     return map_temp_page(2, paddr);
 }
@@ -134,7 +140,7 @@ void vmm_kunmap(void *vaddr) {
     (void)vaddr;
     unmap_temp_page(2);
     uint32_t flags = this_cpu_read(kmap_irq_flags);
-    spin_unlock_irqrestore(&temp_map_lock, flags);
+    cpu_irq_restore(flags);
 }
 
 void vmm_init(void) {
@@ -188,15 +194,18 @@ void vmm_init(void) {
         kernel_pd[i] = ((uint32_t)pt) | PDE_PRESENT | PDE_RW;
     }
 
-    /* 分配临时映射专用 PT */
-    uint32_t *temp_pt = (uint32_t *)alloc_page();
-    if (!temp_pt) {
-        panic("Failed to allocate temp PT");
-    }
-    memset(temp_pt, 0, PAGE_SIZE);
+    /* 为每个 CPU 分配独立的临时映射 PT */
+    for (uint32_t cpu = 0; cpu < CFG_MAX_CPUS; cpu++) {
+        uint32_t *temp_pt = (uint32_t *)alloc_page();
+        if (!temp_pt) {
+            panic("Failed to allocate temp PT for CPU %u", cpu);
+        }
+        memset(temp_pt, 0, PAGE_SIZE);
 
-    /* 注册临时 PT 到 PD[1022] */
-    kernel_pd[TEMP_PT_PD_IDX] = ((uint32_t)temp_pt) | PDE_PRESENT | PDE_RW;
+        /* 注册临时 PT 到对应的 PD 项 */
+        uint32_t pd_idx   = BASE_PD_IDX - cpu;
+        kernel_pd[pd_idx] = ((uint32_t)temp_pt) | PDE_PRESENT | PDE_RW;
+    }
 
     /* 递归映射: 最后一个 PDE 指向 PD 自身 */
     kernel_pd[1023] = ((uint32_t)kernel_pd) | PDE_PRESENT | PDE_RW;
@@ -225,10 +234,10 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
     asm volatile("mov %%cr3, %0" : "=r"(current_cr3));
     bool is_current = ((uint32_t)pd_phys == current_cr3) || (pd_phys == NULL);
 
-    /* 如果不是当前 PD,需要加锁使用临时窗口 */
+    /* 如果不是当前 PD,需要禁用中断使用临时窗口 */
     uint32_t irq_flags = 0;
     if (!is_current) {
-        irq_flags = spin_lock_irqsave(&temp_map_lock);
+        irq_flags = cpu_irq_save();
     }
 
     if (is_current) {
@@ -245,7 +254,7 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
         if (!new_pt_phys) {
             if (!is_current) {
                 unmap_temp_page(1);
-                spin_unlock_irqrestore(&temp_map_lock, irq_flags);
+                cpu_irq_restore(irq_flags);
             }
             return -ENOMEM;
         }
@@ -254,7 +263,7 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
 
         uint32_t temp_irq_flags = 0;
         if (is_current) {
-            temp_irq_flags = spin_lock_irqsave(&temp_map_lock);
+            temp_irq_flags = cpu_irq_save();
         }
 
         void *ptr = map_temp_page(2, (paddr_t)new_pt_phys);
@@ -262,7 +271,7 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
         unmap_temp_page(2);
 
         if (is_current) {
-            spin_unlock_irqrestore(&temp_map_lock, temp_irq_flags);
+            cpu_irq_restore(temp_irq_flags);
         }
 
         /* 设置 PDE 权限: 如果请求是用户态, PDE 也必须是用户态 */
@@ -305,7 +314,7 @@ int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
     } else {
         unmap_temp_page(2);
         unmap_temp_page(1);
-        spin_unlock_irqrestore(&temp_map_lock, irq_flags);
+        cpu_irq_restore(irq_flags);
         /* 无法刷新目标地址空间的 TLB,但也没关系,因为它没在运行 */
     }
 
@@ -324,7 +333,7 @@ void vmm_unmap_page(void *pd_phys, vaddr_t vaddr) {
 
     uint32_t irq_flags = 0;
     if (!is_current) {
-        irq_flags = spin_lock_irqsave(&temp_map_lock);
+        irq_flags = cpu_irq_save();
     }
 
     if (is_current) {
@@ -336,7 +345,7 @@ void vmm_unmap_page(void *pd_phys, vaddr_t vaddr) {
     if (!(pd_virt[pd_idx] & PDE_PRESENT)) {
         if (!is_current) {
             unmap_temp_page(1);
-            spin_unlock_irqrestore(&temp_map_lock, irq_flags);
+            cpu_irq_restore(irq_flags);
         }
         return;
     }
@@ -356,7 +365,7 @@ void vmm_unmap_page(void *pd_phys, vaddr_t vaddr) {
     } else {
         unmap_temp_page(2);
         unmap_temp_page(1);
-        spin_unlock_irqrestore(&temp_map_lock, irq_flags);
+        cpu_irq_restore(irq_flags);
     }
 }
 
@@ -367,7 +376,7 @@ void *vmm_create_pd(void) {
     }
 
     /* 映射新 PD 到窗口 1 进行初始化 */
-    uint32_t  irq_flags = spin_lock_irqsave(&temp_map_lock);
+    uint32_t  irq_flags = cpu_irq_save();
     uint32_t *pd_virt   = (uint32_t *)map_temp_page(1, (paddr_t)pd_phys);
     memset(pd_virt, 0, PAGE_SIZE);
 
@@ -411,8 +420,13 @@ void *vmm_create_pd(void) {
         }
     }
 
-    /* 拷贝 Temp PT 映射 (PD[1022]) 以便新进程也能使用临时映射 */
-    pd_virt[TEMP_PT_PD_IDX] = kpd_virt[TEMP_PT_PD_IDX];
+    /* 拷贝所有 CPU 的 Temp PT 映射以便新进程也能使用临时映射 */
+    for (uint32_t cpu = 0; cpu < CFG_MAX_CPUS; cpu++) {
+        uint32_t pd_idx = BASE_PD_IDX - cpu;
+        if (kpd_virt[pd_idx] & PDE_PRESENT) {
+            pd_virt[pd_idx] = kpd_virt[pd_idx];
+        }
+    }
 
     /* 如果映射了 kernel_pd,需要解除映射 */
     if (!kernel_is_current) {
@@ -423,7 +437,7 @@ void *vmm_create_pd(void) {
     pd_virt[1023] = ((uint32_t)pd_phys) | PDE_PRESENT | PDE_RW;
 
     unmap_temp_page(1);
-    spin_unlock_irqrestore(&temp_map_lock, irq_flags);
+    cpu_irq_restore(irq_flags);
     return pd_phys;
 }
 
@@ -432,7 +446,7 @@ void vmm_destroy_pd(void *pd_phys) {
         return; /* 不能销毁内核 PD */
     }
 
-    uint32_t irq_flags = spin_lock_irqsave(&temp_map_lock);
+    uint32_t irq_flags = cpu_irq_save();
 
     /* 映射 PD 到窗口 1 */
     uint32_t *pd_virt = (uint32_t *)map_temp_page(1, (paddr_t)pd_phys);
@@ -449,7 +463,7 @@ void vmm_destroy_pd(void *pd_phys) {
     }
 
     unmap_temp_page(1);
-    spin_unlock_irqrestore(&temp_map_lock, irq_flags);
+    cpu_irq_restore(irq_flags);
 
     free_page(pd_phys);
 }
@@ -467,7 +481,7 @@ paddr_t vmm_get_paddr(void *pd_phys, vaddr_t vaddr) {
 
     uint32_t irq_flags = 0;
     if (!is_current) {
-        irq_flags = spin_lock_irqsave(&temp_map_lock);
+        irq_flags = cpu_irq_save();
     }
 
     if (is_current) {
@@ -495,7 +509,7 @@ paddr_t vmm_get_paddr(void *pd_phys, vaddr_t vaddr) {
 
     if (!is_current) {
         unmap_temp_page(1);
-        spin_unlock_irqrestore(&temp_map_lock, irq_flags);
+        cpu_irq_restore(irq_flags);
     }
 
     return paddr;
