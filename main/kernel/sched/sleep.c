@@ -16,6 +16,7 @@
 
 #include <drivers/timer.h>
 
+#include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
 
@@ -80,6 +81,7 @@ void sleep_ticks(uint32_t ticks) {
 
     /* 设置唤醒时间 */
     current->wakeup_tick = timer_get_ticks() + ticks;
+    current->wait_chan   = current; /* 设置 wait_chan 以便信号能唤醒 */
     current->state       = THREAD_BLOCKED;
 
     /* 从运行队列移除 */
@@ -97,6 +99,20 @@ void sleep_ticks(uint32_t ticks) {
      */
     while (current->state == THREAD_BLOCKED) {
         schedule();
+
+        /* 检查待处理信号,提前返回 */
+        struct process *proc = current->owner;
+        if (proc && proc->pending_signals) {
+            sched_blocked_list_remove(current);
+            current->wakeup_tick = 0;
+            current->state       = THREAD_READY;
+            if (policy->enqueue) {
+                cpu_id_t cpu = policy->select_cpu ? policy->select_cpu(current) : 0;
+                policy->enqueue(current, cpu);
+            }
+            return;
+        }
+
         if (current->state == THREAD_BLOCKED) {
             cpu_halt(); /* 等待下一个 tick 中断 */
         }
