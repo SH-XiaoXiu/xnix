@@ -117,7 +117,7 @@ foreach (LIB_NAME ${_SORTED_LIBS})
     # 自己的 include
     if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/include)
         target_include_directories(${LIB_NAME} PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/include
+                ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/include
         )
     endif ()
 
@@ -126,7 +126,7 @@ foreach (LIB_NAME ${_SORTED_LIBS})
         set(DEP_DIR ${_LIB_${DEP}_DIR})
         if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${DEP_DIR}/include)
             target_include_directories(${LIB_NAME} PUBLIC
-                ${CMAKE_CURRENT_SOURCE_DIR}/${DEP_DIR}/include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/${DEP_DIR}/include
             )
         endif ()
     endforeach ()
@@ -134,7 +134,7 @@ foreach (LIB_NAME ${_SORTED_LIBS})
     # 如果需要内核头文件，添加到最后
     if (LIB_KERNEL)
         target_include_directories(${LIB_NAME} PUBLIC
-            ${CMAKE_SOURCE_DIR}/main/include
+                ${CMAKE_SOURCE_DIR}/main/include
         )
     endif ()
 

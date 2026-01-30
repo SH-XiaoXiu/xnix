@@ -52,12 +52,11 @@ void isr_handler(struct irq_frame *frame) {
 
     /* 打印通用寄存器 */
     pr_err("--- Register Dump ---");
-    pr_err("EAX: 0x%08x  EBX: 0x%08x  ECX: 0x%08x  EDX: 0x%08x", frame->eax, frame->ebx,
-         frame->ecx, frame->edx);
-    pr_err("ESI: 0x%08x  EDI: 0x%08x  EBP: 0x%08x  ESP: 0x%08x", frame->esi, frame->edi,
-         frame->ebp, frame->esp);
-    pr_err("DS:  0x%04x      CS:  0x%04x      EFLAGS: 0x%08x", frame->ds, frame->cs,
-         frame->eflags);
+    pr_err("EAX: 0x%08x  EBX: 0x%08x  ECX: 0x%08x  EDX: 0x%08x", frame->eax, frame->ebx, frame->ecx,
+           frame->edx);
+    pr_err("ESI: 0x%08x  EDI: 0x%08x  EBP: 0x%08x  ESP: 0x%08x", frame->esi, frame->edi, frame->ebp,
+           frame->esp);
+    pr_err("DS:  0x%04x      CS:  0x%04x      EFLAGS: 0x%08x", frame->ds, frame->cs, frame->eflags);
 
     panic("KERNEL EXCEPTION: %s (int=%d, err=0x%x) at EIP=0x%x", exception_names[frame->int_no],
           frame->int_no, frame->err_code, frame->eip);

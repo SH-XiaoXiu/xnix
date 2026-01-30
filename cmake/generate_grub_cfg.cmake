@@ -13,11 +13,11 @@ string(APPEND GRUB_CFG "  module /boot/init.elf\n")
 string(APPEND GRUB_CFG "  module /boot/seriald.elf\n")
 
 # 添加 demo 模块
-if(DEMO_ELFS)
-    foreach(DEMO_ELF ${DEMO_ELFS})
+if (DEMO_ELFS)
+    foreach (DEMO_ELF ${DEMO_ELFS})
         string(APPEND GRUB_CFG "  module /boot/${DEMO_ELF}\n")
-    endforeach()
-endif()
+    endforeach ()
+endif ()
 
 string(APPEND GRUB_CFG "}\n")
 

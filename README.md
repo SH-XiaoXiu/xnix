@@ -263,6 +263,7 @@ graph TB
 ## 如何运行
 
 ### 环境依赖
+
 ```bash
 # 安装构建工具和 QEMU
 sudo apt install gcc gcc-multilib grub-pc-bin xorriso qemu-system-x86 make cmake

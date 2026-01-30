@@ -20,10 +20,10 @@
 
 # 通用编译选项
 set(USER_C_FLAGS
-    -m32 -march=i386
-    -ffreestanding -nostdlib -fno-builtin -fno-stack-protector
-    -Wall -Wextra
-    -g
+        -m32 -march=i386
+        -ffreestanding -nostdlib -fno-builtin -fno-stack-protector
+        -Wall -Wextra
+        -g
 )
 
 # 确保 include 目录存在
@@ -56,11 +56,11 @@ target_include_directories(init.elf PRIVATE
 )
 target_link_libraries(init.elf PRIVATE c)
 target_link_options(init.elf PRIVATE
-    -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/user.ld -nostdlib
+        -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/user.ld -nostdlib
 )
 
 add_custom_command(TARGET init.elf POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:init.elf> ${CMAKE_BINARY_DIR}/init.elf
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:init.elf> ${CMAKE_BINARY_DIR}/init.elf
 )
 
 # ============================================

@@ -28,16 +28,16 @@ set(CFG_MAX_CONSOLES 4)
 # CPU 配置
 set(CFG_MAX_CPUS 1)
 option(ENABLE_SMP "Enable SMP support" ON)
-if(ENABLE_SMP)
+if (ENABLE_SMP)
     set(CFG_MAX_CPUS 8)
     add_definitions(-DENABLE_SMP)
-endif()
+endif ()
 
 # VMM 调试
 option(ENABLE_VMM_DEBUG "Enable VMM debug logging" OFF)
-if(ENABLE_VMM_DEBUG)
+if (ENABLE_VMM_DEBUG)
     add_definitions(-DENABLE_VMM_DEBUG)
-endif()
+endif ()
 
 # 内核直接映射大小（高半核架构）
 # 物理内存 [0, CFG_KERNEL_DIRECT_MAP_MB] 映射到虚拟地址 [0xC0000000, ...]
@@ -118,9 +118,9 @@ foreach (APP_ELF ${APP_TARGETS})
     string(APPEND GRUB_CFG_CONTENT "  module /boot/${APP_ELF}\n")
 endforeach ()
 # 动态添加 demo 程序
-foreach(DEMO_ELF ${DEMO_TARGETS})
+foreach (DEMO_ELF ${DEMO_TARGETS})
     string(APPEND GRUB_CFG_CONTENT "  module /boot/${DEMO_ELF}\n")
-endforeach()
+endforeach ()
 string(APPEND GRUB_CFG_CONTENT "}\n")
 file(MAKE_DIRECTORY ${ISO_DIR}/boot/grub)
 file(WRITE ${ISO_DIR}/boot/grub/grub.cfg "${GRUB_CFG_CONTENT}")
@@ -128,8 +128,8 @@ file(WRITE ${ISO_DIR}/boot/grub/grub.cfg "${GRUB_CFG_CONTENT}")
 # 构建依赖和复制命令列表
 set(ISO_DEPENDS xnix.elf init.elf)
 set(ISO_COPY_COMMANDS
-    COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:xnix.elf> ${ISO_DIR}/boot/xnix.elf
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/init.elf ${ISO_DIR}/boot/init.elf
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:xnix.elf> ${ISO_DIR}/boot/xnix.elf
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/init.elf ${ISO_DIR}/boot/init.elf
 )
 
 # 添加 UDM 驱动
@@ -149,19 +149,19 @@ foreach (APP_ELF ${APP_TARGETS})
 endforeach ()
 
 # 添加 demo 程序
-foreach(DEMO_ELF ${DEMO_TARGETS})
+foreach (DEMO_ELF ${DEMO_TARGETS})
     list(APPEND ISO_DEPENDS ${DEMO_ELF})
     list(APPEND ISO_COPY_COMMANDS
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/${DEMO_ELF} ${ISO_DIR}/boot/${DEMO_ELF}
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/${DEMO_ELF} ${ISO_DIR}/boot/${DEMO_ELF}
     )
-endforeach()
+endforeach ()
 
 add_custom_command(
-    OUTPUT ${CMAKE_BINARY_DIR}/xnix.iso
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${ISO_DIR}/boot/grub
-    ${ISO_COPY_COMMANDS}
-    COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/xnix.iso ${ISO_DIR} 2>/dev/null || true
-    DEPENDS ${ISO_DEPENDS}
+        OUTPUT ${CMAKE_BINARY_DIR}/xnix.iso
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ISO_DIR}/boot/grub
+        ${ISO_COPY_COMMANDS}
+        COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/xnix.iso ${ISO_DIR} 2>/dev/null || true
+        DEPENDS ${ISO_DEPENDS}
         COMMENT "创建可引导 ISO..."
 )
 add_custom_target(iso DEPENDS ${CMAKE_BINARY_DIR}/xnix.iso)
