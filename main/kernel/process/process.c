@@ -309,6 +309,9 @@ void process_destroy(process_t proc) {
     process_unref(proc);
 }
 
+/* 前向声明 */
+static void process_reparent_children(struct process *proc);
+
 /**
  * 终止进程的所有其他线程
  */
@@ -346,6 +349,15 @@ void process_terminate_current(int signal) {
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = -signal;
+
+    /* 将子进程托管给 init */
+    process_reparent_children(proc);
+
+    /* 唤醒等待的父进程 */
+    struct process *parent = proc->parent;
+    if (parent && parent->wait_chan && parent->threads) {
+        sched_wakeup_thread(parent->threads);
+    }
 
     /* 终止进程的所有其他线程 */
     process_terminate_threads(proc, current);

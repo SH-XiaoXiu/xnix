@@ -229,6 +229,12 @@ struct thread *sched_get_idle_thread(cpu_id_t cpu);
  */
 struct thread **sched_get_zombie_list(cpu_id_t cpu);
 
+/**
+ * 将线程添加到当前 CPU 的僵尸链表
+ * 用于强制退出的线程在系统调用返回时自行清理
+ */
+void thread_add_to_zombie_list(struct thread *t);
+
 /*
  * 睡眠模块(sleep.c)
  */

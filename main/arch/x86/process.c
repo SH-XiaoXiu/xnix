@@ -15,7 +15,18 @@ void arch_thread_switch(struct thread *next) {
     }
 
     /* 切换地址空间 */
-    if (next->owner && next->owner->page_dir_phys) {
+    /*
+     * 不能访问 EXITED 状态线程的 owner,因为进程可能已被释放.
+     * 这发生在多核场景:process_exit 唤醒父进程后,父进程在另一个 CPU
+     * 上调用 waitpid/process_unref 释放进程,但当前 CPU 的线程还在运行.
+     */
+    if (next->state == THREAD_EXITED) {
+        /* 退出中的线程使用内核页目录 */
+        void *kernel_pd = vmm_get_kernel_pd();
+        if (kernel_pd) {
+            mm->switch_as(kernel_pd);
+        }
+    } else if (next->owner && next->owner->page_dir_phys) {
         /* 用户进程线程:切换到进程的页目录 */
         mm->switch_as(next->owner->page_dir_phys);
     } else {

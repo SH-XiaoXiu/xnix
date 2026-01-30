@@ -63,6 +63,10 @@ void sleep_check_wakeup(void) {
 
 /**
  * 睡眠指定 tick 数
+ *
+ * 唤醒方式:
+ *   定时器到期:sleep_check_wakeup() 设置 READY 并 enqueue
+ *   信号:sched_wakeup_thread() 设置 READY 并 enqueue
  */
 void sleep_ticks(uint32_t ticks) {
     if (ticks == 0) {
@@ -89,34 +93,14 @@ void sleep_ticks(uint32_t ticks) {
         policy->dequeue(current);
     }
 
-    /* 加入阻塞链表(会被 sleep_check_wakeup 处理) */
+    /* 加入阻塞链表 */
     sched_blocked_list_add(current);
 
-    /*
-     * 循环直到被唤醒.
-     * 如果没有其他可运行线程,schedule() 会返回到这里,
-     * 此时通过 cpu_halt() 等待下一个中断(tick)来检查唤醒条件.
-     */
-    while (current->state == THREAD_BLOCKED) {
-        schedule();
+    /* 切换到其他线程,唤醒后返回 */
+    schedule();
 
-        /* 检查待处理信号,提前返回 */
-        struct process *proc = current->owner;
-        if (proc && proc->pending_signals) {
-            sched_blocked_list_remove(current);
-            current->wakeup_tick = 0;
-            current->state       = THREAD_READY;
-            if (policy->enqueue) {
-                cpu_id_t cpu = policy->select_cpu ? policy->select_cpu(current) : 0;
-                policy->enqueue(current, cpu);
-            }
-            return;
-        }
-
-        if (current->state == THREAD_BLOCKED) {
-            cpu_halt(); /* 等待下一个 tick 中断 */
-        }
-    }
+    /* 清理唤醒时间 */
+    current->wakeup_tick = 0;
 }
 
 /**

@@ -198,6 +198,15 @@ struct thread **sched_get_zombie_list(cpu_id_t cpu) {
     return per_cpu_ptr(zombie_thread, cpu);
 }
 
+/**
+ * 将线程添加到当前 CPU 的僵尸链表
+ * 用于强制退出的线程在系统调用返回时自行清理
+ */
+void thread_add_to_zombie_list(struct thread *t) {
+    t->next = this_cpu_read(zombie_thread);
+    this_cpu_write(zombie_thread, t);
+}
+
 /*
  * 公共 API 实现
  */
@@ -240,10 +249,18 @@ void thread_force_exit(struct thread *t) {
         pp = &(*pp)->next;
     }
 
-    /* 加入僵尸链表 */
-    cpu_id_t cpu                = cpu_current_id();
-    t->next                     = per_cpu(zombie_thread, cpu);
-    per_cpu(zombie_thread, cpu) = t;
+    /*
+     * 只有当线程不在运行时才加入僵尸链表.
+     * 如果线程正在另一个 CPU 上运行,不能加入僵尸链表,否则会导致
+     * use-after-free:当前 CPU 的 sched_cleanup_zombie 会释放线程,
+     * 但目标 CPU 上的线程还在运行.
+     * 正在运行的线程会在调用 schedule() 时通过 thread_exit 正确清理.
+     */
+    if (t->running_on == CPU_ID_INVALID) {
+        cpu_id_t cpu                = cpu_current_id();
+        t->next                     = per_cpu(zombie_thread, cpu);
+        per_cpu(zombie_thread, cpu) = t;
+    }
 
     spin_unlock_irqrestore(&sched_lock, flags);
 }
