@@ -5,7 +5,11 @@
 
 #include "serial.h"
 
+#include <pthread.h>
+#include <stdio.h>
 #include <udm/server.h>
+#include <unistd.h>
+#include <xnix/syscall.h>
 #include <xnix/udm/console.h>
 
 #define BOOT_CONSOLE_EP 0
@@ -41,8 +45,38 @@ static int console_handler(struct ipc_message *msg) {
     return 0;
 }
 
+/**
+ * 输入处理线程
+ * 轮询串口输入,写入内核输入队列
+ */
+static void *input_thread(void *arg) {
+    (void)arg;
+
+    while (1) {
+        int c = serial_getc();
+        if (c >= 0) {
+            /* 处理回车 -> 换行 */
+            if (c == '\r') {
+                c = '\n';
+            }
+            sys_input_write((char)c);
+        } else {
+            /* 无数据,短暂休眠 */
+            msleep(10);
+        }
+    }
+
+    return NULL;
+}
+
 int main(void) {
     serial_init(BOOT_IOPORT_CAP);
+
+    /* 启动输入处理线程 */
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, input_thread, NULL) != 0) {
+        printf("[seriald] failed to create input thread\n");
+    }
 
     struct udm_server srv = {
         .endpoint = BOOT_CONSOLE_EP,

@@ -22,7 +22,7 @@ int main(void) {
         return 1;
     }
 
-    printf("[kbd] IRQ1 bound, type to test:\n");
+    printf("[kbd] IRQ1 bound\n");
 
     /* 主循环:阻塞读取扫描码,翻译,回显 */
     while (1) {

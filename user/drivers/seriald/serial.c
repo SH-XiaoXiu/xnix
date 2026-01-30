@@ -17,6 +17,7 @@
 #define REG_LINE_CTRL   3
 #define REG_MODEM_CTRL  4
 #define REG_LINE_STATUS 5
+#define LSR_DATA_READY  0x01
 #define LSR_TX_EMPTY    0x20
 
 static uint32_t g_io_cap;
@@ -70,4 +71,16 @@ void serial_reset_color(void) {
 
 void serial_clear(void) {
     serial_puts("\033[2J\033[H");
+}
+
+int serial_data_available(void) {
+    int lsr = sys_ioport_inb(g_io_cap, COM1 + REG_LINE_STATUS);
+    return (lsr >= 0) && (lsr & LSR_DATA_READY);
+}
+
+int serial_getc(void) {
+    if (!serial_data_available()) {
+        return -1;
+    }
+    return sys_ioport_inb(g_io_cap, COM1 + REG_DATA);
 }

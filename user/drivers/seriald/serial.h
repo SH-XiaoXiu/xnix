@@ -40,4 +40,16 @@ void serial_reset_color(void);
  */
 void serial_clear(void);
 
+/**
+ * 检查是否有数据可读
+ * @return 非0表示有数据
+ */
+int serial_data_available(void);
+
+/**
+ * 读取一个字符(非阻塞)
+ * @return 字符值,-1 表示无数据
+ */
+int serial_getc(void);
+
 #endif /* SERIALD_SERIAL_H */

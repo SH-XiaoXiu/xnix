@@ -40,19 +40,11 @@ int input_write(char c) {
     if (c == 3) {
         pid_t target = foreground_pid;
 
-        /* 没有前台进程时,发送给 input_waiter */
-        if (target <= 1) {
-            spin_lock(&input_lock);
-            struct thread *waiter = input_waiter;
-            spin_unlock(&input_lock);
-            if (waiter && waiter->owner) {
-                target = waiter->owner->pid;
-            }
-        }
-
+        /* 只有明确设置了前台进程时才发送 SIGINT */
         if (target > 1) {
             process_kill(target, SIGINT);
         }
+        /* 否则忽略 Ctrl+C(shell 等待输入时不应被杀死) */
         return 0;
     }
 
