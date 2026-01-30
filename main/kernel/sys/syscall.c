@@ -53,6 +53,7 @@ extern void sys_io_init(void);
 extern void sys_misc_init(void);
 extern void sys_thread_init(void);
 extern void sys_sync_init(void);
+extern void sys_irq_init(void);
 
 /**
  * 初始化系统调用子系统
@@ -65,6 +66,7 @@ void syscall_init(void) {
     sys_thread_init();
     sys_sync_init();
     sys_io_init();
+    sys_irq_init();
     sys_misc_init();
 
     pr_info("syscall: initialized %d syscalls", NR_SYSCALLS);

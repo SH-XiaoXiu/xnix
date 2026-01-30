@@ -50,6 +50,9 @@ set(CFG_IPC_MSG_REGS 8)          # 短消息寄存器数量
 set(CFG_IPC_MSG_CAPS_MAX 4)      # 消息中最多能力句柄数
 option(CFG_IPC_MSG_POOL "Enable IPC global message pool for async buffering" ON)
 
+# IRQ 配置
+set(CFG_IRQ_USER_BUF_SIZE 64)    # IRQ 用户态缓冲区大小
+
 option(CFG_DEBUG_MM "Debug memory manager" OFF)
 option(CFG_DEBUG_SCHED "Debug scheduler" OFF)
 option(CFG_DEBUG_IPC "Debug IPC" OFF)

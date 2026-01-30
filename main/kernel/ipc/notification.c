@@ -84,18 +84,10 @@ cap_handle_t notification_create(void) {
  * Notification 操作
  *  */
 
-void notification_signal(cap_handle_t notif_handle, uint32_t bits) {
-    struct process          *proc = process_current();
-    struct ipc_notification *notif;
-    struct thread           *waiter;
+void notification_signal_by_ptr(struct ipc_notification *notif, uint32_t bits) {
+    struct thread *waiter;
 
-    if (!proc || bits == 0) {
-        return;
-    }
-
-    /* 查找 Notification (需要 WRITE 权限) */
-    notif = cap_lookup(proc, notif_handle, CAP_TYPE_NOTIFICATION, CAP_WRITE);
-    if (!notif) {
+    if (!notif || bits == 0) {
         return;
     }
 
@@ -118,17 +110,34 @@ void notification_signal(cap_handle_t notif_handle, uint32_t bits) {
         /* 遍历链表唤醒所有线程 */
         while (waiter_list) {
             waiter            = waiter_list;
-            waiter_list       = waiter->wait_next; /* 使用 wait_next */
+            waiter_list       = waiter->wait_next;
             waiter->wait_next = NULL;
 
             /* 将事件 bits 传递给线程 */
             waiter->notified_bits = delivery_bits;
-            sched_wakeup_thread(waiter); /* 使用 sched_wakeup_thread */
+            sched_wakeup_thread(waiter);
         }
         return;
     }
 
     spin_unlock(&notif->lock);
+}
+
+void notification_signal(cap_handle_t notif_handle, uint32_t bits) {
+    struct process          *proc = process_current();
+    struct ipc_notification *notif;
+
+    if (!proc || bits == 0) {
+        return;
+    }
+
+    /* 查找 Notification (需要 WRITE 权限) */
+    notif = cap_lookup(proc, notif_handle, CAP_TYPE_NOTIFICATION, CAP_WRITE);
+    if (!notif) {
+        return;
+    }
+
+    notification_signal_by_ptr(notif, bits);
 }
 
 uint32_t notification_wait(cap_handle_t notif_handle) {

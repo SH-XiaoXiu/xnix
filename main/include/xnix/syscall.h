@@ -59,4 +59,8 @@
 #define SYS_MUTEX_LOCK    312
 #define SYS_MUTEX_UNLOCK  313
 
+#define SYS_IRQ_BIND   50
+#define SYS_IRQ_UNBIND 51
+#define SYS_IRQ_READ   52
+
 #endif

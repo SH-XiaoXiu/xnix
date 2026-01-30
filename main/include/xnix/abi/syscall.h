@@ -55,6 +55,11 @@
 #define SYS_MUTEX_LOCK    312 /* 获取互斥锁: ebx=handle */
 #define SYS_MUTEX_UNLOCK  313 /* 释放互斥锁: ebx=handle */
 
+/* IRQ 绑定(50-59) */
+#define SYS_IRQ_BIND   50 /* 绑定 IRQ: ebx=irq, ecx=notif_handle, edx=bits */
+#define SYS_IRQ_UNBIND 51 /* 解除绑定: ebx=irq */
+#define SYS_IRQ_READ   52 /* 读取数据: ebx=irq, ecx=buf, edx=size, esi=flags */
+
 /*
  * 系统调用调用约定 (x86)
  *

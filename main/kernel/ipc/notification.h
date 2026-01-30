@@ -31,4 +31,15 @@ void notification_ref(void *ptr);
  */
 void notification_unref(void *ptr);
 
+/**
+ * 通过指针发送信号
+ *
+ * 用于 IRQ 处理器等没有进程上下文的场景.
+ * 调用者需确保 notif 指针有效.
+ *
+ * @param notif notification 对象指针
+ * @param bits  要设置的位
+ */
+void notification_signal_by_ptr(struct ipc_notification *notif, uint32_t bits);
+
 #endif /* KERNEL_IPC_NOTIFICATION_H */

@@ -27,6 +27,9 @@
 #define CFG_IPC_MSG_CAPS_MAX  @CFG_IPC_MSG_CAPS_MAX@
 #cmakedefine01 CFG_IPC_MSG_POOL
 
+/* IRQ */
+#define CFG_IRQ_USER_BUF_SIZE @CFG_IRQ_USER_BUF_SIZE@
+
 /* 调试开关 */
 #cmakedefine CFG_DEBUG_MM
 #cmakedefine CFG_DEBUG_SCHED

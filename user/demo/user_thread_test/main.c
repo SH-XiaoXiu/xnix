@@ -68,7 +68,7 @@ static void *increment_thread(void *arg) {
 static void test_mutex(void) {
     printf("\n[test 3] mutex\n");
 
-    /* 先跑一遍不加锁的，看看会不会出问题 */
+    /* 先跑一遍不加锁的,看看会不会出问题 */
     printf("  without lock:\n");
     g_counter = 0;
 

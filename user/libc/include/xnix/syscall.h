@@ -136,4 +136,21 @@ static inline int sys_spawn(struct spawn_args *args) {
     return syscall1(SYS_SPAWN, (uint32_t)(uintptr_t)args);
 }
 
+/*
+ * IRQ 绑定
+ */
+#define IRQ_READ_NONBLOCK 1
+
+static inline int sys_irq_bind(uint8_t irq, uint32_t notif_handle, uint32_t bits) {
+    return syscall3(SYS_IRQ_BIND, (uint32_t)irq, notif_handle, bits);
+}
+
+static inline int sys_irq_unbind(uint8_t irq) {
+    return syscall1(SYS_IRQ_UNBIND, (uint32_t)irq);
+}
+
+static inline int sys_irq_read(uint8_t irq, void *buf, size_t size, uint32_t flags) {
+    return syscall4(SYS_IRQ_READ, (uint32_t)irq, (uint32_t)(uintptr_t)buf, (uint32_t)size, flags);
+}
+
 #endif /* _XNIX_SYSCALL_H */
