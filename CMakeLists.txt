@@ -111,6 +111,7 @@ string(APPEND GRUB_CFG_CONTENT "  multiboot /boot/xnix.elf xnix.initmod=0 xnix.s
 string(APPEND GRUB_CFG_CONTENT "  module /boot/init.elf\n")
 string(APPEND GRUB_CFG_CONTENT "  module /boot/seriald.elf\n")
 string(APPEND GRUB_CFG_CONTENT "  module /boot/kbd.elf\n")
+string(APPEND GRUB_CFG_CONTENT "  module /boot/shell.elf\n")
 foreach(DEMO_ELF ${DEMO_TARGETS})
     string(APPEND GRUB_CFG_CONTENT "  module /boot/${DEMO_ELF}\n")
 endforeach()
@@ -119,12 +120,13 @@ file(MAKE_DIRECTORY ${ISO_DIR}/boot/grub)
 file(WRITE ${ISO_DIR}/boot/grub/grub.cfg "${GRUB_CFG_CONTENT}")
 
 # 构建 demo 依赖和复制命令列表
-set(ISO_DEPENDS xnix.elf init.elf seriald.elf kbd.elf)
+set(ISO_DEPENDS xnix.elf init.elf seriald.elf kbd.elf shell.elf)
 set(ISO_COPY_COMMANDS
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:xnix.elf> ${ISO_DIR}/boot/xnix.elf
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/init.elf ${ISO_DIR}/boot/init.elf
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/seriald.elf ${ISO_DIR}/boot/seriald.elf
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/kbd.elf ${ISO_DIR}/boot/kbd.elf
+        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/shell.elf ${ISO_DIR}/boot/shell.elf
 )
 
 foreach(DEMO_ELF ${DEMO_TARGETS})

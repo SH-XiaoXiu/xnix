@@ -123,6 +123,29 @@ add_custom_command(TARGET kbd.elf POST_BUILD
 )
 
 # ============================================
+# shell.elf - Shell
+# ============================================
+add_executable(shell.elf
+        libc/src/crt0.s
+        shell/main.c
+)
+
+target_compile_options(shell.elf PRIVATE ${USER_C_FLAGS})
+target_include_directories(shell.elf PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/libc/include
+        ${CMAKE_SOURCE_DIR}/main/include
+        ${CMAKE_BINARY_DIR}/include
+)
+target_link_libraries(shell.elf PRIVATE c)
+target_link_options(shell.elf PRIVATE
+        -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/user.ld -nostdlib
+)
+
+add_custom_command(TARGET shell.elf POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:shell.elf> ${CMAKE_BINARY_DIR}/shell.elf
+)
+
+# ============================================
 # Demo 程序 (自动发现)
 # ============================================
 # 确保 include 目录存在

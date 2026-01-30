@@ -17,9 +17,10 @@
 /* 自动生成的 demo 模块列表 */
 #include <demo_modules.h>
 
-/* 模块索引约定: 0=init, 1=seriald, 2=kbd, 3+=demos */
+/* 模块索引约定: 0=init, 1=seriald, 2=kbd, 3=shell, 4+=demos */
 #define MODULE_SERIALD 1
 #define MODULE_KBD     2
+#define MODULE_SHELL   3
 
 /* init 继承的 capability handles */
 #define CAP_SERIAL_EP 0
@@ -66,6 +67,23 @@ static void start_kbd(void) {
     }
 }
 
+static void start_shell(void) {
+    printf("[init] Starting shell...\n");
+
+    struct spawn_args args = {
+        .name         = "shell",
+        .module_index = MODULE_SHELL,
+        .cap_count    = 0,
+    };
+
+    int pid = sys_spawn(&args);
+    if (pid < 0) {
+        printf("[init] Failed to start shell: %d\n", pid);
+    } else {
+        printf("[init] shell started (pid=%d)\n", pid);
+    }
+}
+
 static void start_demos(void) {
 #if DEMO_COUNT > 0
     printf("[init] Starting %d demo(s)...\n", DEMO_COUNT);
@@ -108,10 +126,10 @@ int main(void) {
     /* 启动 kbd 服务 */
     start_kbd();
 
-    printf("[init] System ready\n");
+    /* 启动 shell */
+    start_shell();
 
-    /* 启动所有 demo 程序 */
-    start_demos();
+    printf("[init] System ready\n");
 
     /* 主循环 */
     int i = 0;

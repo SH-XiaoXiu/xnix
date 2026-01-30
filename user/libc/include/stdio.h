@@ -19,7 +19,8 @@ int putchar(int c);
 int puts(const char *s);
 
 /* 字符输入 */
-int getchar(void);
+int   getchar(void);
+char *gets_s(char *buf, size_t size);
 
 /* 流操作 */
 int fflush(void *stream);
