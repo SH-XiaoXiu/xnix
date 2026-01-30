@@ -1,5 +1,6 @@
 #include <arch/hal/feature.h>
 
+#include <asm/mmu.h>
 #include <asm/multiboot.h>
 #include <xnix/boot.h>
 #include <xnix/stdio.h>
@@ -98,7 +99,7 @@ int boot_get_module(uint32_t index, void **out_addr, uint32_t *out_size) {
         return -1;
     }
     if (out_addr) {
-        *out_addr = (void *)g_boot_modules[index].mod_start;
+        *out_addr = (void *)(uintptr_t)g_boot_modules[index].mod_start;
     }
     if (out_size) {
         *out_size = g_boot_modules[index].mod_end - g_boot_modules[index].mod_start;
@@ -115,8 +116,9 @@ static uint32_t boot_compute_ram_mb(uint32_t magic, const struct multiboot_info 
         uint64_t total_kb = 0;
         uint32_t off      = 0;
         while (off < mb_info->mmap_length) {
+            /* mmap_addr 是物理地址,需要转换为虚拟地址 */
             struct multiboot_mmap_entry *e =
-                (struct multiboot_mmap_entry *)(uintptr_t)(mb_info->mmap_addr + off);
+                (struct multiboot_mmap_entry *)PHYS_TO_VIRT(mb_info->mmap_addr + off);
             if (e->type == MULTIBOOT_MEMORY_AVAILABLE && e->len) {
                 total_kb += e->len / 1024ULL;
             }
@@ -143,12 +145,14 @@ __attribute__((weak)) void boot_init(uint32_t magic, const struct multiboot_info
         features.ram_size_mb = boot_compute_ram_mb(magic, mb_info);
 
         if (mb_info->flags & MULTIBOOT_INFO_CMDLINE) {
-            cmdline = (const char *)mb_info->cmdline;
+            /* cmdline 是物理地址,需要转换为虚拟地址 */
+            cmdline = (const char *)PHYS_TO_VIRT(mb_info->cmdline);
         }
 
         /* 保存模块信息 */
         if ((mb_info->flags & MULTIBOOT_INFO_MODS) && mb_info->mods_count > 0) {
-            g_boot_modules      = (struct multiboot_mod_list *)mb_info->mods_addr;
+            /* mods_addr 是物理地址,需要转换为虚拟地址 */
+            g_boot_modules      = (struct multiboot_mod_list *)PHYS_TO_VIRT(mb_info->mods_addr);
             g_boot_module_count = mb_info->mods_count;
         }
     }

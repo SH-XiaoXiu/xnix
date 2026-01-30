@@ -8,8 +8,8 @@
 
 #include <arch/mmu.h>
 
+#include <asm/mmu.h>
 #include <xnix/config.h>
-#include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
@@ -82,8 +82,8 @@ void page_alloc_init(void) {
     bitmap_bytes          = (raw_pages + 7) / 8;
     uint32_t bitmap_pages = PAGE_ALIGN_UP(bitmap_bytes) / PAGE_SIZE;
 
-    /* bitmap 放在内存开头 */
-    page_bitmap = (uint32_t *)raw_start;
+    /* bitmap 放在内存开头(物理地址转虚拟地址) */
+    page_bitmap = PHYS_TO_VIRT(raw_start);
     bitmap_size = (bitmap_bytes + 3) / 4;
 
     /* 可分配内存从 bitmap 之后开始 */
@@ -93,7 +93,7 @@ void page_alloc_init(void) {
     now_free_pages = total_pages;
     low_pages      = total_pages;
 
-    paddr_t low_end = (paddr_t)CFG_KERNEL_IDMAP_MB * 1024u * 1024u;
+    paddr_t low_end = (paddr_t)CFG_KERNEL_DIRECT_MAP_MB * 1024u * 1024u;
     if (low_end > memory_start && low_end < memory_end) {
         low_pages = (low_end - memory_start) / PAGE_SIZE;
     }

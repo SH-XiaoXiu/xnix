@@ -15,7 +15,7 @@ set(CMAKE_C_FLAGS "-m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -
 set(CMAKE_C_FLAGS_DEBUG "-g -O0")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
 set(CMAKE_ASM_FLAGS "-m32 -g")
-set(CMAKE_EXE_LINKER_FLAGS "-m32 -T${ARCH_DIR}/boot/kernel.ld -nostdlib -no-pie")
+set(CMAKE_EXE_LINKER_FLAGS "-m32 -T${ARCH_DIR}/boot/kernel.ld -nostdlib -no-pie -Wl,--build-id=none")
 
 # 内核配置
 set(CFG_SCHED_HZ 100)
@@ -39,9 +39,10 @@ if(ENABLE_VMM_DEBUG)
     add_definitions(-DENABLE_VMM_DEBUG)
 endif()
 
-# 低端恒等映射窗口(用于内核直接访问物理地址)
-# x86 non-PAE 下，为避免与用户态地址布局冲突，应保持较小(例如 64MB/128MB)。
-set(CFG_KERNEL_IDMAP_MB 64)
+# 内核直接映射大小（高半核架构）
+# 物理内存 [0, CFG_KERNEL_DIRECT_MAP_MB] 映射到虚拟地址 [0xC0000000, ...]
+# 建议值：嵌入式 16-32MB，通用 64MB，大内存系统 128-256MB
+set(CFG_KERNEL_DIRECT_MAP_MB 64)
 
 # IPC 配置
 set(CFG_CAP_TABLE_SIZE 256)      # 每个进程最多句柄数

@@ -75,10 +75,6 @@ ap_entry_32:
     mov %ax, %gs
     mov %ax, %ss
 
-    /* 加载正式的内核 GDT */
-    lgdt ap_kernel_gdtr - ap_trampoline_start(%ebp)
-
-    /* 远跳转刷新 CS 到内核代码段 */
     ljmp $0x08, $(AP_TRAMPOLINE_ADDR + ap_entry_kernel - ap_trampoline_start)
 
 ap_entry_kernel:
@@ -89,8 +85,7 @@ ap_entry_kernel:
     mov %ax, %fs
     mov %ax, %gs
     mov %ax, %ss
-
-    lidt ap_kernel_idtr - ap_trampoline_start(%ebp)
+    mov $AP_TRAMPOLINE_STACK_TOP, %esp
 
     /* 检查并处理 x2APIC 模式 (切换到 xAPIC) */
     mov $MSR_IA32_APIC_BASE, %ecx
@@ -110,6 +105,18 @@ ap_entry_kernel:
     mov %eax, %cr0
     jmp 2f
 2:
+    lgdt ap_kernel_gdtr - ap_trampoline_start(%ebp)
+    ljmp $0x08, $(AP_TRAMPOLINE_ADDR + ap_entry_paged - ap_trampoline_start)
+
+ap_entry_paged:
+    mov $0x10, %ax
+    mov %ax, %ds
+    mov %ax, %es
+    mov %ax, %fs
+    mov %ax, %gs
+    mov %ax, %ss
+
+    lidt ap_kernel_idtr - ap_trampoline_start(%ebp)
 
     /* 获取 CPU ID (通过 LAPIC ID) */
     /* LAPIC ID 寄存器在 LAPIC_BASE + LAPIC_ID_REG */

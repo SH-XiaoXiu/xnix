@@ -13,6 +13,7 @@
 
 #include <arch/mmu.h>
 
+#include <asm/mmu.h>
 #include <xnix/mm.h>
 #include <xnix/string.h>
 
@@ -29,21 +30,24 @@ void *kmalloc(size_t size) {
         return NULL;
     }
 
-    /* 总大小 = header + 用户请求 */
     size_t   total = sizeof(struct kmalloc_header) + size;
     uint32_t pages = (total + PAGE_SIZE - 1) / PAGE_SIZE;
 
-    void *ptr = alloc_pages(pages);
-    if (!ptr) {
+    /* alloc_pages 返回物理地址 */
+    paddr_t phys = (paddr_t)alloc_pages(pages);
+    if (!phys) {
         return NULL;
     }
 
+    /* 转换为虚拟地址 */
+    void *virt = PHYS_TO_VIRT(phys);
+
     /* 记录页数 */
-    struct kmalloc_header *hdr = ptr;
+    struct kmalloc_header *hdr = virt;
     hdr->pages                 = pages;
     hdr->reserved              = 0;
 
-    return (char *)ptr + sizeof(struct kmalloc_header);
+    return (char *)virt + sizeof(struct kmalloc_header);
 }
 
 void *kzalloc(size_t size) {
@@ -63,5 +67,7 @@ void kfree(void *ptr) {
     struct kmalloc_header *hdr =
         (struct kmalloc_header *)((char *)ptr - sizeof(struct kmalloc_header));
 
-    free_pages(hdr, hdr->pages);
+    /* 转换虚拟地址为物理地址 */
+    paddr_t phys = VIRT_TO_PHYS((uint32_t)hdr);
+    free_pages((void *)phys, hdr->pages);
 }

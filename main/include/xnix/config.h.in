@@ -33,8 +33,8 @@
 #cmakedefine CFG_DEBUG_IPC
 #cmakedefine ENABLE_VMM_DEBUG
 
-/* VMM */
-#define CFG_KERNEL_IDMAP_MB   @CFG_KERNEL_IDMAP_MB@
+/* VMM - 高半核直接映射 */
+#define CFG_KERNEL_DIRECT_MAP_MB @CFG_KERNEL_DIRECT_MAP_MB@
 
 /* 全局调试开关 */
 #cmakedefine CFG_DEBUG

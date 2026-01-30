@@ -5,6 +5,7 @@
 
 #include <arch/mmu.h>
 
+#include <asm/mmu.h>
 #include <asm/multiboot.h>
 #include <xnix/stdio.h>
 
@@ -34,7 +35,7 @@ uint32_t arch_get_memory_map(struct arch_mem_region *regions, uint32_t max_regio
     uint32_t off = 0;
     while (off < mb->mmap_length && out < max_regions) {
         struct multiboot_mmap_entry *e =
-            (struct multiboot_mmap_entry *)(uintptr_t)(mb->mmap_addr + off);
+            (struct multiboot_mmap_entry *)PHYS_TO_VIRT(mb->mmap_addr + off);
 
         uint64_t start64 = e->addr;
         uint64_t end64   = e->addr + e->len;
@@ -65,14 +66,15 @@ uint32_t arch_get_memory_map(struct arch_mem_region *regions, uint32_t max_regio
 void arch_get_memory_range(paddr_t *start, paddr_t *end) {
     struct multiboot_info *mb = multiboot_info_ptr;
 
-    /* 内核结束地址 */
-    *start = PAGE_ALIGN_UP((paddr_t)_kernel_end);
+    /* 内核结束地址(转换虚拟地址为物理地址) */
+    *start = PAGE_ALIGN_UP(VIRT_TO_PHYS((paddr_t)_kernel_end));
 
     /* 检查模块,避免覆盖模块内存 */
     if (mb->flags & MULTIBOOT_INFO_MODS) {
         if (mb->mods_count > 0) {
-            struct multiboot_mod_list *mods         = (struct multiboot_mod_list *)mb->mods_addr;
-            uint32_t                   mod_end_addr = 0;
+            struct multiboot_mod_list *mods =
+                (struct multiboot_mod_list *)PHYS_TO_VIRT(mb->mods_addr);
+            uint32_t mod_end_addr = 0;
             for (uint32_t i = 0; i < mb->mods_count; i++) {
                 if (mods[i].mod_end > mod_end_addr) {
                     mod_end_addr = mods[i].mod_end;

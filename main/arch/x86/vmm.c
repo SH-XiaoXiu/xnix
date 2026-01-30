@@ -3,12 +3,12 @@
 #include <arch/smp.h>
 
 #include <asm/irq_defs.h>
+#include <asm/mmu.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
-#include <xnix/sync.h>
 #include <xnix/vmm.h>
 
 /* x86 页表相关定义 */
@@ -51,7 +51,12 @@ static uint32_t *kernel_pd = NULL;
  * - 虚拟地址基址: (BASE_PD_IDX - cpu_id) * 4MB
  * - PT 访问地址(递归映射): 0xFFC00000 + (PD_IDX * 4096)
  */
-#define BASE_PD_IDX          1020 /* CPU 0 使用 PD[1020] */
+/*
+ * 临时映射窗口 PDE 索引
+ * PDE[1019] 被 IOAPIC (0xFEC00000) 和 LAPIC (0xFEE00000) 使用
+ * 所以我们从 PDE[1018] 开始,避免冲突
+ */
+#define BASE_PD_IDX          1018 /* CPU 0 使用 PD[1018],避开 PDE[1019] (APIC) */
 #define TEMP_VADDR_BASE(cpu) (((BASE_PD_IDX - (cpu)) << 22))
 #define TEMP_PT_VADDR(cpu)   (0xFFC00000 + ((BASE_PD_IDX - (cpu)) << 12))
 
@@ -144,77 +149,106 @@ void vmm_kunmap(void *vaddr) {
 }
 
 void vmm_init(void) {
-    /* 分配内核页目录 */
-    kernel_pd = (uint32_t *)alloc_page();
-    if (!kernel_pd) {
+    /* 分配内核页目录(物理地址) */
+    paddr_t kernel_pd_phys = (paddr_t)alloc_page();
+    if (!kernel_pd_phys) {
         panic("Failed to allocate kernel page directory");
     }
-    memset(kernel_pd, 0, PAGE_SIZE);
 
-    /* 恒等映射:只映射低地址区域,避免与用户空间冲突 */
+    /* 转换为虚拟地址以便访问 */
+    uint32_t *kernel_pd_virt = PHYS_TO_VIRT(kernel_pd_phys);
+    memset(kernel_pd_virt, 0, PAGE_SIZE);
+
+    /* 内核直接映射:0xC0000000 -> 物理 0x0 */
     paddr_t start, end;
     arch_get_memory_range(&start, &end);
 
-    uint32_t max_idmap = (uint32_t)CFG_KERNEL_IDMAP_MB * 1024u * 1024u;
-    if (max_idmap && end > max_idmap) {
-        end = max_idmap;
+    uint32_t map_size = KERNEL_DIRECT_MAP_SIZE;
+    if (end < map_size) {
+        map_size = (end + 0x3FFFFF) & ~0x3FFFFF;
     }
-    uint32_t map_end = (end + 0x3FFFFF) & ~0x3FFFFF;
 
-    /*
-     * 映射所有探测到的物理内存
-     */
-
-    uint32_t pt_count = map_end >> 22;
-
-    if (pt_count > 1024) { /* 最大 4GB */
-        pt_count = 1024;
-        pr_warn("Physical memory too large, truncating mapping to 4GB");
-    }
+    uint32_t pt_count = map_size >> 22; /* 每个 PT 覆盖 4MB */
 
     for (uint32_t i = 0; i < pt_count; i++) {
-        uint32_t *pt = (uint32_t *)alloc_page();
-        if (!pt) {
-            pr_warn("Partial kernel PT allocated, memory beyond mapped may cause page fault");
+        paddr_t pt_phys = (paddr_t)alloc_page();
+        if (!pt_phys) {
+            pr_warn("Partial kernel PT allocated");
             break;
         }
 
-        memset(pt, 0, PAGE_SIZE);
+        uint32_t *pt_virt = PHYS_TO_VIRT(pt_phys);
+        memset(pt_virt, 0, PAGE_SIZE);
 
-        /* 填充页表项 */
+        /* 填充页表:虚拟 0xC0000000 + i*4MB -> 物理 i*4MB */
         for (uint32_t j = 0; j < 1024; j++) {
-            uint32_t paddr = (i * 1024 * 4096) + (j * 4096);
+            paddr_t paddr = (i * 1024 * 4096) + (j * 4096);
             if (paddr < end) {
-                pt[j] = paddr | PTE_PRESENT | PTE_RW;
-            } else {
-                pt[j] = 0;
+                pt_virt[j] = paddr | PTE_PRESENT | PTE_RW;
             }
         }
-        /* 写入页目录: Present, RW, Supervisor */
-        kernel_pd[i] = ((uint32_t)pt) | PDE_PRESENT | PDE_RW;
+
+        /* 写入 PDE[768 + i] */
+        kernel_pd_virt[768 + i] = pt_phys | PDE_PRESENT | PDE_RW;
     }
 
-    /* 为每个 CPU 分配独立的临时映射 PT */
+    /* Per-CPU 临时映射窗口 */
     for (uint32_t cpu = 0; cpu < CFG_MAX_CPUS; cpu++) {
-        uint32_t *temp_pt = (uint32_t *)alloc_page();
-        if (!temp_pt) {
+        paddr_t temp_pt_phys = (paddr_t)alloc_page();
+        if (!temp_pt_phys) {
             panic("Failed to allocate temp PT for CPU %u", cpu);
         }
-        memset(temp_pt, 0, PAGE_SIZE);
+        uint32_t *temp_pt_virt = PHYS_TO_VIRT(temp_pt_phys);
+        memset(temp_pt_virt, 0, PAGE_SIZE);
 
-        /* 注册临时 PT 到对应的 PD 项 */
-        uint32_t pd_idx   = BASE_PD_IDX - cpu;
-        kernel_pd[pd_idx] = ((uint32_t)temp_pt) | PDE_PRESENT | PDE_RW;
+        uint32_t pd_idx        = BASE_PD_IDX - cpu;
+        kernel_pd_virt[pd_idx] = temp_pt_phys | PDE_PRESENT | PDE_RW;
     }
 
-    /* 递归映射: 最后一个 PDE 指向 PD 自身 */
-    kernel_pd[1023] = ((uint32_t)kernel_pd) | PDE_PRESENT | PDE_RW;
+    /* 递归映射:PDE[1023] -> PD 自身 */
+    kernel_pd_virt[1023] = kernel_pd_phys | PDE_PRESENT | PDE_RW;
 
-    /* 启用分页 */
-    load_cr3((uint32_t)kernel_pd);
-    enable_paging();
-    pr_ok("VMM initialized, Paging enabled, mapped %u MB (IDMAP %u MB)", map_end / 1024 / 1024,
-          (uint32_t)CFG_KERNEL_IDMAP_MB);
+    /*
+     * 保留低端恒等映射(PDE[0])用于:
+     * - SMP trampoline 代码(0x8000)
+     * - VGA 缓冲区(0xB8000)
+     *
+     * 方案:从 boot 页表复制 PDE[0],如果失败则手动创建
+     */
+    uint32_t current_cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(current_cr3));
+    uint32_t *boot_pd_virt = PHYS_TO_VIRT(current_cr3);
+
+    bool pde0_copied = false;
+    if (boot_pd_virt[0] & PDE_PRESENT) {
+        kernel_pd_virt[0] = boot_pd_virt[0];
+        pde0_copied       = true;
+    }
+
+    /* 如果复制失败,手动创建低 4MB 恒等映射 */
+    if (!pde0_copied) {
+        paddr_t pt0_phys = (paddr_t)alloc_page();
+        if (pt0_phys) {
+            uint32_t *pt0_virt = PHYS_TO_VIRT(pt0_phys);
+            memset(pt0_virt, 0, PAGE_SIZE);
+            /* 映射低 4MB (0x0 - 0x400000) */
+            for (uint32_t j = 0; j < 1024; j++) {
+                paddr_t paddr = j * PAGE_SIZE;
+                pt0_virt[j]   = paddr | PTE_PRESENT | PTE_RW;
+            }
+            kernel_pd_virt[0] = pt0_phys | PDE_PRESENT | PDE_RW;
+        } else {
+        }
+    }
+
+    /* 保存内核 PD 物理地址 */
+    kernel_pd = (uint32_t *)kernel_pd_phys;
+
+    /* 切换到新页目录 */
+    load_cr3(kernel_pd_phys);
+
+    pr_ok("VMM initialized, Kernel at 0x%x, mapped %u MB", KERNEL_VIRT_BASE,
+          map_size / 1024 / 1024);
 }
 
 int vmm_map_page(void *pd_phys, vaddr_t vaddr, paddr_t paddr, uint32_t flags) {
@@ -399,28 +433,23 @@ void *vmm_create_pd(void) {
 
     /*
      * 拷贝内核映射
-     * 内核当前在 1MB,通过恒等映射访问.用户进程陷入内核时(中断/系统调用)
-     * 也需要访问内核代码,所以必须拷贝包含内核的 PDE.
-     * 但我们只拷贝**真正包含内核代码**的 PDE,而不是整个恒等映射范围.
-     * 内核在 1-2MB 范围,只需拷贝 PDE[0] 即可.
+     * 内核运行在高半核(0xC0000000+),用户进程陷入内核时(中断/系统调用)
+     * 需要访问内核代码,所以必须拷贝内核映射.
      */
-    int copied_count = 0;
 
-    /* 拷贝 PDE[0]:包含内核代码(1MB) */
+    /* 拷贝 PDE[0]:低 4MB 恒等映射,用于 VGA 输出和 AP trampoline */
     if (kpd_virt[0] & PDE_PRESENT) {
         pd_virt[0] = kpd_virt[0];
-        copied_count++;
     }
 
-    /* 拷贝高地址内核空间(>=3GB) */
-    for (int i = 768; i < 1022; i++) {
+    /* 拷贝内核映射:PDE[768-1022] */
+    for (int i = 768; i < 1023; i++) {
         if (kpd_virt[i] & PDE_PRESENT) {
             pd_virt[i] = kpd_virt[i];
-            copied_count++;
         }
     }
 
-    /* 拷贝所有 CPU 的 Temp PT 映射以便新进程也能使用临时映射 */
+    /* 拷贝 Per-CPU 临时窗口 */
     for (uint32_t cpu = 0; cpu < CFG_MAX_CPUS; cpu++) {
         uint32_t pd_idx = BASE_PD_IDX - cpu;
         if (kpd_virt[pd_idx] & PDE_PRESENT) {

@@ -9,8 +9,9 @@
 #define ASM_SMP_ASM_H
 
 /* Trampoline 加载地址 (必须在 1MB 以下,且 4KB 对齐) */
-#define AP_TRAMPOLINE_ADDR 0x8000
-#define AP_TRAMPOLINE_SEG  (AP_TRAMPOLINE_ADDR >> 4) /* 实模式段地址 */
+#define AP_TRAMPOLINE_ADDR      0x8000
+#define AP_TRAMPOLINE_SEG       (AP_TRAMPOLINE_ADDR >> 4) /* 实模式段地址 */
+#define AP_TRAMPOLINE_STACK_TOP (AP_TRAMPOLINE_ADDR + 0x2000)
 
 /* LAPIC 地址 (使用 apic.h 中的定义更好,但汇编需要简单常量) */
 #define LAPIC_BASE_ADDR 0xFEE00000
