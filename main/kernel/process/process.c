@@ -11,6 +11,7 @@
 #include <xnix/errno.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
+#include <xnix/signal.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/thread.h>
@@ -668,5 +669,66 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
         current->wait_chan = current;
         sched_block(current->wait_chan);
         current->wait_chan = NULL;
+    }
+}
+
+int process_kill(pid_t pid, int sig) {
+    if (sig < 1 || sig >= NSIG) {
+        return -EINVAL;
+    }
+
+    struct process *proc = process_find_by_pid(pid);
+    if (!proc) {
+        return -ESRCH;
+    }
+
+    /* 不能向内核进程发信号 */
+    if (proc->pid == 0) {
+        process_unref(proc);
+        return -EPERM;
+    }
+
+    /* 设置待处理信号 */
+    uint32_t flags = cpu_irq_save();
+    proc->pending_signals |= sigmask(sig);
+    cpu_irq_restore(flags);
+
+    /* 如果进程在睡眠,唤醒它处理信号 */
+    struct thread *t = proc->threads;
+    if (t && t->wait_chan) {
+        sched_wakeup(t->wait_chan);
+    }
+
+    process_unref(proc);
+    return 0;
+}
+
+void process_check_signals(void) {
+    struct process *proc = process_get_current();
+    if (!proc || proc->pid == 0) {
+        return;
+    }
+
+    uint32_t pending = proc->pending_signals;
+    if (!pending) {
+        return;
+    }
+
+    /* 处理致命信号 */
+    if (pending & (sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGTERM) | sigmask(SIGSEGV))) {
+        int sig = 0;
+        if (pending & sigmask(SIGKILL)) {
+            sig = SIGKILL;
+        } else if (pending & sigmask(SIGINT)) {
+            sig = SIGINT;
+        } else if (pending & sigmask(SIGTERM)) {
+            sig = SIGTERM;
+        } else if (pending & sigmask(SIGSEGV)) {
+            sig = SIGSEGV;
+        }
+
+        proc->pending_signals &= ~sigmask(sig);
+        process_terminate_current(sig);
+        /* 不会返回 */
     }
 }

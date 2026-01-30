@@ -53,6 +53,7 @@
 #define SYS_WAITPID 320 /* 等待子进程: ebx=pid, ecx=status_ptr, edx=options */
 #define SYS_GETPID  321 /* 获取当前进程 PID */
 #define SYS_GETPPID 322 /* 获取父进程 PID */
+#define SYS_KILL    323 /* 发送信号: ebx=pid, ecx=sig */
 
 /* 同步原语(310-319) */
 #define SYS_MUTEX_CREATE  310 /* 创建互斥锁 */

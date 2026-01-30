@@ -62,6 +62,9 @@ struct process {
     /* 子进程退出等待 */
     void *wait_chan; /* 等待通道,用于 waitpid 阻塞 */
 
+    /* 信号 */
+    uint32_t pending_signals; /* 待处理信号位图 */
+
     /* 进程链表 */
     struct process *next; /* 全局进程链表 */
 
@@ -170,5 +173,19 @@ pid_t process_waitpid(pid_t pid, int *status, int options);
 
 /* waitpid options */
 #define WNOHANG 1 /* 非阻塞 */
+
+/**
+ * 向进程发送信号
+ * @param pid 目标进程 PID
+ * @param sig 信号编号
+ * @return 0 成功,<0 错误
+ */
+int process_kill(pid_t pid, int sig);
+
+/**
+ * 检查并处理当前进程的待处理信号
+ * 在返回用户态前调用
+ */
+void process_check_signals(void);
 
 #endif

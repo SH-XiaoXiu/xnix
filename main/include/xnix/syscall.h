@@ -69,5 +69,6 @@
 #define SYS_WAITPID 320
 #define SYS_GETPID  321
 #define SYS_GETPPID 322
+#define SYS_KILL    323
 
 #endif

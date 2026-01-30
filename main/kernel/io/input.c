@@ -6,8 +6,10 @@
  * 用户进程通过 syscall 读取.
  */
 
+#include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
+#include <xnix/signal.h>
 #include <xnix/sync.h>
 
 #define INPUT_BUF_SIZE 256
@@ -23,6 +25,18 @@ void input_init(void) {
 }
 
 int input_write(char c) {
+    /* Ctrl+C (ETX, 0x03) - 发送 SIGINT 给前台进程 */
+    if (c == 3) {
+        spin_lock(&input_lock);
+        struct thread *waiter = input_waiter;
+        spin_unlock(&input_lock);
+
+        if (waiter && waiter->owner) {
+            process_kill(waiter->owner->pid, SIGINT);
+        }
+        return 0;
+    }
+
     spin_lock(&input_lock);
 
     uint16_t next = (input_head + 1) % INPUT_BUF_SIZE;
@@ -54,6 +68,9 @@ int input_read(void) {
         spin_unlock(&input_lock);
 
         sched_block(&input_buf);
+
+        /* 被唤醒后检查信号 */
+        process_check_signals();
 
         spin_lock(&input_lock);
     }

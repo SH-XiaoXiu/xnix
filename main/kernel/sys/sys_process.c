@@ -70,6 +70,13 @@ static int32_t sys_getppid(const uint32_t *args) {
     return (int32_t)proc->parent->pid;
 }
 
+/* SYS_KILL: ebx=pid, ecx=sig */
+static int32_t sys_kill(const uint32_t *args) {
+    pid_t pid = (pid_t)args[0];
+    int   sig = (int)args[1];
+    return process_kill(pid, sig);
+}
+
 /* SYS_SPAWN: ebx=args */
 static int32_t sys_spawn(const uint32_t *args) {
     struct user_spawn_args *user_args = (struct user_spawn_args *)(uintptr_t)args[0];
@@ -120,4 +127,5 @@ void sys_process_init(void) {
     syscall_register(SYS_WAITPID, sys_waitpid, 3, "waitpid");
     syscall_register(SYS_GETPID, sys_getpid, 0, "getpid");
     syscall_register(SYS_GETPPID, sys_getppid, 0, "getppid");
+    syscall_register(SYS_KILL, sys_kill, 2, "kill");
 }
