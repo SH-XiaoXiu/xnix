@@ -70,6 +70,11 @@ static void vga_putc(char c) {
         vga_x = 0;
     } else if (c == '\t') {
         vga_x = (vga_x + 8) & ~7;
+    } else if (c == '\b') {
+        /* Backspace: 光标后退一格 */
+        if (vga_x > 0) {
+            vga_x--;
+        }
     } else {
         vga_buffer[vga_y * VGA_WIDTH + vga_x] = make_entry(c, vga_attr);
         vga_x++;

@@ -80,6 +80,7 @@ int main(void) {
 
     while (1) {
         printf("> ");
+        fflush(NULL);
 
         if (gets_s(line, sizeof(line)) == NULL) {
             continue;
