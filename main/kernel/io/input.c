@@ -20,19 +20,38 @@ static uint16_t       input_tail = 0;
 static spinlock_t     input_lock;
 static struct thread *input_waiter = NULL;
 
+/* 前台进程 PID(Ctrl+C 发送目标) */
+static pid_t foreground_pid = 0;
+
 void input_init(void) {
     spin_init(&input_lock);
+}
+
+void input_set_foreground(pid_t pid) {
+    foreground_pid = pid;
+}
+
+pid_t input_get_foreground(void) {
+    return foreground_pid;
 }
 
 int input_write(char c) {
     /* Ctrl+C (ETX, 0x03) - 发送 SIGINT 给前台进程 */
     if (c == 3) {
-        spin_lock(&input_lock);
-        struct thread *waiter = input_waiter;
-        spin_unlock(&input_lock);
+        pid_t target = foreground_pid;
 
-        if (waiter && waiter->owner) {
-            process_kill(waiter->owner->pid, SIGINT);
+        /* 没有前台进程时,发送给 input_waiter */
+        if (target <= 1) {
+            spin_lock(&input_lock);
+            struct thread *waiter = input_waiter;
+            spin_unlock(&input_lock);
+            if (waiter && waiter->owner) {
+                target = waiter->owner->pid;
+            }
+        }
+
+        if (target > 1) {
+            process_kill(target, SIGINT);
         }
         return 0;
     }

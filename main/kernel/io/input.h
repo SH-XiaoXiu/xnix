@@ -6,6 +6,8 @@
 #ifndef KERNEL_IO_INPUT_H
 #define KERNEL_IO_INPUT_H
 
+#include <xnix/types.h>
+
 /**
  * 初始化输入子系统
  */
@@ -25,5 +27,15 @@ int input_write(char c);
  * @return 字符
  */
 int input_read(void);
+
+/**
+ * 设置前台进程 PID(Ctrl+C 发送目标)
+ */
+void input_set_foreground(pid_t pid);
+
+/**
+ * 获取前台进程 PID
+ */
+pid_t input_get_foreground(void);
 
 #endif /* KERNEL_IO_INPUT_H */
