@@ -66,11 +66,12 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
     target_include_directories(${DRIVER_ELF} PRIVATE
             ${CMAKE_SOURCE_DIR}/user/libs/libc/include
             ${CMAKE_SOURCE_DIR}/user/libs/libudm/include
+            ${CMAKE_SOURCE_DIR}/user/libs/libpthread/include
             ${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}
             ${CMAKE_SOURCE_DIR}/main/include
             ${CMAKE_BINARY_DIR}/include
     )
-    target_link_libraries(${DRIVER_ELF} PRIVATE c udm)
+    target_link_libraries(${DRIVER_ELF} PRIVATE c udm pthread)
     target_link_options(${DRIVER_ELF} PRIVATE
             -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/user.ld -nostdlib
     )
@@ -84,6 +85,10 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
     list(APPEND _DRIVER_NAMES ${DRIVER_NAME})
 endforeach ()
 
+# 按字母序排序（与 GLOB 结果一致）
+list(SORT _DRIVER_NAMES)
+list(SORT _DRIVER_TARGETS)
+
 # 导出变量
 set(DRIVER_TARGETS "${_DRIVER_TARGETS}" CACHE INTERNAL "List of driver targets" FORCE)
 set(DRIVER_NAMES "${_DRIVER_NAMES}" CACHE INTERNAL "List of driver names" FORCE)
@@ -91,3 +96,24 @@ set(DRIVER_TARGETS "${_DRIVER_TARGETS}" PARENT_SCOPE)
 set(DRIVER_NAMES "${_DRIVER_NAMES}" PARENT_SCOPE)
 
 message(STATUS "Driver targets: ${_DRIVER_TARGETS}")
+
+# 生成模块索引头文件
+# 模块 0 = init, 驱动从模块 1 开始
+set(MODULE_INDEX_CONTENT "/* 自动生成，勿手动修改 */\n")
+string(APPEND MODULE_INDEX_CONTENT "#ifndef _MODULE_INDEX_H\n#define _MODULE_INDEX_H\n\n")
+string(APPEND MODULE_INDEX_CONTENT "#define MODULE_INIT 0\n")
+
+set(_IDX 1)
+foreach (_NAME ${_DRIVER_NAMES})
+    string(TOUPPER ${_NAME} _UPPER)
+    string(APPEND MODULE_INDEX_CONTENT "#define MODULE_${_UPPER} ${_IDX}\n")
+    math(EXPR _IDX "${_IDX} + 1")
+endforeach ()
+
+# shell 在驱动之后
+string(APPEND MODULE_INDEX_CONTENT "#define MODULE_SHELL ${_IDX}\n")
+math(EXPR _IDX "${_IDX} + 1")
+string(APPEND MODULE_INDEX_CONTENT "#define MODULE_DEMO_BASE ${_IDX}\n")
+string(APPEND MODULE_INDEX_CONTENT "\n#endif /* _MODULE_INDEX_H */\n")
+
+file(WRITE ${CMAKE_BINARY_DIR}/include/module_index.h "${MODULE_INDEX_CONTENT}")

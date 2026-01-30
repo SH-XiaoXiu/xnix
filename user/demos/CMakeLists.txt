@@ -10,7 +10,7 @@
 #   -DXNIX_DEMO_<NAME>=OFF        禁用指定 demo (如 -DXNIX_DEMO_HELLO=OFF)
 #
 
-option(XNIX_BUILD_DEMOS "Build demo programs" OFF)
+option(XNIX_BUILD_DEMOS "Build demo programs" ON)
 
 if (NOT XNIX_BUILD_DEMOS)
     message(STATUS "Demo programs disabled")

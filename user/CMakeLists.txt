@@ -35,6 +35,12 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
 add_subdirectory(libs)
 
 # ============================================
+# UDM 驱动 (动态扫描，生成 module_index.h)
+# 必须在 init 之前处理，因为 init 依赖 module_index.h
+# ============================================
+add_subdirectory(drivers)
+
+# ============================================
 # init.elf
 # ============================================
 add_executable(init.elf
@@ -56,11 +62,6 @@ target_link_options(init.elf PRIVATE
 add_custom_command(TARGET init.elf POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:init.elf> ${CMAKE_BINARY_DIR}/init.elf
 )
-
-# ============================================
-# UDM 驱动 (动态扫描)
-# ============================================
-add_subdirectory(drivers)
 
 # ============================================
 # 应用程序 (动态扫描)

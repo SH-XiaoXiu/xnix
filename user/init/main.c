@@ -14,13 +14,10 @@
 #include <unistd.h>
 #include <xnix/syscall.h>
 
+/* 自动生成的模块索引(按字母序排列驱动) */
+#include <module_index.h>
 /* 自动生成的 demo 模块列表 */
 #include <demo_modules.h>
-
-/* 模块索引约定: 0=init, 1=seriald, 2=kbd, 3=shell, 4+=demos */
-#define MODULE_SERIALD 1
-#define MODULE_KBD     2
-#define MODULE_SHELL   3
 
 /* init 继承的 capability handles */
 #define CAP_SERIAL_EP 0
