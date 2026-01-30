@@ -341,7 +341,7 @@ void process_terminate_current(int signal) {
         panic("Init process terminated by signal %d!", signal);
     }
 
-    klog(LOG_ERR, "Process %d '%s' terminated (signal %d)", proc->pid,
+    pr_err("Process %d '%s' terminated (signal %d)", proc->pid,
          proc->name ? proc->name : "?", signal);
 
     proc->state     = PROCESS_ZOMBIE;

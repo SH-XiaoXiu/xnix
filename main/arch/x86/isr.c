@@ -43,7 +43,7 @@ void isr_handler(struct irq_frame *frame) {
 
     if (from_user) {
         /* 用户态异常 → 终止进程 */
-        klog(LOG_ERR, "User exception: %s at EIP=0x%x", exception_names[frame->int_no], frame->eip);
+        pr_err("User exception: %s at EIP=0x%x", exception_names[frame->int_no], frame->eip);
         process_terminate_current(frame->int_no);
         /* 不返回 */
     }
@@ -51,12 +51,12 @@ void isr_handler(struct irq_frame *frame) {
     /* 内核态异常 → panic(保留现有逻辑) */
 
     /* 打印通用寄存器 */
-    klog(LOG_ERR, "--- Register Dump ---");
-    klog(LOG_ERR, "EAX: 0x%08x  EBX: 0x%08x  ECX: 0x%08x  EDX: 0x%08x", frame->eax, frame->ebx,
+    pr_err("--- Register Dump ---");
+    pr_err("EAX: 0x%08x  EBX: 0x%08x  ECX: 0x%08x  EDX: 0x%08x", frame->eax, frame->ebx,
          frame->ecx, frame->edx);
-    klog(LOG_ERR, "ESI: 0x%08x  EDI: 0x%08x  EBP: 0x%08x  ESP: 0x%08x", frame->esi, frame->edi,
+    pr_err("ESI: 0x%08x  EDI: 0x%08x  EBP: 0x%08x  ESP: 0x%08x", frame->esi, frame->edi,
          frame->ebp, frame->esp);
-    klog(LOG_ERR, "DS:  0x%04x      CS:  0x%04x      EFLAGS: 0x%08x", frame->ds, frame->cs,
+    pr_err("DS:  0x%04x      CS:  0x%04x      EFLAGS: 0x%08x", frame->ds, frame->cs,
          frame->eflags);
 
     panic("KERNEL EXCEPTION: %s (int=%d, err=0x%x) at EIP=0x%x", exception_names[frame->int_no],
