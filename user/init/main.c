@@ -132,12 +132,8 @@ int main(void) {
     printf("[init] System ready\n");
 
     /* 主循环 */
-    int i = 0;
     while (1) {
-        sleep(5);
-        i++;
-        printf("[init] heartbeat %d\n", i);
+        usleep(200);
     }
-
     return 0;
 }

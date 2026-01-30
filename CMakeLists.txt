@@ -109,9 +109,15 @@ set(ISO_DIR ${CMAKE_BINARY_DIR}/iso)
 set(GRUB_CFG_CONTENT "set timeout=0\nset default=0\nmenuentry \"Xnix\" {\n")
 string(APPEND GRUB_CFG_CONTENT "  multiboot /boot/xnix.elf xnix.initmod=0 xnix.serialmod=1\n")
 string(APPEND GRUB_CFG_CONTENT "  module /boot/init.elf\n")
-string(APPEND GRUB_CFG_CONTENT "  module /boot/seriald.elf\n")
-string(APPEND GRUB_CFG_CONTENT "  module /boot/kbd.elf\n")
-string(APPEND GRUB_CFG_CONTENT "  module /boot/shell.elf\n")
+# 动态添加 UDM 驱动
+foreach (DRIVER_ELF ${DRIVER_TARGETS})
+    string(APPEND GRUB_CFG_CONTENT "  module /boot/${DRIVER_ELF}\n")
+endforeach ()
+# 动态添加应用程序
+foreach (APP_ELF ${APP_TARGETS})
+    string(APPEND GRUB_CFG_CONTENT "  module /boot/${APP_ELF}\n")
+endforeach ()
+# 动态添加 demo 程序
 foreach(DEMO_ELF ${DEMO_TARGETS})
     string(APPEND GRUB_CFG_CONTENT "  module /boot/${DEMO_ELF}\n")
 endforeach()
@@ -119,16 +125,30 @@ string(APPEND GRUB_CFG_CONTENT "}\n")
 file(MAKE_DIRECTORY ${ISO_DIR}/boot/grub)
 file(WRITE ${ISO_DIR}/boot/grub/grub.cfg "${GRUB_CFG_CONTENT}")
 
-# 构建 demo 依赖和复制命令列表
-set(ISO_DEPENDS xnix.elf init.elf seriald.elf kbd.elf shell.elf)
+# 构建依赖和复制命令列表
+set(ISO_DEPENDS xnix.elf init.elf)
 set(ISO_COPY_COMMANDS
     COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:xnix.elf> ${ISO_DIR}/boot/xnix.elf
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/init.elf ${ISO_DIR}/boot/init.elf
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/seriald.elf ${ISO_DIR}/boot/seriald.elf
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/kbd.elf ${ISO_DIR}/boot/kbd.elf
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/shell.elf ${ISO_DIR}/boot/shell.elf
 )
 
+# 添加 UDM 驱动
+foreach (DRIVER_ELF ${DRIVER_TARGETS})
+    list(APPEND ISO_DEPENDS ${DRIVER_ELF})
+    list(APPEND ISO_COPY_COMMANDS
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/${DRIVER_ELF} ${ISO_DIR}/boot/${DRIVER_ELF}
+    )
+endforeach ()
+
+# 添加应用程序
+foreach (APP_ELF ${APP_TARGETS})
+    list(APPEND ISO_DEPENDS ${APP_ELF})
+    list(APPEND ISO_COPY_COMMANDS
+            COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/${APP_ELF} ${ISO_DIR}/boot/${APP_ELF}
+    )
+endforeach ()
+
+# 添加 demo 程序
 foreach(DEMO_ELF ${DEMO_TARGETS})
     list(APPEND ISO_DEPENDS ${DEMO_ELF})
     list(APPEND ISO_COPY_COMMANDS
@@ -142,7 +162,7 @@ add_custom_command(
     ${ISO_COPY_COMMANDS}
     COMMAND grub-mkrescue -o ${CMAKE_BINARY_DIR}/xnix.iso ${ISO_DIR} 2>/dev/null || true
     DEPENDS ${ISO_DEPENDS}
-    COMMENT "创建可引导 ISO (demos: ${DEMO_TARGETS})..."
+        COMMENT "创建可引导 ISO..."
 )
 add_custom_target(iso DEPENDS ${CMAKE_BINARY_DIR}/xnix.iso)
 

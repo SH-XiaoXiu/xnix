@@ -1,5 +1,24 @@
 # 用户态程序构建
+#
+# 目录结构:
+#   libs/       - 用户态库 (libc, libpthread, libudm)
+#   init/       - init 进程
+#   drivers/    - UDM 驱动 (动态扫描)
+#   apps/       - 应用程序 (动态扫描)
+#   demos/      - 演示程序 (动态扫描)
+#
+# 全局开关:
+#   -DXNIX_BUILD_DRIVERS=OFF    禁用所有 UDM 驱动
+#   -DXNIX_BUILD_APPS=OFF       禁用所有应用
+#   -DXNIX_BUILD_DEMOS=OFF      禁用所有 demo
+#
+# 单独模块开关 (默认 ON):
+#   -DXNIX_DRIVER_<NAME>=OFF    禁用指定驱动
+#   -DXNIX_APP_<NAME>=OFF       禁用指定应用
+#   -DXNIX_DEMO_<NAME>=OFF      禁用指定 demo
+#
 
+# 通用编译选项
 set(USER_C_FLAGS
     -m32 -march=i386
     -ffreestanding -nostdlib -fno-builtin -fno-stack-protector
@@ -7,58 +26,25 @@ set(USER_C_FLAGS
     -g
 )
 
-# ============================================
-# libc - 用户态标准库
-# ============================================
-file(GLOB_RECURSE LIBC_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/libc/src/*.c
-)
-
-add_library(c STATIC
-        ${LIBC_SOURCES}
-)
-
-target_compile_options(c PRIVATE ${USER_C_FLAGS})
-target_include_directories(c PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/libc/include
-        ${CMAKE_SOURCE_DIR}/main/include  # for xnix/udm/*.h
-)
+# 确保 include 目录存在
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
 
 # ============================================
-# libpthread - 用户态多线程库
+# 用户态库
 # ============================================
-add_subdirectory(libpthread)
-
-# ============================================
-# libudm - UDM 框架库
-# ============================================
-file(GLOB_RECURSE LIBUDM_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/libudm/src/*.c
-)
-
-add_library(udm STATIC
-        ${LIBUDM_SOURCES}
-)
-
-target_compile_options(udm PRIVATE ${USER_C_FLAGS})
-target_include_directories(udm PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/libudm/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/libc/include
-        ${CMAKE_SOURCE_DIR}/main/include
-)
-target_link_libraries(udm PUBLIC c)
+add_subdirectory(libs)
 
 # ============================================
 # init.elf
 # ============================================
 add_executable(init.elf
-        libc/src/crt0.s
-    init.c
+        libs/libc/src/crt0.s
+        init/main.c
 )
 
 target_compile_options(init.elf PRIVATE ${USER_C_FLAGS})
 target_include_directories(init.elf PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/libc/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/libc/include
         ${CMAKE_SOURCE_DIR}/main/include
         ${CMAKE_BINARY_DIR}/include
 )
@@ -72,87 +58,24 @@ add_custom_command(TARGET init.elf POST_BUILD
 )
 
 # ============================================
-# seriald.elf - UDM 串口驱动
+# UDM 驱动 (动态扫描)
 # ============================================
-add_executable(seriald.elf
-        libc/src/crt0.s
-        drivers/seriald/main.c
-        drivers/seriald/serial.c
-)
-
-target_compile_options(seriald.elf PRIVATE ${USER_C_FLAGS})
-target_include_directories(seriald.elf PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/libc/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/libudm/include
-        ${CMAKE_SOURCE_DIR}/main/include
-        ${CMAKE_BINARY_DIR}/include
-)
-target_link_libraries(seriald.elf PRIVATE c udm)
-target_link_options(seriald.elf PRIVATE
-        -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/user.ld -nostdlib
-)
-
-add_custom_command(TARGET seriald.elf POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:seriald.elf> ${CMAKE_BINARY_DIR}/seriald.elf
-)
+add_subdirectory(drivers)
 
 # ============================================
-# kbd.elf - UDM 键盘驱动
+# 应用程序 (动态扫描)
 # ============================================
-add_executable(kbd.elf
-        libc/src/crt0.s
-        drivers/kbd/main.c
-        drivers/kbd/scancode.c
-)
-
-target_compile_options(kbd.elf PRIVATE ${USER_C_FLAGS})
-target_include_directories(kbd.elf PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/libc/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/libudm/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/drivers/kbd
-        ${CMAKE_SOURCE_DIR}/main/include
-        ${CMAKE_BINARY_DIR}/include
-)
-target_link_libraries(kbd.elf PRIVATE c udm)
-target_link_options(kbd.elf PRIVATE
-        -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/user.ld -nostdlib
-)
-
-add_custom_command(TARGET kbd.elf POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:kbd.elf> ${CMAKE_BINARY_DIR}/kbd.elf
-)
+add_subdirectory(apps)
 
 # ============================================
-# shell.elf - Shell
+# Demo 程序 (动态扫描)
 # ============================================
-add_executable(shell.elf
-        libc/src/crt0.s
-        shell/main.c
-)
+add_subdirectory(demos)
 
-target_compile_options(shell.elf PRIVATE ${USER_C_FLAGS})
-target_include_directories(shell.elf PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/libc/include
-        ${CMAKE_SOURCE_DIR}/main/include
-        ${CMAKE_BINARY_DIR}/include
-)
-target_link_libraries(shell.elf PRIVATE c)
-target_link_options(shell.elf PRIVATE
-        -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/user.ld -nostdlib
-)
-
-add_custom_command(TARGET shell.elf POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:shell.elf> ${CMAKE_BINARY_DIR}/shell.elf
-)
-
-# ============================================
-# Demo 程序 (自动发现)
-# ============================================
-# 确保 include 目录存在
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
-
-add_subdirectory(demo)
-
-# 传递 demo 变量给父级
+# 传递变量给父级
+set(DRIVER_TARGETS "${DRIVER_TARGETS}" PARENT_SCOPE)
+set(DRIVER_NAMES "${DRIVER_NAMES}" PARENT_SCOPE)
+set(APP_TARGETS "${APP_TARGETS}" PARENT_SCOPE)
+set(APP_NAMES "${APP_NAMES}" PARENT_SCOPE)
 set(DEMO_TARGETS "${DEMO_TARGETS}" PARENT_SCOPE)
 set(DEMO_NAMES "${DEMO_NAMES}" PARENT_SCOPE)
