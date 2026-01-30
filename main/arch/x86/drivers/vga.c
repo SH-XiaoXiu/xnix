@@ -5,12 +5,22 @@
  * @date 2026-01-20
  */
 
+#include <arch/cpu.h>
+
 #include <xnix/console.h>
 #include <xnix/types.h>
 
 #define VGA_BUFFER 0xB8000
 #define VGA_WIDTH  80
 #define VGA_HEIGHT 25
+
+/* VGA CRT 控制器端口 */
+#define VGA_CRTC_INDEX   0x3D4
+#define VGA_CRTC_DATA    0x3D5
+#define VGA_CURSOR_HIGH  0x0E
+#define VGA_CURSOR_LOW   0x0F
+#define VGA_CURSOR_START 0x0A
+#define VGA_CURSOR_END   0x0B
 
 /* VGA 颜色 */
 enum vga_color {
@@ -40,6 +50,23 @@ static inline uint8_t make_attr(uint8_t fg, uint8_t bg) {
     return fg | (bg << 4);
 }
 
+/* 更新硬件光标位置 */
+static void vga_update_cursor(void) {
+    uint16_t pos = vga_y * VGA_WIDTH + vga_x;
+    outb(VGA_CRTC_INDEX, VGA_CURSOR_HIGH);
+    outb(VGA_CRTC_DATA, (pos >> 8) & 0xFF);
+    outb(VGA_CRTC_INDEX, VGA_CURSOR_LOW);
+    outb(VGA_CRTC_DATA, pos & 0xFF);
+}
+
+/* 启用光标(扫描线 14-15,下划线样式) */
+static void vga_enable_cursor(void) {
+    outb(VGA_CRTC_INDEX, VGA_CURSOR_START);
+    outb(VGA_CRTC_DATA, 14);
+    outb(VGA_CRTC_INDEX, VGA_CURSOR_END);
+    outb(VGA_CRTC_DATA, 15);
+}
+
 static inline uint16_t make_entry(char c, uint8_t attr) {
     return (uint16_t)c | ((uint16_t)attr << 8);
 }
@@ -60,6 +87,8 @@ static void vga_init(void) {
     vga_x      = 0;
     vga_y      = 0;
     vga_attr   = make_attr(VGA_LIGHT_GREY, VGA_BLACK);
+    vga_enable_cursor();
+    vga_update_cursor();
 }
 
 static void vga_putc(char c) {
@@ -88,6 +117,7 @@ static void vga_putc(char c) {
         vga_scroll();
         vga_y = VGA_HEIGHT - 1;
     }
+    vga_update_cursor();
 }
 
 static void vga_puts(const char *s) {
@@ -112,6 +142,7 @@ static void vga_clear(void) {
     }
     vga_x = 0;
     vga_y = 0;
+    vga_update_cursor();
 }
 
 /* 导出驱动结构 */

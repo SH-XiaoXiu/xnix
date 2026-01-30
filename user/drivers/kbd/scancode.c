@@ -11,6 +11,7 @@
 static bool shift_held = false;
 static bool ctrl_held  = false;
 static bool caps_lock  = false;
+static bool e0_prefix  = false;
 
 /* Scancode Set 1 映射表(无修饰) */
 static const char scancode_normal[128] = {
@@ -47,11 +48,53 @@ static const char scancode_shift[128] = {
 #define SC_LCTRL_PRESS    0x1D
 #define SC_LCTRL_RELEASE  0x9D
 #define SC_CAPS_PRESS     0x3A
+#define SC_E0_PREFIX      0xE0
+
+/* E0 扩展扫描码 */
+#define SC_E0_UP    0x48
+#define SC_E0_DOWN  0x50
+#define SC_E0_LEFT  0x4B
+#define SC_E0_RIGHT 0x4D
+
+/* 返回值编码:
+ * >= 0: 普通字符
+ * -1: 无输出
+ * -2 ~ -5: 方向键 (上/下/左/右)
+ */
+#define KEY_UP    (-2)
+#define KEY_DOWN  (-3)
+#define KEY_LEFT  (-4)
+#define KEY_RIGHT (-5)
 
 int scancode_to_char(uint8_t scancode) {
+    /* E0 前缀 */
+    if (scancode == SC_E0_PREFIX) {
+        e0_prefix = true;
+        return -1;
+    }
+
     /* 检查是否为释放码(最高位为 1) */
     bool    release = (scancode & 0x80) != 0;
     uint8_t code    = scancode & 0x7F;
+
+    /* 处理 E0 扩展码 */
+    if (e0_prefix) {
+        e0_prefix = false;
+        if (release) {
+            return -1;
+        }
+        switch (code) {
+        case SC_E0_UP:
+            return KEY_UP;
+        case SC_E0_DOWN:
+            return KEY_DOWN;
+        case SC_E0_LEFT:
+            return KEY_LEFT;
+        case SC_E0_RIGHT:
+            return KEY_RIGHT;
+        }
+        return -1;
+    }
 
     /* 处理修饰键 */
     switch (scancode) {

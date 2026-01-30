@@ -37,8 +37,15 @@ int main(void) {
         /* 翻译扫描码 */
         int c = scancode_to_char(scancode);
         if (c >= 0) {
-            /* 写入内核输入队列 */
+            /* 普通字符:写入内核输入队列 */
             sys_input_write((char)c);
+        } else if (c <= KEY_UP && c >= KEY_RIGHT) {
+            /* 方向键:发送 ANSI 转义序列 ESC [ A/B/C/D */
+            static const char arrow_codes[] = {'A', 'B', 'D', 'C'}; /* 上下左右 */
+            int               idx           = -(c + 2); /* KEY_UP=-2 -> 0, KEY_DOWN=-3 -> 1, etc */
+            sys_input_write('\033');
+            sys_input_write('[');
+            sys_input_write(arrow_codes[idx]);
         }
     }
 
