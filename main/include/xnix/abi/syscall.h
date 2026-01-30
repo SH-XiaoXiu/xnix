@@ -49,6 +49,11 @@
 #define SYS_THREAD_YIELD  304 /* 主动让出 CPU */
 #define SYS_THREAD_DETACH 305 /* 分离线程: ebx=tid */
 
+/* 进程管理(320-329) */
+#define SYS_WAITPID 320 /* 等待子进程: ebx=pid, ecx=status_ptr, edx=options */
+#define SYS_GETPID  321 /* 获取当前进程 PID */
+#define SYS_GETPPID 322 /* 获取父进程 PID */
+
 /* 同步原语(310-319) */
 #define SYS_MUTEX_CREATE  310 /* 创建互斥锁 */
 #define SYS_MUTEX_DESTROY 311 /* 销毁互斥锁: ebx=handle */

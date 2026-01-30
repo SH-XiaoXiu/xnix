@@ -34,6 +34,42 @@ static int32_t sys_exit(const uint32_t *args) {
     return 0;
 }
 
+/* SYS_WAITPID: ebx=pid, ecx=status_ptr, edx=options */
+static int32_t sys_waitpid(const uint32_t *args) {
+    pid_t pid     = (pid_t)args[0];
+    int  *user_st = (int *)(uintptr_t)args[1];
+    int   options = (int)args[2];
+
+    int   status;
+    pid_t ret = process_waitpid(pid, &status, options);
+
+    if (ret > 0 && user_st) {
+        int err = copy_to_user(user_st, &status, sizeof(status));
+        if (err < 0) {
+            return err;
+        }
+    }
+
+    return (int32_t)ret;
+}
+
+/* SYS_GETPID */
+static int32_t sys_getpid(const uint32_t *args) {
+    (void)args;
+    struct process *proc = process_get_current();
+    return proc ? (int32_t)proc->pid : 0;
+}
+
+/* SYS_GETPPID */
+static int32_t sys_getppid(const uint32_t *args) {
+    (void)args;
+    struct process *proc = process_get_current();
+    if (!proc || !proc->parent) {
+        return 0;
+    }
+    return (int32_t)proc->parent->pid;
+}
+
 /* SYS_SPAWN: ebx=args */
 static int32_t sys_spawn(const uint32_t *args) {
     struct user_spawn_args *user_args = (struct user_spawn_args *)(uintptr_t)args[0];
@@ -81,4 +117,7 @@ static int32_t sys_spawn(const uint32_t *args) {
 void sys_process_init(void) {
     syscall_register(SYS_EXIT, sys_exit, 1, "exit");
     syscall_register(SYS_SPAWN, sys_spawn, 1, "spawn");
+    syscall_register(SYS_WAITPID, sys_waitpid, 3, "waitpid");
+    syscall_register(SYS_GETPID, sys_getpid, 0, "getpid");
+    syscall_register(SYS_GETPPID, sys_getppid, 0, "getppid");
 }

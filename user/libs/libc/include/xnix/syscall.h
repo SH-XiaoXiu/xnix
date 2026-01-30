@@ -136,6 +136,21 @@ static inline int sys_spawn(struct spawn_args *args) {
     return syscall1(SYS_SPAWN, (uint32_t)(uintptr_t)args);
 }
 
+/* waitpid options */
+#define WNOHANG 1
+
+static inline int sys_waitpid(int pid, int *status, int options) {
+    return syscall3(SYS_WAITPID, (uint32_t)pid, (uint32_t)(uintptr_t)status, (uint32_t)options);
+}
+
+static inline int sys_getpid(void) {
+    return syscall0(SYS_GETPID);
+}
+
+static inline int sys_getppid(void) {
+    return syscall0(SYS_GETPPID);
+}
+
 /*
  * IRQ 绑定
  */

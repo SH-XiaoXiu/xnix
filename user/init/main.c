@@ -114,8 +114,18 @@ static void start_demos(void) {
 #endif
 }
 
+static void reap_children(void) {
+    int status;
+    int pid;
+
+    /* 非阻塞收割所有已退出的子进程 */
+    while ((pid = sys_waitpid(-1, &status, WNOHANG)) > 0) {
+        printf("[init] Reaped child process %d (status=%d)\n", pid, status);
+    }
+}
+
 int main(void) {
-    printf("[init] init process started\n");
+    printf("[init] init process started (PID %d)\n", sys_getpid());
 
     /* 启动 seriald 服务 */
     start_seriald();
@@ -131,9 +141,10 @@ int main(void) {
 
     printf("[init] System ready\n");
 
-    /* 主循环 */
+    /* 收割僵尸子进程 */
     while (1) {
-        usleep(200);
+        reap_children();
+        msleep(100);
     }
     return 0;
 }

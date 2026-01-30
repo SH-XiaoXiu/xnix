@@ -59,6 +59,9 @@ struct process {
     struct process *children;     /* 子进程链表 */
     struct process *next_sibling; /* 兄弟进程链表 */
 
+    /* 子进程退出等待 */
+    void *wait_chan; /* 等待通道,用于 waitpid 阻塞 */
+
     /* 进程链表 */
     struct process *next; /* 全局进程链表 */
 
@@ -147,5 +150,25 @@ pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_siz
  * @param signal 导致终止的信号号(用于日志和 exit_code)
  */
 void process_terminate_current(int signal);
+
+/**
+ * 进程退出处理
+ * 设置退出码,通知父进程,处理子进程托管
+ * @param proc 退出的进程
+ * @param exit_code 退出码
+ */
+void process_exit(struct process *proc, int exit_code);
+
+/**
+ * 等待子进程退出
+ * @param pid 目标子进程 PID,-1 表示任意子进程
+ * @param status 输出退出状态
+ * @param options WNOHANG 等选项
+ * @return 退出的子进程 PID,0 表示无子进程退出(WNOHANG),<0 错误
+ */
+pid_t process_waitpid(pid_t pid, int *status, int options);
+
+/* waitpid options */
+#define WNOHANG 1 /* 非阻塞 */
 
 #endif

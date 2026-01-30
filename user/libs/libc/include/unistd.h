@@ -19,7 +19,7 @@ static inline unsigned int sleep(unsigned int seconds) {
 /**
  * 睡眠指定毫秒数
  */
-static inline int usleep(unsigned int ms) {
+static inline int msleep(unsigned int ms) {
     sys_sleep(ms);
     return 0;
 }

@@ -266,6 +266,16 @@ void thread_exit(int code) {
 
         pr_info("Thread %d '%s' exited with code %d", current->tid, current->name, code);
 
+        /* 检查是否是进程的最后一个线程 */
+        struct process *proc = current->owner;
+        if (proc && proc->pid != 0) {
+            /* 检查进程是否只剩一个线程(当前线程) */
+            bool last_thread = (proc->thread_count <= 1);
+            if (last_thread) {
+                process_exit(proc, code);
+            }
+        }
+
         /* 从运行队列移除 */
         if (current_policy && current_policy->dequeue) {
             current_policy->dequeue(current);

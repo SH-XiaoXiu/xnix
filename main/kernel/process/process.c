@@ -8,10 +8,12 @@
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
+#include <xnix/errno.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
+#include <xnix/thread.h>
 
 #include "arch/cpu.h"
 
@@ -465,6 +467,17 @@ pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_siz
     }
 
     struct process *creator = process_get_current();
+
+    /* 设置父子关系 */
+    proc->parent = creator;
+    if (creator) {
+        uint32_t flags = cpu_irq_save();
+        spin_lock(&process_list_lock);
+        proc->next_sibling = creator->children;
+        creator->children  = proc;
+        spin_unlock(&process_list_lock);
+        cpu_irq_restore(flags);
+    }
     for (uint32_t i = 0; i < inherit_count; i++) {
         cap_handle_t dup =
             cap_duplicate_to(creator, inherit_caps[i].src, proc, inherit_caps[i].rights);
@@ -507,4 +520,153 @@ pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_siz
     process_add_thread(proc, (struct thread *)t);
     pr_ok("Spawned %s process (PID %d)", name ? name : "?", proc->pid);
     return proc->pid;
+}
+
+/**
+ * 从父进程的子进程链表中移除
+ */
+static void process_remove_from_parent(struct process *proc) {
+    struct process *parent = proc->parent;
+    if (!parent) {
+        return;
+    }
+
+    uint32_t flags = cpu_irq_save();
+    spin_lock(&process_list_lock);
+
+    struct process **pp = &parent->children;
+    while (*pp) {
+        if (*pp == proc) {
+            *pp = proc->next_sibling;
+            break;
+        }
+        pp = &(*pp)->next_sibling;
+    }
+    proc->parent       = NULL;
+    proc->next_sibling = NULL;
+
+    spin_unlock(&process_list_lock);
+    cpu_irq_restore(flags);
+}
+
+/**
+ * 将子进程托管给 init 进程
+ */
+static void process_reparent_children(struct process *proc) {
+    if (!proc->children) {
+        return;
+    }
+
+    /* 找到 init 进程(PID 1) */
+    struct process *init = process_find_by_pid(1);
+    if (!init) {
+        /* 没有 init 进程,直接断开 */
+        proc->children = NULL;
+        return;
+    }
+
+    uint32_t flags = cpu_irq_save();
+    spin_lock(&process_list_lock);
+
+    /* 将所有子进程挂到 init 下 */
+    struct process *child = proc->children;
+    while (child) {
+        struct process *next = child->next_sibling;
+        child->parent        = init;
+        child->next_sibling  = init->children;
+        init->children       = child;
+
+        /* 如果子进程已经是僵尸,唤醒 init */
+        if (child->state == PROCESS_ZOMBIE && init->wait_chan) {
+            sched_wakeup(init->wait_chan);
+        }
+        child = next;
+    }
+    proc->children = NULL;
+
+    spin_unlock(&process_list_lock);
+    cpu_irq_restore(flags);
+
+    process_unref(init);
+}
+
+void process_exit(struct process *proc, int exit_code) {
+    if (!proc || proc->pid == 0) {
+        return;
+    }
+
+    proc->state     = PROCESS_ZOMBIE;
+    proc->exit_code = exit_code;
+
+    /* 将子进程托管给 init */
+    process_reparent_children(proc);
+
+    /* 通知父进程 */
+    struct process *parent = proc->parent;
+    if (parent && parent->wait_chan) {
+        sched_wakeup(parent->wait_chan);
+    }
+}
+
+pid_t process_waitpid(pid_t pid, int *status, int options) {
+    struct process *current = process_get_current();
+    if (!current) {
+        return -ESRCH;
+    }
+
+    while (1) {
+        uint32_t flags = cpu_irq_save();
+        spin_lock(&process_list_lock);
+
+        /* 查找匹配的僵尸子进程 */
+        struct process *child     = current->children;
+        struct process *prev      = NULL;
+        struct process *found     = NULL;
+        bool            has_child = false;
+
+        while (child) {
+            if (pid == -1 || child->pid == pid) {
+                has_child = true;
+                if (child->state == PROCESS_ZOMBIE) {
+                    found = child;
+                    /* 从子进程链表移除 */
+                    if (prev) {
+                        prev->next_sibling = child->next_sibling;
+                    } else {
+                        current->children = child->next_sibling;
+                    }
+                    break;
+                }
+            }
+            prev  = child;
+            child = child->next_sibling;
+        }
+
+        spin_unlock(&process_list_lock);
+        cpu_irq_restore(flags);
+
+        if (found) {
+            pid_t ret_pid = found->pid;
+            if (status) {
+                *status = found->exit_code;
+            }
+            found->parent       = NULL;
+            found->next_sibling = NULL;
+            process_unref(found);
+            return ret_pid;
+        }
+
+        if (!has_child) {
+            return -ECHILD;
+        }
+
+        if (options & WNOHANG) {
+            return 0;
+        }
+
+        /* 阻塞等待子进程退出 */
+        current->wait_chan = current;
+        sched_block(current->wait_chan);
+        current->wait_chan = NULL;
+    }
 }

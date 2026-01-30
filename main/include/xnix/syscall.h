@@ -47,6 +47,13 @@
 #define SYS_MODULE_COUNT 12
 #define SYS_WRITE        13
 
+#define SYS_IRQ_BIND   50
+#define SYS_IRQ_UNBIND 51
+#define SYS_IRQ_READ   52
+
+#define SYS_INPUT_WRITE 60
+#define SYS_INPUT_READ  61
+
 #define SYS_THREAD_CREATE 300
 #define SYS_THREAD_EXIT   301
 #define SYS_THREAD_JOIN   302
@@ -59,11 +66,8 @@
 #define SYS_MUTEX_LOCK    312
 #define SYS_MUTEX_UNLOCK  313
 
-#define SYS_IRQ_BIND   50
-#define SYS_IRQ_UNBIND 51
-#define SYS_IRQ_READ   52
-
-#define SYS_INPUT_WRITE 60
-#define SYS_INPUT_READ  61
+#define SYS_WAITPID 320
+#define SYS_GETPID  321
+#define SYS_GETPPID 322
 
 #endif
