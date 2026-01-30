@@ -63,4 +63,7 @@
 #define SYS_IRQ_UNBIND 51
 #define SYS_IRQ_READ   52
 
+#define SYS_INPUT_WRITE 60
+#define SYS_INPUT_READ  61
+
 #endif

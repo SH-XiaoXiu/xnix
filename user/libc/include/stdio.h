@@ -18,6 +18,9 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap);
 int putchar(int c);
 int puts(const char *s);
 
+/* 字符输入 */
+int getchar(void);
+
 /* 流操作 */
 int fflush(void *stream);
 

@@ -60,6 +60,10 @@
 #define SYS_IRQ_UNBIND 51 /* 解除绑定: ebx=irq */
 #define SYS_IRQ_READ   52 /* 读取数据: ebx=irq, ecx=buf, edx=size, esi=flags */
 
+/* 输入队列(60-69) */
+#define SYS_INPUT_WRITE 60 /* 写入字符: ebx=char */
+#define SYS_INPUT_READ  61 /* 读取字符(阻塞) */
+
 /*
  * 系统调用调用约定 (x86)
  *

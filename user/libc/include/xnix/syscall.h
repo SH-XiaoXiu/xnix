@@ -153,4 +153,15 @@ static inline int sys_irq_read(uint8_t irq, void *buf, size_t size, uint32_t fla
     return syscall4(SYS_IRQ_READ, (uint32_t)irq, (uint32_t)(uintptr_t)buf, (uint32_t)size, flags);
 }
 
+/*
+ * 输入队列
+ */
+static inline int sys_input_write(char c) {
+    return syscall1(SYS_INPUT_WRITE, (uint32_t)(unsigned char)c);
+}
+
+static inline int sys_input_read(void) {
+    return syscall0(SYS_INPUT_READ);
+}
+
 #endif /* _XNIX_SYSCALL_H */

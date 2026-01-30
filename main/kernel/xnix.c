@@ -9,6 +9,7 @@
 #include <drivers/timer.h>
 
 #include <asm/multiboot.h>
+#include <kernel/io/input.h>
 #include <kernel/io/ioport.h>
 #include <kernel/irq/irq.h>
 #include <kernel/process/process.h>
@@ -83,6 +84,7 @@ static void boot_phase_subsys(void) {
     pr_ok("IPC subsystem.");
 
     ioport_init();
+    input_init();
 
     syscall_init();
 

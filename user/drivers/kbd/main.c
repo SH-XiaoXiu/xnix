@@ -37,8 +37,8 @@ int main(void) {
         /* 翻译扫描码 */
         int c = scancode_to_char(scancode);
         if (c >= 0) {
-            /* 输出字符 */
-            sys_putc((char)c);
+            /* 写入内核输入队列 */
+            sys_input_write((char)c);
         }
     }
 
