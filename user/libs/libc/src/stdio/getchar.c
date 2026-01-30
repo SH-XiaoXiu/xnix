@@ -37,11 +37,13 @@ char *gets_s(char *buf, size_t size) {
                 putchar('\b');
                 putchar(' ');
                 putchar('\b');
+                fflush(NULL);
             }
         } else if (c >= 32 && c < 127) {
             /* 可打印字符 */
             buf[pos++] = (char)c;
             putchar(c);
+            fflush(NULL);
         }
         /* 忽略其他控制字符 */
     }
