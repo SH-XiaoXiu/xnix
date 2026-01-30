@@ -67,8 +67,9 @@
 #define SYS_IRQ_READ   52 /* 读取数据: ebx=irq, ecx=buf, edx=size, esi=flags */
 
 /* 输入队列(60-69) */
-#define SYS_INPUT_WRITE 60 /* 写入字符: ebx=char */
-#define SYS_INPUT_READ  61 /* 读取字符(阻塞) */
+#define SYS_INPUT_WRITE    60 /* 写入字符: ebx=char */
+#define SYS_INPUT_READ     61 /* 读取字符(阻塞) */
+#define SYS_SET_FOREGROUND 62 /* 设置前台进程: ebx=pid */
 
 /*
  * 系统调用调用约定 (x86)

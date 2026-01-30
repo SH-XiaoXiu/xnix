@@ -183,4 +183,8 @@ static inline int sys_input_read(void) {
     return syscall0(SYS_INPUT_READ);
 }
 
+static inline int sys_set_foreground(int pid) {
+    return syscall1(SYS_SET_FOREGROUND, (uint32_t)pid);
+}
+
 #endif /* _XNIX_SYSCALL_H */

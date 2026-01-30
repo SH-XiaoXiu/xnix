@@ -9,6 +9,7 @@
 
 #include <asm/irq_defs.h>
 #include <asm/syscall.h>
+#include <kernel/process/process.h>
 
 /**
  * x86 系统调用处理函数(由 isr.s 调用)
@@ -18,6 +19,9 @@ void syscall_handler(struct irq_regs *regs) {
     x86_extract_syscall_args(regs, &args);
 
     struct syscall_result result = syscall_dispatch(&args);
+
+    /* 返回用户态前检查信号 */
+    process_check_signals();
 
     x86_set_syscall_result(regs, &result);
 }
