@@ -615,6 +615,9 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
         return -ESRCH;
     }
 
+    /* 提前设置 wait_chan,避免与子进程退出的竞态 */
+    current->wait_chan = current;
+
     while (1) {
         uint32_t flags = cpu_irq_save();
         spin_lock(&process_list_lock);
@@ -654,21 +657,22 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
             found->parent       = NULL;
             found->next_sibling = NULL;
             process_unref(found);
+            current->wait_chan = NULL;
             return ret_pid;
         }
 
         if (!has_child) {
+            current->wait_chan = NULL;
             return -ECHILD;
         }
 
         if (options & WNOHANG) {
+            current->wait_chan = NULL;
             return 0;
         }
 
         /* 阻塞等待子进程退出 */
-        current->wait_chan = current;
         sched_block(current->wait_chan);
-        current->wait_chan = NULL;
     }
 }
 
