@@ -10,8 +10,8 @@
 #include <xnix/sync.h>
 #include <xnix/types.h>
 
-/* 输出锁,保证多核输出不交错 */
-static spinlock_t kprintf_lock = SPINLOCK_INIT;
+/* 输出锁,保证多核输出不交错(导出给 sys_write 使用) */
+spinlock_t kprintf_lock = SPINLOCK_INIT;
 
 void kputc(char c) {
     if (c == '\n') {

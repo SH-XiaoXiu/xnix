@@ -11,8 +11,8 @@
 
 extern void sleep_ms(uint32_t ms);
 
-/* 输出锁,保护用户态输出不交错 */
-static spinlock_t sys_output_lock = SPINLOCK_INIT;
+/* 使用与 kprintf 相同的锁,避免内核输出和用户输出交错 */
+extern spinlock_t kprintf_lock;
 
 /* SYS_PUTC: ebx=char (保留兼容性) */
 static int32_t sys_putc(const uint32_t *args) {
@@ -34,12 +34,12 @@ static int32_t sys_write(const uint32_t *args) {
         return 0;
     }
 
-    /* 原子输出整个消息 */
-    uint32_t flags = spin_lock_irqsave(&sys_output_lock);
+    /* 原子输出整个消息(使用 kprintf_lock 避免与内核输出交错) */
+    uint32_t flags = spin_lock_irqsave(&kprintf_lock);
     for (size_t i = 0; i < len; i++) {
         kputc(buf[i]);
     }
-    spin_unlock_irqrestore(&sys_output_lock, flags);
+    spin_unlock_irqrestore(&kprintf_lock, flags);
 
     return (int32_t)len;
 }
