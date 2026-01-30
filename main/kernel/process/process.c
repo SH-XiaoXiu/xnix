@@ -341,8 +341,8 @@ void process_terminate_current(int signal) {
         panic("Init process terminated by signal %d!", signal);
     }
 
-    pr_err("Process %d '%s' terminated (signal %d)", proc->pid,
-         proc->name ? proc->name : "?", signal);
+    pr_err("Process %d '%s' terminated (signal %d)", proc->pid, proc->name ? proc->name : "?",
+           signal);
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = -signal;
@@ -578,8 +578,8 @@ static void process_reparent_children(struct process *proc) {
         init->children       = child;
 
         /* 如果子进程已经是僵尸,唤醒 init */
-        if (child->state == PROCESS_ZOMBIE && init->wait_chan) {
-            sched_wakeup(init->wait_chan);
+        if (child->state == PROCESS_ZOMBIE && init->wait_chan && init->threads) {
+            sched_wakeup_thread(init->threads);
         }
         child = next;
     }
@@ -602,10 +602,10 @@ void process_exit(struct process *proc, int exit_code) {
     /* 将子进程托管给 init */
     process_reparent_children(proc);
 
-    /* 通知父进程 */
+    /* 唤醒等待的父进程(仅当父进程在 waitpid 中等待时) */
     struct process *parent = proc->parent;
-    if (parent && parent->wait_chan) {
-        sched_wakeup(parent->wait_chan);
+    if (parent && parent->wait_chan && parent->threads) {
+        sched_wakeup_thread(parent->threads);
     }
 }
 
@@ -697,10 +697,10 @@ int process_kill(pid_t pid, int sig) {
     proc->pending_signals |= sigmask(sig);
     cpu_irq_restore(flags);
 
-    /* 如果进程在睡眠,唤醒它处理信号 */
+    /* 唤醒进程的主线程处理信号 */
     struct thread *t = proc->threads;
-    if (t && t->wait_chan) {
-        sched_wakeup(t->wait_chan);
+    if (t) {
+        sched_wakeup_thread(t);
     }
 
     process_unref(proc);
