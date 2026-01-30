@@ -11,22 +11,24 @@
 #include <xnix/process.h>
 #include <xnix/syscall.h>
 
-/* SYS_IRQ_BIND: ebx=irq, ecx=notif_handle, edx=bits */
+/* SYS_IRQ_BIND: ebx=irq, ecx=notif_handle(-1 表示无), edx=bits */
 static int32_t sys_irq_bind(const uint32_t *args) {
     uint8_t                  irq          = (uint8_t)args[0];
     cap_handle_t             notif_handle = (cap_handle_t)args[1];
     uint32_t                 bits         = args[2];
     struct process          *proc         = process_current();
-    struct ipc_notification *notif;
+    struct ipc_notification *notif        = NULL;
 
     if (!proc) {
         return -ESRCH;
     }
 
-    /* 查找 notification(需要 WRITE 权限) */
-    notif = cap_lookup(proc, notif_handle, CAP_TYPE_NOTIFICATION, CAP_WRITE);
-    if (!notif) {
-        return -EPERM;
+    /* notification 可选 */
+    if (notif_handle != CAP_HANDLE_INVALID) {
+        notif = cap_lookup(proc, notif_handle, CAP_TYPE_NOTIFICATION, CAP_WRITE);
+        if (!notif) {
+            return -EPERM;
+        }
     }
 
     return irq_bind_notification(irq, notif, bits);

@@ -17,8 +17,9 @@
 /* 自动生成的 demo 模块列表 */
 #include <demo_modules.h>
 
-/* 模块索引约定: 0=init, 1=seriald, 2+=demos */
+/* 模块索引约定: 0=init, 1=seriald, 2=kbd, 3+=demos */
 #define MODULE_SERIALD 1
+#define MODULE_KBD     2
 
 /* init 继承的 capability handles */
 #define CAP_SERIAL_EP 0
@@ -48,13 +49,30 @@ static void start_seriald(void) {
     }
 }
 
+static void start_kbd(void) {
+    printf("[init] Starting kbd...\n");
+
+    struct spawn_args args = {
+        .name         = "kbd",
+        .module_index = MODULE_KBD,
+        .cap_count    = 0,
+    };
+
+    int pid = sys_spawn(&args);
+    if (pid < 0) {
+        printf("[init] Failed to start kbd: %d\n", pid);
+    } else {
+        printf("[init] kbd started (pid=%d)\n", pid);
+    }
+}
+
 static void start_demos(void) {
 #if DEMO_COUNT > 0
     printf("[init] Starting %d demo(s)...\n", DEMO_COUNT);
 
     for (int i = 0; i < DEMO_COUNT; i++) {
-        const char *name = demo_names[i];
-        uint32_t module_index = MODULE_DEMO_BASE + i;
+        const char *name         = demo_names[i];
+        uint32_t    module_index = MODULE_DEMO_BASE + i;
 
         printf("[init] Starting demo '%s' (module %u)...\n", name, module_index);
 
@@ -86,6 +104,9 @@ int main(void) {
 
     /* 等待 seriald 初始化 */
     sleep(1);
+
+    /* 启动 kbd 服务 */
+    start_kbd();
 
     printf("[init] System ready\n");
 

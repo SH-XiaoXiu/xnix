@@ -95,7 +95,7 @@ set(DEMO_HEADER_CONTENT "/* Auto-generated demo module list */\n")
 string(APPEND DEMO_HEADER_CONTENT "#ifndef _DEMO_MODULES_H\n")
 string(APPEND DEMO_HEADER_CONTENT "#define _DEMO_MODULES_H\n\n")
 string(APPEND DEMO_HEADER_CONTENT "/* Demo module indices (starting from MODULE_DEMO_BASE) */\n")
-string(APPEND DEMO_HEADER_CONTENT "#define MODULE_DEMO_BASE 2\n\n")
+string(APPEND DEMO_HEADER_CONTENT "#define MODULE_DEMO_BASE 3\n\n")
 
 list(LENGTH _DEMO_NAMES DEMO_COUNT)
 set(DEMO_INDEX 0)

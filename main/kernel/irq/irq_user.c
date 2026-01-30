@@ -17,7 +17,8 @@
  * IRQ 用户态绑定信息
  */
 struct irq_user_binding {
-    struct ipc_notification *notif;       /* 目标 notification */
+    bool                     bound;       /* 是否已绑定 */
+    struct ipc_notification *notif;       /* 目标 notification(可选) */
     uint32_t                 signal_bits; /* 触发时发送的信号位 */
 
     /* 数据缓冲区(环形) */
@@ -34,7 +35,7 @@ struct irq_user_binding {
 static struct irq_user_binding irq_bindings[ARCH_NR_IRQS];
 
 int irq_bind_notification(uint8_t irq, struct ipc_notification *notif, uint32_t bits) {
-    if (irq >= ARCH_NR_IRQS || !notif) {
+    if (irq >= ARCH_NR_IRQS) {
         return -EINVAL;
     }
 
@@ -42,18 +43,21 @@ int irq_bind_notification(uint8_t irq, struct ipc_notification *notif, uint32_t 
 
     spin_lock(&bind->lock);
 
-    if (bind->notif != NULL) {
+    if (bind->bound) {
         spin_unlock(&bind->lock);
         return -EBUSY;
     }
 
+    bind->bound       = true;
     bind->notif       = notif;
     bind->signal_bits = bits;
     bind->head        = 0;
     bind->tail        = 0;
     bind->waiter      = NULL;
 
-    notification_ref(notif);
+    if (notif) {
+        notification_ref(notif);
+    }
 
     spin_unlock(&bind->lock);
 
@@ -71,14 +75,17 @@ int irq_unbind_notification(uint8_t irq) {
 
     spin_lock(&bind->lock);
 
-    if (bind->notif == NULL) {
+    if (!bind->bound) {
         spin_unlock(&bind->lock);
         return -ENOENT;
     }
 
     irq_disable(irq);
 
-    notification_unref(bind->notif);
+    if (bind->notif) {
+        notification_unref(bind->notif);
+    }
+    bind->bound       = false;
     bind->notif       = NULL;
     bind->signal_bits = 0;
 
@@ -102,7 +109,7 @@ void irq_user_push(uint8_t irq, uint8_t data) {
 
     spin_lock(&bind->lock);
 
-    if (bind->notif == NULL) {
+    if (!bind->bound) {
         spin_unlock(&bind->lock);
         return;
     }
@@ -126,8 +133,10 @@ void irq_user_push(uint8_t irq, uint8_t data) {
 
     spin_unlock(&bind->lock);
 
-    /* 发送通知 */
-    notification_signal_by_ptr(notif, bits);
+    /* 发送通知(如果有) */
+    if (notif) {
+        notification_signal_by_ptr(notif, bits);
+    }
 }
 
 int irq_user_read(uint8_t irq, uint8_t *buf, size_t size, bool block) {
@@ -140,7 +149,7 @@ int irq_user_read(uint8_t irq, uint8_t *buf, size_t size, bool block) {
 
     spin_lock(&bind->lock);
 
-    if (bind->notif == NULL) {
+    if (!bind->bound) {
         spin_unlock(&bind->lock);
         return -ENOENT;
     }
@@ -167,7 +176,7 @@ int irq_user_read(uint8_t irq, uint8_t *buf, size_t size, bool block) {
             spin_lock(&bind->lock);
 
             /* 检查是否被解绑 */
-            if (bind->notif == NULL) {
+            if (!bind->bound) {
                 spin_unlock(&bind->lock);
                 return -ENOENT;
             }

@@ -97,6 +97,32 @@ add_custom_command(TARGET seriald.elf POST_BUILD
 )
 
 # ============================================
+# kbd.elf - UDM 键盘驱动
+# ============================================
+add_executable(kbd.elf
+        libc/src/crt0.s
+        drivers/kbd/main.c
+        drivers/kbd/scancode.c
+)
+
+target_compile_options(kbd.elf PRIVATE ${USER_C_FLAGS})
+target_include_directories(kbd.elf PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/libc/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/libudm/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/drivers/kbd
+        ${CMAKE_SOURCE_DIR}/main/include
+        ${CMAKE_BINARY_DIR}/include
+)
+target_link_libraries(kbd.elf PRIVATE c udm)
+target_link_options(kbd.elf PRIVATE
+        -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/user.ld -nostdlib
+)
+
+add_custom_command(TARGET kbd.elf POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:kbd.elf> ${CMAKE_BINARY_DIR}/kbd.elf
+)
+
+# ============================================
 # Demo 程序 (自动发现)
 # ============================================
 # 确保 include 目录存在
