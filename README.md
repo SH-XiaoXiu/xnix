@@ -268,27 +268,71 @@ graph TB
 sudo apt install gcc gcc-multilib grub-pc-bin xorriso qemu-system-x86 make cmake
 ```
 
-### 构建与运行
+### 快速开始
+
+`run` 脚本
 
 ```bash
+
+./run -f                 # 清理 + 并行编译 + 运行
+
+./run                    # 增量编译并运行
+
+# 查看所有选项
+./run --help
+```
+
+### 常用示例
+
+```bash
+./run -f                 # 构建运行
+./run                    # 增量编译运行
+./run -f -i              # 构建 + ISO 完整测试
+./run -d                 # 调试模式（等待 GDB :1234）
+
+# 清理操作
+./run --clean            # 只清理不编译
+./run --clean-all        # 完全删除 build
+./run --rebuild          # 完全重建（删除 build + 重新配置）
+
+# QEMU 硬件配置
+./run -f --mem 256M --smp 2    # 指定内存和 CPU 核心
+./run -f --mem 512M --smp 4    # 更大配置
+
+# CMake 编译配置
+./run -DENABLE_SMP=ON -DCFG_MAX_CPUS=8     # 启用 SMP
+./run -DCFG_DEBUG_SCHED=ON                 # 调度器调试
+./run -DENABLE_VMM_DEBUG=ON                # VMM 调试
+
+# 额外功能
+./run -c                       # 只编译不运行
+./run -i                       # 使用 ISO 启动
+./run --qemu "-serial file:serial.log"    # 串口输出到文件
+```
+
+### 调试流程
+
+```bash
+# 终端 1: 启动调试模式
+./run -d
+
+# 终端 2: 连接 GDB
+gdb build/xnix.elf -ex "target remote :1234"
+```
+
+### Make 方式
+
+```bash
+# 初始化
 mkdir build && cd build
 cmake ..
 
-# 生成 ISO 镜像
-make iso
-
-# 使用 QEMU 运行
+# 并行编译运行
+make -j$(nproc) iso
 make run
-```
 
-### 调试
-
-```bash
-# 终端 1: 启动 QEMU 调试模式 (暂停等待连接)
+# 调试
 make debug
-
-# 终端 2: 启动 GDB 连接
-gdb build/xnix.elf -ex "target remote localhost:1234"
 ```
 
 ## 用户代码
