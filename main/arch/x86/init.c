@@ -15,6 +15,7 @@ extern void serial_console_register(void);
 extern void pic_register(void);
 extern void pit_register(void);
 extern void apic_register(void);
+extern void ps2_register(void);
 
 /* GDT/IDT 初始化 */
 extern void gdt_init(void);
@@ -41,6 +42,9 @@ void arch_init(void) {
     /* 初始化 GDT/IDT */
     gdt_init();
     idt_init();
+
+    /* 注册 PS/2 键盘驱动 */
+    ps2_register();
 
     /*
      * 外部 IRQ 先使用 8259 PIC (PIT/键盘等 ISA IRQ 更稳定)
