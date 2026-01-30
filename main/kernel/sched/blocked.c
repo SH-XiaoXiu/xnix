@@ -109,6 +109,7 @@ void sched_wakeup(void *wait_chan) {
             *pp          = t->next;
             t->next      = NULL;
             t->wait_chan = NULL;
+            t->state     = THREAD_READY;
 
             /* 重新加入运行队列 */
             cpu_id_t cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
