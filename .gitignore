@@ -16,6 +16,7 @@ _deps
 CMakeUserPresets.json
 
 build/
+build-*/
 
 # CMake 自动生成的架构包装头文件
 kernel/arch/*.h
