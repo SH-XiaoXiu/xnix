@@ -187,4 +187,62 @@ static inline int sys_set_foreground(int pid) {
     return syscall1(SYS_SET_FOREGROUND, (uint32_t)pid);
 }
 
+/*
+ * VFS 系统调用
+ */
+struct vfs_info;
+struct vfs_dirent;
+
+static inline int sys_open(const char *path, uint32_t flags) {
+    return syscall2(SYS_OPEN, (uint32_t)(uintptr_t)path, flags);
+}
+
+static inline int sys_close(int fd) {
+    return syscall1(SYS_CLOSE, (uint32_t)fd);
+}
+
+static inline int sys_read(int fd, void *buf, size_t size) {
+    return syscall3(SYS_READ, (uint32_t)fd, (uint32_t)(uintptr_t)buf, (uint32_t)size);
+}
+
+static inline int sys_write2(int fd, const void *buf, size_t size) {
+    return syscall3(SYS_WRITE2, (uint32_t)fd, (uint32_t)(uintptr_t)buf, (uint32_t)size);
+}
+
+static inline int sys_lseek(int fd, int32_t offset, int whence) {
+    return syscall3(SYS_LSEEK, (uint32_t)fd, (uint32_t)offset, (uint32_t)whence);
+}
+
+static inline int sys_info(const char *path, struct vfs_info *info) {
+    return syscall2(SYS_INFO, (uint32_t)(uintptr_t)path, (uint32_t)(uintptr_t)info);
+}
+
+static inline int sys_finfo(int fd, struct vfs_info *info) {
+    return syscall2(SYS_FINFO, (uint32_t)fd, (uint32_t)(uintptr_t)info);
+}
+
+static inline int sys_opendir(const char *path) {
+    return syscall1(SYS_OPENDIR, (uint32_t)(uintptr_t)path);
+}
+
+static inline int sys_readdir(int fd, uint32_t index, struct vfs_dirent *entry) {
+    return syscall3(SYS_READDIR, (uint32_t)fd, index, (uint32_t)(uintptr_t)entry);
+}
+
+static inline int sys_mkdir(const char *path) {
+    return syscall1(SYS_MKDIR, (uint32_t)(uintptr_t)path);
+}
+
+static inline int sys_del(const char *path) {
+    return syscall1(SYS_DEL, (uint32_t)(uintptr_t)path);
+}
+
+static inline int sys_mount(const char *path, uint32_t fs_ep) {
+    return syscall2(SYS_MOUNT, (uint32_t)(uintptr_t)path, fs_ep);
+}
+
+static inline int sys_umount(const char *path) {
+    return syscall1(SYS_UMOUNT, (uint32_t)(uintptr_t)path);
+}
+
 #endif /* _XNIX_SYSCALL_H */

@@ -71,6 +71,21 @@
 #define SYS_INPUT_READ     61 /* 读取字符(阻塞) */
 #define SYS_SET_FOREGROUND 62 /* 设置前台进程: ebx=pid */
 
+/* VFS 系统调用(400-419) */
+#define SYS_OPEN    400 /* 打开文件: ebx=path, ecx=flags */
+#define SYS_CLOSE   401 /* 关闭文件: ebx=fd */
+#define SYS_READ    402 /* 读取文件: ebx=fd, ecx=buf, edx=size */
+#define SYS_WRITE2  403 /* VFS 写文件: ebx=fd, ecx=buf, edx=size */
+#define SYS_LSEEK   404 /* 调整偏移: ebx=fd, ecx=offset, edx=whence */
+#define SYS_INFO    405 /* 文件信息(路径): ebx=path, ecx=info */
+#define SYS_FINFO   406 /* 文件信息(fd): ebx=fd, ecx=info */
+#define SYS_OPENDIR 407 /* 打开目录: ebx=path */
+#define SYS_READDIR 408 /* 读取目录项: ebx=fd, ecx=index, edx=entry */
+#define SYS_MKDIR   410 /* 创建目录: ebx=path */
+#define SYS_DEL     411 /* 删除文件: ebx=path */
+#define SYS_MOUNT   412 /* 挂载: ebx=path, ecx=fs_ep */
+#define SYS_UMOUNT  413 /* 卸载: ebx=path */
+
 /*
  * 系统调用调用约定 (x86)
  *
