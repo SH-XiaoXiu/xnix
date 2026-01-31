@@ -7,6 +7,7 @@
  * 内核传递的 cap:
  *   handle 0: serial_ep (串口 endpoint)
  *   handle 1: io_cap (I/O 端口 capability)
+ *   handle 2: vfs_ep (VFS endpoint, 传给 ramfsd)
  */
 
 #include <stdio.h>
@@ -22,6 +23,7 @@
 /* init 继承的 capability handles */
 #define CAP_SERIAL_EP 0
 #define CAP_IOPORT    1
+#define CAP_VFS_EP    2
 
 /* 需要保活的服务 PID */
 static int shell_pid = -1;
@@ -64,6 +66,39 @@ static void start_kbd(void) {
         printf("[init] Failed to start kbd: %d\n", pid);
     } else {
         printf("[init] kbd started (pid=%d)\n", pid);
+    }
+}
+
+static void start_ramfsd(void) {
+    printf("[init] Starting ramfsd...\n");
+
+    struct spawn_args args = {
+        .name         = "ramfsd",
+        .module_index = MODULE_RAMFSD,
+        .cap_count    = 1,
+        .caps =
+            {
+                /* 传递 vfs_ep 给 ramfsd (handle 0) */
+                {.src = CAP_VFS_EP, .rights = CAP_READ | CAP_WRITE, .dst_hint = 0},
+            },
+    };
+
+    int pid = sys_spawn(&args);
+    if (pid < 0) {
+        printf("[init] Failed to start ramfsd: %d\n", pid);
+        return;
+    }
+    printf("[init] ramfsd started (pid=%d)\n", pid);
+
+    /* 等待 ramfsd 初始化 */
+    msleep(100);
+
+    /* 挂载根文件系统 */
+    int ret = sys_mount("/", CAP_VFS_EP);
+    if (ret < 0) {
+        printf("[init] Failed to mount root filesystem: %d\n", ret);
+    } else {
+        printf("[init] Root filesystem mounted\n");
     }
 }
 
@@ -152,6 +187,9 @@ int main(void) {
 
     /* 启动 kbd 服务 */
     start_kbd();
+
+    /* 启动 ramfsd 并挂载根文件系统 */
+    start_ramfsd();
 
     /* 启动 shell */
     start_shell();

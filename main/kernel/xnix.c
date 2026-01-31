@@ -120,10 +120,10 @@ static void boot_phase_late(void) {
  * Services - 仅启动 init 进程
  *
  * 内核只负责:
- * 创建必要的 cap(serial_ep, io_cap)
+ * 创建必要的 cap(serial_ep, io_cap, vfs_ep)
  * 启动 init 进程并传递这些 cap
  *
- * seriald 等服务的启动由 init 进程负责(通过 sys_spawn)
+ * seriald、ramfsd 等服务的启动由 init 进程负责(通过 sys_spawn)
  */
 static void boot_start_services(void) {
     uint32_t mods_count = boot_get_module_count();
@@ -141,6 +141,9 @@ static void boot_start_services(void) {
         io_cap = ioport_create_range((struct process *)process_current(), 0x3F8, 0x3FF,
                                      CAP_READ | CAP_WRITE | CAP_GRANT);
     }
+
+    /* 创建 VFS endpoint (用于 ramfsd) */
+    cap_handle_t vfs_ep = endpoint_create();
 
     /* 获取 init 模块 */
     uint32_t init_mod_index = boot_get_initmod_index();
@@ -162,13 +165,16 @@ static void boot_start_services(void) {
      * 传递给 init 的 capability:
      *   handle 0: serial_ep (用于 printf 输出)
      *   handle 1: io_cap (传递给 seriald)
+     *   handle 2: vfs_ep (传递给 ramfsd)
      */
-    if (serial_ep != CAP_HANDLE_INVALID && io_cap != CAP_HANDLE_INVALID) {
-        struct spawn_inherit_cap init_inherit[2] = {
+    if (serial_ep != CAP_HANDLE_INVALID && io_cap != CAP_HANDLE_INVALID &&
+        vfs_ep != CAP_HANDLE_INVALID) {
+        struct spawn_inherit_cap init_inherit[3] = {
             {.src = serial_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 0},
             {.src = io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 1},
+            {.src = vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 2},
         };
-        process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 2);
+        process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 3);
     } else {
         process_spawn_module("init", mod_addr, mod_size);
     }

@@ -66,12 +66,13 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
     target_include_directories(${DRIVER_ELF} PRIVATE
             ${CMAKE_SOURCE_DIR}/user/libs/libc/include
             ${CMAKE_SOURCE_DIR}/user/libs/libudm/include
+            ${CMAKE_SOURCE_DIR}/user/libs/libvfs/include
             ${CMAKE_SOURCE_DIR}/user/libs/libpthread/include
             ${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}
             ${CMAKE_SOURCE_DIR}/main/include
             ${CMAKE_BINARY_DIR}/include
     )
-    target_link_libraries(${DRIVER_ELF} PRIVATE c udm pthread)
+    target_link_libraries(${DRIVER_ELF} PRIVATE c udm vfs pthread)
     target_link_options(${DRIVER_ELF} PRIVATE
             -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/user.ld -nostdlib
     )
