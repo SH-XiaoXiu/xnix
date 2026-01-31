@@ -120,10 +120,10 @@ static void boot_phase_late(void) {
  * Services - 仅启动 init 进程
  *
  * 内核只负责:
- * 创建必要的 cap(serial_ep, io_cap, vfs_ep)
+ * 创建必要的 cap(serial_ep, io_cap, vfs_ep, ata_io_cap, fat_vfs_ep)
  * 启动 init 进程并传递这些 cap
  *
- * seriald,ramfsd 等服务的启动由 init 进程负责(通过 sys_spawn)
+ * seriald,ramfsd,fatfsd 等服务的启动由 init 进程负责(通过 sys_spawn)
  */
 static void boot_start_services(void) {
     uint32_t mods_count = boot_get_module_count();
@@ -144,6 +144,15 @@ static void boot_start_services(void) {
 
     /* 创建 VFS endpoint (用于 ramfsd) */
     cap_handle_t vfs_ep = endpoint_create();
+
+    /* 创建 ATA I/O port capability (0x1F0-0x1F7: 数据端口, 0x3F6-0x3F7: 控制端口) */
+    cap_handle_t ata_io_cap = ioport_create_range((struct process *)process_current(), 0x1F0, 0x1F7,
+                                                  CAP_READ | CAP_WRITE | CAP_GRANT);
+    cap_handle_t ata_ctrl_cap = ioport_create_range((struct process *)process_current(), 0x3F6,
+                                                    0x3F7, CAP_READ | CAP_WRITE | CAP_GRANT);
+
+    /* 创建 FAT VFS endpoint (用于 fatfsd) */
+    cap_handle_t fat_vfs_ep = endpoint_create();
 
     /* 获取 init 模块 */
     uint32_t init_mod_index = boot_get_initmod_index();
@@ -166,15 +175,22 @@ static void boot_start_services(void) {
      *   handle 0: serial_ep (用于 printf 输出)
      *   handle 1: io_cap (传递给 seriald)
      *   handle 2: vfs_ep (传递给 ramfsd)
+     *   handle 3: ata_io_cap (传递给 fatfsd)
+     *   handle 4: ata_ctrl_cap (传递给 fatfsd)
+     *   handle 5: fat_vfs_ep (传递给 fatfsd)
      */
     if (serial_ep != CAP_HANDLE_INVALID && io_cap != CAP_HANDLE_INVALID &&
-        vfs_ep != CAP_HANDLE_INVALID) {
-        struct spawn_inherit_cap init_inherit[3] = {
+        vfs_ep != CAP_HANDLE_INVALID && ata_io_cap != CAP_HANDLE_INVALID &&
+        ata_ctrl_cap != CAP_HANDLE_INVALID && fat_vfs_ep != CAP_HANDLE_INVALID) {
+        struct spawn_inherit_cap init_inherit[6] = {
             {.src = serial_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 0},
             {.src = io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 1},
             {.src = vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 2},
+            {.src = ata_io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 3},
+            {.src = ata_ctrl_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 4},
+            {.src = fat_vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 5},
         };
-        process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 3);
+        process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 6);
     } else {
         process_spawn_module("init", mod_addr, mod_size);
     }

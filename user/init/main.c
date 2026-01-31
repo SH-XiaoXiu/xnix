@@ -6,8 +6,11 @@
  *
  * 内核传递的 cap:
  *   handle 0: serial_ep (串口 endpoint)
- *   handle 1: io_cap (I/O 端口 capability)
+ *   handle 1: io_cap (I/O 端口 capability, 传给 seriald)
  *   handle 2: vfs_ep (VFS endpoint, 传给 ramfsd)
+ *   handle 3: ata_io_cap (ATA 数据端口, 传给 fatfsd)
+ *   handle 4: ata_ctrl_cap (ATA 控制端口, 传给 fatfsd)
+ *   handle 5: fat_vfs_ep (FAT VFS endpoint, 传给 fatfsd)
  */
 
 #include <stdio.h>
@@ -19,9 +22,12 @@
 #include <module_index.h>
 
 /* init 继承的 capability handles */
-#define CAP_SERIAL_EP 0
-#define CAP_IOPORT    1
-#define CAP_VFS_EP    2
+#define CAP_SERIAL_EP  0
+#define CAP_IOPORT     1
+#define CAP_VFS_EP     2
+#define CAP_ATA_IO     3
+#define CAP_ATA_CTRL   4
+#define CAP_FAT_VFS_EP 5
 
 /* 需要保活的服务 PID */
 static int shell_pid = -1;
@@ -100,6 +106,43 @@ static void start_ramfsd(void) {
     }
 }
 
+static void start_fatfsd(void) {
+    printf("[init] Starting fatfsd...\n");
+
+    struct spawn_args args = {
+        .name         = "fatfsd",
+        .module_index = MODULE_FATFSD,
+        .cap_count    = 3,
+        .caps =
+            {
+                /* 传递 fat_vfs_ep 给 fatfsd (handle 0) */
+                {.src = CAP_FAT_VFS_EP, .rights = CAP_READ | CAP_WRITE, .dst_hint = 0},
+                /* 传递 ata_io_cap 给 fatfsd (handle 1) */
+                {.src = CAP_ATA_IO, .rights = CAP_READ | CAP_WRITE, .dst_hint = 1},
+                /* 传递 ata_ctrl_cap 给 fatfsd (handle 2) */
+                {.src = CAP_ATA_CTRL, .rights = CAP_READ | CAP_WRITE, .dst_hint = 2},
+            },
+    };
+
+    int pid = sys_spawn(&args);
+    if (pid < 0) {
+        printf("[init] Failed to start fatfsd: %d\n", pid);
+        return;
+    }
+    printf("[init] fatfsd started (pid=%d)\n", pid);
+
+    /* 等待 fatfsd 初始化 */
+    msleep(200);
+
+    /* 挂载 FAT 文件系统到 /mnt */
+    int ret = sys_mount("/mnt", CAP_FAT_VFS_EP);
+    if (ret < 0) {
+        printf("[init] Failed to mount FAT filesystem: %d\n", ret);
+    } else {
+        printf("[init] FAT filesystem mounted at /mnt\n");
+    }
+}
+
 static int spawn_shell(void) {
     struct spawn_args args = {
         .name         = "shell",
@@ -120,7 +163,6 @@ static void start_shell(void) {
         shell_pid = pid;
     }
 }
-
 
 static void reap_children(void) {
     int status;
@@ -159,6 +201,9 @@ int main(void) {
 
     /* 启动 ramfsd 并挂载根文件系统 */
     start_ramfsd();
+
+    /* 启动 fatfsd 并挂载到 /mnt */
+    start_fatfsd();
 
     /* 启动 shell */
     start_shell();
