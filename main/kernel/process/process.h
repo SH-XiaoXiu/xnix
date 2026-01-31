@@ -17,6 +17,7 @@
 struct cap_table;  /* 前向声明 */
 struct thread;     /* 前向声明 */
 struct page_table; /* 前向声明 */
+struct fd_table;   /* 前向声明 */
 
 /**
  * 同步对象表
@@ -53,6 +54,9 @@ struct process {
 
     /* 同步对象表 */
     struct sync_table *sync_table; /* 用户态线程的互斥锁等同步原语 */
+
+    /* 文件描述符表 */
+    struct fd_table *fd_table;
 
     /* 父子关系 */
     struct process *parent;
