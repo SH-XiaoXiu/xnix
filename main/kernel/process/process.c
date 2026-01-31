@@ -547,33 +547,6 @@ pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_siz
 }
 
 /**
- * 从父进程的子进程链表中移除
- */
-static void process_remove_from_parent(struct process *proc) {
-    struct process *parent = proc->parent;
-    if (!parent) {
-        return;
-    }
-
-    uint32_t flags = cpu_irq_save();
-    spin_lock(&process_list_lock);
-
-    struct process **pp = &parent->children;
-    while (*pp) {
-        if (*pp == proc) {
-            *pp = proc->next_sibling;
-            break;
-        }
-        pp = &(*pp)->next_sibling;
-    }
-    proc->parent       = NULL;
-    proc->next_sibling = NULL;
-
-    spin_unlock(&process_list_lock);
-    cpu_irq_restore(flags);
-}
-
-/**
  * 将子进程托管给 init 进程
  */
 static void process_reparent_children(struct process *proc) {

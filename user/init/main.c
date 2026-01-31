@@ -17,8 +17,6 @@
 
 /* 自动生成的模块索引(按字母序排列驱动) */
 #include <module_index.h>
-/* 自动生成的 demo 模块列表 */
-#include <demo_modules.h>
 
 /* init 继承的 capability handles */
 #define CAP_SERIAL_EP 0
@@ -123,35 +121,6 @@ static void start_shell(void) {
     }
 }
 
-static void start_demos(void) {
-#if DEMO_COUNT > 0
-    printf("[init] Starting %d demo(s)...\n", DEMO_COUNT);
-
-    for (int i = 0; i < DEMO_COUNT; i++) {
-        const char *name         = demo_names[i];
-        uint32_t    module_index = MODULE_DEMO_BASE + i;
-
-        printf("[init] Starting demo '%s' (module %u)...\n", name, module_index);
-
-        struct spawn_args args = {0};
-        /* 复制名称 */
-        for (int j = 0; name[j] && j < 15; j++) {
-            args.name[j] = name[j];
-        }
-        args.module_index = module_index;
-        args.cap_count    = 0;
-
-        int pid = sys_spawn(&args);
-        if (pid < 0) {
-            printf("[init] Failed to start '%s': %d\n", name, pid);
-        } else {
-            printf("[init] '%s' started (pid=%d)\n", name, pid);
-        }
-    }
-#else
-    printf("[init] No demos configured\n");
-#endif
-}
 
 static void reap_children(void) {
     int status;
