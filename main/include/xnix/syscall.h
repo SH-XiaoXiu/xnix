@@ -72,4 +72,19 @@
 #define SYS_GETPPID 322
 #define SYS_KILL    323
 
+/* VFS 系统调用 */
+#define SYS_OPEN    400
+#define SYS_CLOSE   401
+#define SYS_READ    402
+#define SYS_WRITE2  403 /* VFS write，区别于 SYS_WRITE (13) */
+#define SYS_LSEEK   404
+#define SYS_INFO    405
+#define SYS_FINFO   406
+#define SYS_OPENDIR 407
+#define SYS_READDIR 408
+#define SYS_MKDIR   410
+#define SYS_DEL     411
+#define SYS_MOUNT   412
+#define SYS_UMOUNT  413
+
 #endif
