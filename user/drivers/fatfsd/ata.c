@@ -68,17 +68,12 @@ static inline uint8_t ata_inb(uint16_t port) {
 }
 
 static inline void ata_outw(uint16_t port, uint16_t val) {
-    /* 16 位输出:分两次 8 位写入(低字节先) */
-    uint32_t cap = get_cap_for_port(port);
-    sys_ioport_outb(cap, port, val & 0xFF);
-    sys_ioport_outb(cap, port, (val >> 8) & 0xFF);
+    sys_ioport_outw(get_cap_for_port(port), port, val);
 }
 
 static inline uint16_t ata_inw(uint16_t port) {
-    /* 16 位输入:分两次 8 位读取 */
-    uint8_t lo = ata_inb(port);
-    uint8_t hi = ata_inb(port);
-    return (uint16_t)lo | ((uint16_t)hi << 8);
+    int ret = sys_ioport_inw(get_cap_for_port(port), port);
+    return (ret >= 0) ? (uint16_t)ret : 0xFFFF;
 }
 
 /* 400ns 延迟(读取 4 次备用状态寄存器) */

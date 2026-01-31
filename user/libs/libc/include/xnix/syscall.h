@@ -84,6 +84,14 @@ static inline int sys_ioport_inb(uint32_t io_cap, uint16_t port) {
     return syscall2(SYS_IOPORT_INB, io_cap, (uint32_t)port);
 }
 
+static inline int sys_ioport_outw(uint32_t io_cap, uint16_t port, uint16_t val) {
+    return syscall3(SYS_IOPORT_OUTW, io_cap, (uint32_t)port, (uint32_t)val);
+}
+
+static inline int sys_ioport_inw(uint32_t io_cap, uint16_t port) {
+    return syscall2(SYS_IOPORT_INW, io_cap, (uint32_t)port);
+}
+
 static inline void sys_sleep(uint32_t ms) {
     syscall1(SYS_SLEEP, ms);
 }
