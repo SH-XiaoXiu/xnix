@@ -236,7 +236,7 @@ if [ -n "$QEMU_HDA" ]; then
         echo "错误: 硬盘镜像不存在: $QEMU_HDA"
         exit 1
     fi
-    QEMU_ARGS="$QEMU_ARGS -hda $QEMU_HDA"
+    QEMU_ARGS="$QEMU_ARGS -drive file=$QEMU_HDA,format=raw,if=ide"
 fi
 
 # 调试模式
@@ -256,7 +256,7 @@ fi
 # 运行
 if $USE_ISO; then
     echo "从 ISO 启动 Xnix..."
-    $QEMU_CMD -cdrom xnix.iso $QEMU_ARGS
+    $QEMU_CMD -cdrom xnix.iso -boot d $QEMU_ARGS
 else
     if ! $DEBUG; then
         echo "启动 Xnix..."
