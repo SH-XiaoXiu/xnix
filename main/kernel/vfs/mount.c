@@ -3,8 +3,11 @@
  * @brief 挂载点管理
  */
 
+#include <kernel/capability/capability.h>
+#include <kernel/ipc/endpoint.h>
 #include <kernel/vfs/vfs.h>
 #include <xnix/errno.h>
+#include <xnix/process.h>
 #include <xnix/sync.h>
 
 /* 全局挂载表 */
@@ -34,8 +37,15 @@ static void kstrcpy(char *dst, const char *src, size_t max) {
     dst[i] = '\0';
 }
 
-int vfs_mount(const char *path, cap_handle_t fs_ep) {
+int vfs_mount(const char *path, cap_handle_t fs_ep_handle) {
     if (!path || path[0] != '/') {
+        return -EINVAL;
+    }
+
+    /* 从调用者的 cap 表中查找 endpoint */
+    struct process      *proc = (struct process *)process_current();
+    struct ipc_endpoint *ep   = cap_lookup(proc, fs_ep_handle, CAP_TYPE_ENDPOINT, CAP_WRITE);
+    if (!ep) {
         return -EINVAL;
     }
 
@@ -44,7 +54,7 @@ int vfs_mount(const char *path, cap_handle_t fs_ep) {
         return -ENAMETOOLONG;
     }
 
-    /* 去掉尾部斜杠（除了根目录） */
+    /* 去掉尾部斜杠(除了根目录) */
     while (path_len > 1 && path[path_len - 1] == '/') {
         path_len--;
     }
@@ -82,10 +92,13 @@ int vfs_mount(const char *path, cap_handle_t fs_ep) {
         return -ENOMEM;
     }
 
+    /* 增加 endpoint 引用计数 */
+    endpoint_ref(ep);
+
     /* 注册挂载点 */
     kstrcpy(mounts[slot].path, path, path_len + 1);
     mounts[slot].path_len = path_len;
-    mounts[slot].fs_ep    = fs_ep;
+    mounts[slot].fs_ep    = ep;
     mounts[slot].active   = true;
 
     spin_unlock(&mounts_lock);
@@ -99,7 +112,7 @@ int vfs_umount(const char *path) {
 
     size_t path_len = kstrlen(path);
 
-    /* 去掉尾部斜杠（除了根目录） */
+    /* 去掉尾部斜杠(除了根目录) */
     while (path_len > 1 && path[path_len - 1] == '/') {
         path_len--;
     }
@@ -116,8 +129,12 @@ int vfs_umount(const char *path) {
                 }
             }
             if (match) {
-                mounts[i].active = false;
+                struct ipc_endpoint *ep = mounts[i].fs_ep;
+                mounts[i].active        = false;
+                mounts[i].fs_ep         = NULL;
                 spin_unlock(&mounts_lock);
+                /* 释放 endpoint 引用 */
+                endpoint_unref(ep);
                 return 0;
             }
         }
@@ -163,17 +180,17 @@ struct vfs_mount *vfs_lookup_mount(const char *path, const char **rel_path) {
             continue;
         }
 
-        /* 确保是完整路径匹配（非前缀子串） */
-        if (mount_len < path_len && path[mount_len] != '/') {
-            continue;
-        }
-
-        /* 根目录特殊处理 */
+        /* 根目录特殊处理:匹配所有以 / 开头的路径 */
         if (mount_len == 1 && mounts[i].path[0] == '/') {
             if (best_len == 0) {
                 best     = &mounts[i];
                 best_len = 1;
             }
+            continue;
+        }
+
+        /* 确保是完整路径匹配(非前缀子串) */
+        if (mount_len < path_len && path[mount_len] != '/') {
             continue;
         }
 
@@ -188,7 +205,7 @@ struct vfs_mount *vfs_lookup_mount(const char *path, const char **rel_path) {
     if (best && rel_path) {
         /* 计算相对路径 */
         if (best_len == 1 && best->path[0] == '/') {
-            *rel_path = path; /* 根目录挂载，相对路径就是完整路径 */
+            *rel_path = path; /* 根目录挂载,相对路径就是完整路径 */
         } else if (best_len == path_len) {
             *rel_path = "/"; /* 刚好是挂载点本身 */
         } else {

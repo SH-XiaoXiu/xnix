@@ -2,9 +2,10 @@
  * @file vfs.c
  * @brief VFS 核心逻辑
  *
- * 通过 IPC 与用户态 fs 服务通信，实现文件操作
+ * 通过 IPC 与用户态 fs 服务通信,实现文件操作
  */
 
+#include <kernel/ipc/endpoint.h>
 #include <kernel/process/process.h>
 #include <kernel/vfs/vfs.h>
 #include <xnix/errno.h>
@@ -35,8 +36,9 @@ static struct fd_table *get_current_fd_table(void) {
 /**
  * 发送 VFS 请求到 fs 服务并等待回复
  */
-static int vfs_ipc_call(cap_handle_t fs_ep, struct ipc_message *req, struct ipc_message *reply) {
-    int ret = ipc_call(fs_ep, req, reply, 5000); /* 5 秒超时 */
+static int vfs_ipc_call(struct ipc_endpoint *fs_ep, struct ipc_message *req,
+                        struct ipc_message *reply) {
+    int ret = ipc_call_direct(fs_ep, req, reply, 5000); /* 5 秒超时 */
     if (ret < 0) {
         return ret;
     }
