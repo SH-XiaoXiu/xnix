@@ -20,6 +20,9 @@
  *   - 300-399: 进程/线程管理
  */
 
+/* 内存管理(200-209) */
+#define SYS_SBRK 200 /* 调整堆大小: ebx=increment, 返回旧堆顶或 -1 */
+
 /* 基础系统调用 */
 #define SYS_PUTC         1  /* 输出字符: ebx=char */
 #define SYS_EXIT         2  /* 退出进程: ebx=exit_code */

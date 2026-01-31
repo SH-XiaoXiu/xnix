@@ -245,4 +245,11 @@ static inline int sys_umount(const char *path) {
     return syscall1(SYS_UMOUNT, (uint32_t)(uintptr_t)path);
 }
 
+/*
+ * 内存管理
+ */
+static inline void *sys_sbrk(int32_t increment) {
+    return (void *)syscall1(SYS_SBRK, (uint32_t)increment);
+}
+
 #endif /* _XNIX_SYSCALL_H */

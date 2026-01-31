@@ -221,6 +221,9 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
         return -EINVAL;
     }
 
+    /* 记录最高的段结束地址，用于初始化堆 */
+    uint32_t max_seg_end = 0;
+
     /* 遍历 Program Headers */
     for (uint16_t i = 0; i < hdr.e_phnum; i++) {
         Elf32_Phdr phdr;
@@ -308,7 +311,19 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
 
             copied += chunk_size;
         }
+
+        /* 更新最高段结束地址 */
+        if (vaddr_end > max_seg_end) {
+            max_seg_end = vaddr_end;
+        }
     }
+
+    /* 初始化用户堆 */
+    uint32_t heap_start = PAGE_ALIGN_UP(max_seg_end);
+    uint32_t heap_max   = USER_STACK_TOP - USER_STACK_SIZE; /* 栈底之前 */
+    proc->heap_start    = heap_start;
+    proc->heap_current  = heap_start;
+    proc->heap_max      = heap_max;
 
     /* 分配并映射用户栈 */
     uint32_t stack_pages = USER_STACK_SIZE / PAGE_SIZE;
