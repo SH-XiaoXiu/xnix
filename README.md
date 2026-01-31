@@ -22,6 +22,7 @@ MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](http
 | IPC 通信            | 同步/异步消息传递，支持 RPC 模式 | endpoint send/recv/call |
 | 用户态驱动 (UDM)       | 驱动隔离，崩溃可恢复，支持热更新    | seriald、kbd 均为用户进程      |
 | 进程管理              | 完整生命周期、信号机制、进程树     | fork-like spawn、SIGTERM |
+| FAT32 文件系统        | 支持读写 FAT32 格式磁盘     | 可挂载硬盘镜像进行文件操作           |
 
 ## 项目亮点
 
@@ -29,6 +30,7 @@ MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](http
 - **弱符号机制**：使用 `__attribute__((weak))` 实现优雅的平台适配
 - **Opaque 类型**：公共 API 隐藏内部实现，保证接口稳定性
 - **驱动隔离**：UDM 模式下驱动崩溃可自动恢复，不拖垮系统
+- **FAT32 支持**：可读写 FAT32 磁盘镜像，方便与宿主机交换文件
 
 ## 快速开始
 
@@ -280,6 +282,82 @@ Xnix 是一个教学项目，主要在 QEMU 中运行。如需在真实硬件上
 ![PVE 运行演示](docs/assets/screenshot_eb99d3d0.png)
 
 > 注意：真实硬件运行未经充分测试，QEMU可能与真实硬件行为不一致。
+
+## 磁盘镜像与 FAT32
+
+Xnix 支持 FAT32 文件系统，可以通过硬盘镜像与宿主机交换文件。
+
+### 创建硬盘镜像
+
+构建时会自动创建 `build/disk.img`（FAT32 格式），也可以手动创建：
+
+```bash
+# 创建 32MB 的空白镜像
+dd if=/dev/zero of=disk.img bs=1M count=32
+
+# 格式化为 FAT32
+mkfs.vfat -F 32 disk.img
+```
+
+### 在 Linux/WSL 中挂载
+
+```bash
+# 创建挂载点
+sudo mkdir -p /mnt/xnix_disk
+
+# 挂载镜像
+sudo mount -o loop build/disk.img /mnt/xnix_disk
+
+# 复制文件到镜像
+sudo cp myfile.txt /mnt/xnix_disk/
+
+# 卸载
+sudo umount /mnt/xnix_disk
+```
+
+### 在 Windows 中使用 ImDisk 挂载
+
+对于 Windows 用户，推荐使用 **ImDisk** 工具直接挂载磁盘镜像，无需进入 WSL。
+
+#### 1. 安装 ImDisk
+
+从官网下载安装：https://sourceforge.net/projects/imdisk-toolkit/
+
+或使用 winget：
+
+```powershell
+winget install ImDisk.Toolkit
+```
+
+#### 2. 挂载镜像
+
+**方式一：右键菜单**
+
+在文件资源管理器中右键点击 `disk.img`，选择「Mount as ImDisk Virtual Disk」。
+
+**方式二：命令行**
+
+```powershell
+# 挂载到 X: 盘
+imdisk -a -f "C:\path\to\xnix\build\disk.img" -m X:
+
+# 卸载
+imdisk -d -m X:
+```
+
+**方式三：ImDisk 控制面板**
+
+运行 `ImDiskCpl.exe`，点击「Mount new...」选择镜像文件。
+
+#### 3. 操作文件
+
+挂载后，镜像会显示为一个普通磁盘分区，可以直接拖放文件。
+
+#### 4. 注意事项
+
+- 挂载前确保 QEMU 未使用该镜像（否则可能损坏数据）
+- 修改完成后务必先卸载再启动 QEMU
+- ImDisk 支持读写模式，修改会直接写入镜像文件
 
 ## 常见问题
 
