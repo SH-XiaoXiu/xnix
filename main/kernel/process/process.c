@@ -340,12 +340,12 @@ void process_terminate_current(int signal) {
     }
 
     /* init 进程终止是致命的 */
-    if (proc->pid == 1) {
+    if (!proc || proc->pid == 1) {
         panic("Init process terminated by signal %d!", signal);
     }
 
-    pr_err("Process %d '%s' terminated (signal %d)", proc->pid, proc->name ? proc->name : "?",
-           signal);
+    pr_info("Process %d '%s' terminated (signal %d)", proc->pid, proc->name ? proc->name : "?",
+            signal);
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = -signal;
