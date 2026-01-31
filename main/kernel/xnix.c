@@ -22,6 +22,7 @@
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
 #include <xnix/udm/console.h>
+#include <xnix/vfs.h>
 
 static void boot_print_banner(void) {
     kprintf("\n");
@@ -82,6 +83,8 @@ static void boot_phase_subsys(void) {
 
     ipc_init();
     pr_ok("IPC subsystem.");
+
+    vfs_init();
 
     ioport_init();
     input_init();
