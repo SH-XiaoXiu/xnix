@@ -19,6 +19,7 @@ MODULES=""
 CMAKE_OPTS=""
 QEMU_MEMORY="4096M"
 QEMU_CPUS="2"
+QEMU_HDA=""
 QEMU_EXTRA=""
 
 # 帮助信息
@@ -49,6 +50,7 @@ Xnix 构建运行脚本
 QEMU 配置:
   --mem <size>            内存大小（默认: 128M）
   --smp <n>               CPU 核心数（默认: 1）
+  --hda <file>            硬盘镜像文件（FAT 格式）
   --qemu <args>           额外 QEMU 参数
 
 CMake 配置:
@@ -125,6 +127,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --smp)
             QEMU_CPUS="$2"
+            shift 2
+            ;;
+        --hda)
+            QEMU_HDA="$2"
             shift 2
             ;;
         --qemu)
@@ -223,6 +229,15 @@ QEMU_ARGS="-serial stdio -no-reboot"
 
 # 内存和 CPU
 QEMU_ARGS="$QEMU_ARGS -m $QEMU_MEMORY -smp $QEMU_CPUS"
+
+# 硬盘
+if [ -n "$QEMU_HDA" ]; then
+    if [ ! -f "$QEMU_HDA" ]; then
+        echo "错误: 硬盘镜像不存在: $QEMU_HDA"
+        exit 1
+    fi
+    QEMU_ARGS="$QEMU_ARGS -hda $QEMU_HDA"
+fi
 
 # 调试模式
 if $DEBUG; then
