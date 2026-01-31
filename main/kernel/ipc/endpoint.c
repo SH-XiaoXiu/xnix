@@ -214,6 +214,55 @@ int ipc_call(cap_handle_t ep_handle, struct ipc_message *request, struct ipc_mes
     return ipc_send_internal(ep_handle, request, reply, timeout_ms);
 }
 
+/**
+ * 直接使用 endpoint 指针进行 IPC call
+ */
+int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc_message *reply_buf,
+                    uint32_t timeout_ms) {
+    struct thread *current;
+    struct thread *receiver;
+
+    (void)timeout_ms;
+
+    if (!ep) {
+        return IPC_ERR_INVALID;
+    }
+
+    current = sched_current();
+    if (!current) {
+        return IPC_ERR_INVALID;
+    }
+
+    spin_lock(&ep->lock);
+
+    if (ep->recv_queue) {
+        receiver            = ep->recv_queue;
+        ep->recv_queue      = receiver->wait_next;
+        receiver->wait_next = NULL;
+        spin_unlock(&ep->lock);
+
+        ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
+        receiver->ipc_peer = current->tid;
+        sched_wakeup_thread(receiver);
+
+        current->ipc_req_msg   = msg;
+        current->ipc_reply_msg = reply_buf;
+        sched_block(current);
+
+        return IPC_OK;
+    }
+
+    current->wait_next = ep->send_queue;
+    ep->send_queue     = current;
+    spin_unlock(&ep->lock);
+
+    current->ipc_req_msg   = msg;
+    current->ipc_reply_msg = reply_buf;
+    sched_block(current);
+
+    return IPC_OK;
+}
+
 int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
     struct process      *proc = process_current();
     struct thread       *current;
