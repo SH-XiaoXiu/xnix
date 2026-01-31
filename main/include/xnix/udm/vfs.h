@@ -48,7 +48,7 @@ enum udm_vfs_op {
     UDM_VFS_WRITE = 4,
 
     /**
-     * 获取文件信息（通过路径）
+     * 获取文件信息(通过路径)
      * 请求: buffer = path (null-terminated)
      * 响应: data[1] = 0 (成功) 或 error, buffer = struct vfs_info
      */
@@ -77,7 +77,7 @@ enum udm_vfs_op {
     UDM_VFS_DEL = 8,
 
     /**
-     * 获取文件信息（通过 handle）
+     * 获取文件信息(通过 handle)
      * 请求: data[1] = handle
      * 响应: data[1] = 0 (成功) 或 error, buffer = struct vfs_info
      */

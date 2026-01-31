@@ -221,7 +221,7 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
         return -EINVAL;
     }
 
-    /* 记录最高的段结束地址，用于初始化堆 */
+    /* 记录最高的段结束地址,用于初始化堆 */
     uint32_t max_seg_end = 0;
 
     /* 遍历 Program Headers */

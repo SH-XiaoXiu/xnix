@@ -59,9 +59,9 @@ struct process {
     struct fd_table *fd_table;
 
     /* 用户堆 */
-    uint32_t heap_start;   /* 堆起始地址（ELF 数据段之后，页对齐） */
-    uint32_t heap_current; /* 当前堆顶（brk 指针） */
-    uint32_t heap_max;     /* 堆上限（栈底之前） */
+    uint32_t heap_start;   /* 堆起始地址(ELF 数据段之后,页对齐) */
+    uint32_t heap_current; /* 当前堆顶(brk 指针) */
+    uint32_t heap_max;     /* 堆上限(栈底之前) */
 
     /* 父子关系 */
     struct process *parent;

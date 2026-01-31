@@ -19,8 +19,8 @@ extern void  vmm_kunmap(void *vaddr);
 /**
  * SYS_SBRK: 调整堆大小
  *
- * @param args[0] increment 增量（可以为负数）
- * @return 旧堆顶地址，失败返回 -1
+ * @param args[0] increment 增量(可以为负数)
+ * @return 旧堆顶地址,失败返回 -1
  */
 static int32_t sys_sbrk(const uint32_t *args) {
     int32_t increment = (int32_t)args[0];
@@ -32,7 +32,7 @@ static int32_t sys_sbrk(const uint32_t *args) {
 
     uint32_t old_brk = proc->heap_current;
 
-    /* increment == 0：仅返回当前堆顶 */
+    /* increment == 0:仅返回当前堆顶 */
     if (increment == 0) {
         return (int32_t)old_brk;
     }
@@ -63,7 +63,7 @@ static int32_t sys_sbrk(const uint32_t *args) {
     }
 
     if (new_brk > old_brk) {
-        /* 扩展堆：分配新页面 */
+        /* 扩展堆:分配新页面 */
         uint32_t old_page = PAGE_ALIGN_UP(old_brk);
         uint32_t new_page = PAGE_ALIGN_UP(new_brk);
 
@@ -76,7 +76,7 @@ static int32_t sys_sbrk(const uint32_t *args) {
 
             void *page = alloc_page_high();
             if (!page) {
-                /* 分配失败，回滚 */
+                /* 分配失败,回滚 */
                 proc->heap_current = old_brk;
                 return -1;
             }
@@ -94,7 +94,7 @@ static int32_t sys_sbrk(const uint32_t *args) {
             vmm_kunmap(k);
         }
     } else if (new_brk < old_brk && mm->unmap) {
-        /* 收缩堆：释放页面 */
+        /* 收缩堆:释放页面 */
         uint32_t old_page = PAGE_ALIGN_UP(old_brk);
         uint32_t new_page = PAGE_ALIGN_UP(new_brk);
 

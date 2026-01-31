@@ -123,7 +123,7 @@ static void boot_phase_late(void) {
  * 创建必要的 cap(serial_ep, io_cap, vfs_ep)
  * 启动 init 进程并传递这些 cap
  *
- * seriald、ramfsd 等服务的启动由 init 进程负责(通过 sys_spawn)
+ * seriald,ramfsd 等服务的启动由 init 进程负责(通过 sys_spawn)
  */
 static void boot_start_services(void) {
     uint32_t mods_count = boot_get_module_count();
