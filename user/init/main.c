@@ -23,6 +23,9 @@
 #define CAP_SERIAL_EP 0
 #define CAP_IOPORT    1
 
+/* 需要保活的服务 PID */
+static int shell_pid = -1;
+
 static void start_seriald(void) {
     printf("[init] Starting seriald...\n");
 
@@ -64,20 +67,24 @@ static void start_kbd(void) {
     }
 }
 
-static void start_shell(void) {
-    printf("[init] Starting shell...\n");
-
+static int spawn_shell(void) {
     struct spawn_args args = {
         .name         = "shell",
         .module_index = MODULE_SHELL,
         .cap_count    = 0,
     };
+    return sys_spawn(&args);
+}
 
-    int pid = sys_spawn(&args);
+static void start_shell(void) {
+    printf("[init] Starting shell...\n");
+
+    int pid = spawn_shell();
     if (pid < 0) {
         printf("[init] Failed to start shell: %d\n", pid);
     } else {
         printf("[init] shell started (pid=%d)\n", pid);
+        shell_pid = pid;
     }
 }
 
@@ -118,6 +125,19 @@ static void reap_children(void) {
     /* 非阻塞收割所有已退出的子进程 */
     while ((pid = sys_waitpid(-1, &status, WNOHANG)) > 0) {
         printf("[init] Reaped child process %d (status=%d)\n", pid, status);
+
+        /* shell 退出后自动重启 */
+        if (pid == shell_pid) {
+            printf("[init] Shell exited, respawning...\n");
+            int new_pid = spawn_shell();
+            if (new_pid < 0) {
+                printf("[init] Failed to respawn shell: %d\n", new_pid);
+                shell_pid = -1;
+            } else {
+                printf("[init] shell respawned (pid=%d)\n", new_pid);
+                shell_pid = new_pid;
+            }
+        }
     }
 }
 
