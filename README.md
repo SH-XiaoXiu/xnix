@@ -6,21 +6,22 @@
 
 ## 简介
 
-Xnix 是一个从零构建的 32 位 x86 操作系统内核，采用微内核架构设计。项目源于作者在完成 MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](https://gitee.com/sh-xiaoxiu/my-rtos-demo)）（ARM32 RTOS）后，希望进一步探索更复杂的系统设计。
-
+Xnix 是一个从零构建的 32 位 x86 操作系统内核，采用微内核架构设计。项目源于作者在完成
+MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](https://gitee.com/sh-xiaoxiu/my-rtos-demo)
+）（ARM32 RTOS）后，希望进一步探索更复杂的系统设计。
 
 **技术栈**：C11 + x86 Assembly + CMake + GCC + QEMU
 
 ## 核心能力
 
-| 能力 | 说明 | 示例 |
-|------|------|------|
-| 微内核设计 | 最小化内核，策略与机制分离 | 内核仅含调度、IPC、内存管理 |
-| 平台抽象 | HAL + 弱符号机制，支持多平台移植 | 新增架构只需实现少量强符号 |
-| 能力系统 (Capability) | 细粒度权限控制，无全局特权 | I/O 端口访问需持有对应 cap |
-| IPC 通信 | 同步/异步消息传递，支持 RPC 模式 | endpoint send/recv/call |
-| 用户态驱动 (UDM) | 驱动隔离，崩溃可恢复，支持热更新 | seriald、kbd 均为用户进程 |
-| 进程管理 | 完整生命周期、信号机制、进程树 | fork-like spawn、SIGTERM |
+| 能力                | 说明                  | 示例                      |
+|-------------------|---------------------|-------------------------|
+| 微内核设计             | 最小化内核，策略与机制分离       | 内核仅含调度、IPC、内存管理         |
+| 平台抽象              | HAL + 弱符号机制，支持多平台移植 | 新增架构只需实现少量强符号           |
+| 能力系统 (Capability) | 细粒度权限控制，无全局特权       | I/O 端口访问需持有对应 cap       |
+| IPC 通信            | 同步/异步消息传递，支持 RPC 模式 | endpoint send/recv/call |
+| 用户态驱动 (UDM)       | 驱动隔离，崩溃可恢复，支持热更新    | seriald、kbd 均为用户进程      |
+| 进程管理              | 完整生命周期、信号机制、进程树     | fork-like spawn、SIGTERM |
 
 ## 项目亮点
 
@@ -35,7 +36,8 @@ Xnix 是一个从零构建的 32 位 x86 操作系统内核，采用微内核架
 
 **Windows 用户**
 
-需要先安装 WSL2，参考 [微软官方文档](https://learn.microsoft.com/zh-cn/windows/wsl/install)，然后在 WSL 中按 Linux 方式安装工具链。
+需要先安装 WSL2，参考 [微软官方文档](https://learn.microsoft.com/zh-cn/windows/wsl/install)，然后在 WSL 中按 Linux
+方式安装工具链。
 
 **Linux 用户 (Ubuntu/Debian)**
 
@@ -68,12 +70,12 @@ cd xnix
 
 ## 运行环境
 
-| 项目 | 要求 |
-|------|------|
+| 项目   | 要求                            |
+|------|-------------------------------|
 | 操作系统 | Linux（推荐 Ubuntu 20.04+）或 WSL2 |
-| 编译器 | GCC 支持 32 位编译（gcc-multilib） |
-| 模拟器 | QEMU x86 |
-| 构建工具 | CMake 3.10+, Make |
+| 编译器  | GCC 支持 32 位编译（gcc-multilib）   |
+| 模拟器  | QEMU x86                      |
+| 构建工具 | CMake 3.10+, Make             |
 
 ## 配置选项
 
@@ -113,8 +115,6 @@ QEMU 硬件配置：
 # 终端 2: 连接 GDB
 gdb build/xnix.elf -ex "target remote :1234"
 ```
-
-
 
 ## 项目结构
 
@@ -286,6 +286,7 @@ Xnix 是一个教学项目，主要在 QEMU 中运行。如需在真实硬件上
 **Q: 编译报错找不到 32 位库？**
 
 安装 multilib 支持：
+
 ```bash
 sudo apt install gcc-multilib
 ```
