@@ -56,6 +56,12 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
     # 收集该驱动目录下所有源文件
     file(GLOB DRIVER_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}/*.c)
 
+    # 加载驱动配置（如果存在）
+    set(DRIVER_EXTRA_LIBS "")
+    if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}/CMakeLists.txt)
+        include(${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}/CMakeLists.txt)
+    endif ()
+
     # 创建可执行文件
     add_executable(${DRIVER_ELF}
             ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.s
@@ -72,7 +78,9 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
             ${CMAKE_SOURCE_DIR}/main/include
             ${CMAKE_BINARY_DIR}/include
     )
-    target_link_libraries(${DRIVER_ELF} PRIVATE c udm vfs pthread)
+    # 链接库
+    target_link_libraries(${DRIVER_ELF} PRIVATE c udm vfs pthread ${DRIVER_EXTRA_LIBS})
+
     target_link_options(${DRIVER_ELF} PRIVATE
             -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/user.ld -nostdlib
     )
