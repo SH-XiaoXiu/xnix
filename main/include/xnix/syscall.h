@@ -1,90 +1,13 @@
+/**
+ * @file syscall.h
+ * @brief 系统调用号定义
+ *
+ * 直接引用 ABI 层定义，避免重复
+ */
+
 #ifndef XNIX_SYSCALL_H
 #define XNIX_SYSCALL_H
 
-/**
- * 系统调用号定义
- *
- * 约定:
- * - x86: eax 为 syscall number
- * - 返回值通过 eax 返回
- */
-#define SYS_PUTC            1
-#define SYS_EXIT            2
-#define SYS_ENDPOINT_CREATE 3
-#define SYS_IPC_SEND        4
-#define SYS_IPC_RECV        5
-#define SYS_IPC_CALL        6
-#define SYS_IPC_REPLY       7
+#include <xnix/abi/syscall.h>
 
-/**
- * @brief 端口输出 1 字节(受 capability 限制)
- *
- * 参数约定(x86 int 0x80):\n
- * - ebx: ioport capability handle(CAP_TYPE_IOPORT,且具备 CAP_WRITE)\n
- * - ecx: port(uint16_t)\n
- * - edx: value(uint8_t)\n
- *
- * 返回值:\n
- * - 0 成功\n
- * - 负数失败(如 -EPERM:无权限或端口不在授权范围内)
- */
-#define SYS_IOPORT_OUTB 8
-
-/**
- * @brief 端口读取 1 字节(受 capability 限制)
- *
- * 参数约定(x86 int 0x80):\n
- * - ebx: ioport capability handle(CAP_TYPE_IOPORT,且具备 CAP_READ)\n
- * - ecx: port(uint16_t)\n
- *
- * 返回值:\n
- * - >=0 读取到的字节(低 8 位有效)\n
- * - 负数失败(如 -EPERM:无权限或端口不在授权范围内)
- */
-#define SYS_IOPORT_INB   9
-#define SYS_SLEEP        10
-#define SYS_SPAWN        11
-#define SYS_MODULE_COUNT 12
-#define SYS_WRITE        13
-
-#define SYS_IRQ_BIND   50
-#define SYS_IRQ_UNBIND 51
-#define SYS_IRQ_READ   52
-
-#define SYS_INPUT_WRITE    60
-#define SYS_INPUT_READ     61
-#define SYS_SET_FOREGROUND 62
-
-#define SYS_THREAD_CREATE 300
-#define SYS_THREAD_EXIT   301
-#define SYS_THREAD_JOIN   302
-#define SYS_THREAD_SELF   303
-#define SYS_THREAD_YIELD  304
-#define SYS_THREAD_DETACH 305
-
-#define SYS_MUTEX_CREATE  310
-#define SYS_MUTEX_DESTROY 311
-#define SYS_MUTEX_LOCK    312
-#define SYS_MUTEX_UNLOCK  313
-
-#define SYS_WAITPID 320
-#define SYS_GETPID  321
-#define SYS_GETPPID 322
-#define SYS_KILL    323
-
-/* VFS 系统调用 */
-#define SYS_OPEN    400
-#define SYS_CLOSE   401
-#define SYS_READ    402
-#define SYS_WRITE2  403 /* VFS write，区别于 SYS_WRITE (13) */
-#define SYS_LSEEK   404
-#define SYS_INFO    405
-#define SYS_FINFO   406
-#define SYS_OPENDIR 407
-#define SYS_READDIR 408
-#define SYS_MKDIR   410
-#define SYS_DEL     411
-#define SYS_MOUNT   412
-#define SYS_UMOUNT  413
-
-#endif
+#endif /* XNIX_SYSCALL_H */
