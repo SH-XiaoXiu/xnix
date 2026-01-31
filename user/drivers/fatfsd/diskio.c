@@ -7,8 +7,10 @@
 
 #include "ata.h"
 
+// clang-format off
+#include <ff.h>      // 必须先于 diskio.h,定义 BYTE/UINT/LBA_t 等类型
 #include <diskio.h>
-#include <ff.h>
+// clang-format on
 
 /* 物理驱动器映射 */
 #define DEV_ATA0 0 /* ATA 主盘 */
