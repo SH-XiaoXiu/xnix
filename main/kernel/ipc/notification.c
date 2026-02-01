@@ -6,6 +6,7 @@
 #include <arch/cpu.h>
 
 #include <kernel/capability/capability.h>
+#include <kernel/ipc/endpoint.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/sched/sched.h>
 #include <xnix/ipc.h>
@@ -66,6 +67,7 @@ cap_handle_t notification_create(void) {
     spin_init(&notif->lock);
     notif->pending_bits = 0;
     notif->wait_queue   = NULL;
+    notif->poll_queue   = NULL;
     notif->refcount     = 0; /* cap_alloc 会增加引用计数 */
 
     /* 分配句柄: 默认给予读写和管理权限 */
@@ -95,6 +97,14 @@ void notification_signal_by_ptr(struct ipc_notification *notif, uint32_t bits) {
 
     /* 设置 bits */
     notif->pending_bits |= bits;
+
+    /* 唤醒 poll 等待者 (ipc_wait_any) */
+    struct poll_entry *pe = notif->poll_queue;
+    while (pe) {
+        pe->triggered = true;
+        sched_wakeup_thread(pe->waiter);
+        pe = pe->next;
+    }
 
     /* 唤醒等待者 (Broadcast: 唤醒所有等待者) */
     if (notif->wait_queue) {

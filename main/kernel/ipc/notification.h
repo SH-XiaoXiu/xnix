@@ -5,6 +5,7 @@
 #include <xnix/types.h>
 
 struct thread;
+struct poll_entry;
 
 /**
  * Notification 对象
@@ -18,6 +19,9 @@ struct ipc_notification {
     uint32_t       pending_bits; /* 待处理事件位图 */
     struct thread *wait_queue;   /* 等待线程 (通常只有一个) */
     uint32_t       refcount;
+
+    /* Poll 等待队列(用于 ipc_wait_any) */
+    struct poll_entry *poll_queue;
 };
 
 /**

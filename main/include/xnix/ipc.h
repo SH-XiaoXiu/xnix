@@ -47,9 +47,8 @@ struct ipc_message {
 #define IPC_ERR_CLOSED  ABI_IPC_ERR_CLOSED
 #define IPC_ERR_NOMEM   ABI_IPC_ERR_NOMEM
 
-/* spin_unlock
+/*
  * IPC 原语
- * spin_unlock
  */
 
 /**

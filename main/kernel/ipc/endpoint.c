@@ -10,11 +10,18 @@
 #include <kernel/ipc/msg_pool.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/sched/sched.h>
+#include <xnix/config.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/process.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
+#include <xnix/thread.h>
+
+/*
+ * 前向声明
+ */
+static void endpoint_poll_wakeup(struct ipc_endpoint *ep);
 
 /*
  * Endpoint 对象管理
@@ -73,6 +80,7 @@ cap_handle_t endpoint_create(void) {
     spin_init(&ep->lock);
     ep->send_queue = NULL;
     ep->recv_queue = NULL;
+    ep->poll_queue = NULL;
     ep->refcount   = 0; /* cap_alloc 会增加引用计数 */
 #if CFG_IPC_MSG_POOL
     ep->async_head = NULL;
@@ -184,6 +192,10 @@ static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
     /* 没有接收者,加入发送队列 */
     current->wait_next = ep->send_queue;
     ep->send_queue     = current;
+
+    /* 唤醒 poll 等待者 */
+    endpoint_poll_wakeup(ep);
+
     spin_unlock(&ep->lock);
 
     /* 保存状态 */
@@ -261,6 +273,10 @@ int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc
 
     current->wait_next = ep->send_queue;
     ep->send_queue     = current;
+
+    /* 唤醒 poll 等待者 */
+    endpoint_poll_wakeup(ep);
+
     spin_unlock(&ep->lock);
 
     current->ipc_req_msg   = msg;
@@ -444,6 +460,9 @@ int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
     ep->async_tail = km;
     ep->async_len++;
 
+    /* 唤醒 poll 等待者 */
+    endpoint_poll_wakeup(ep);
+
     spin_unlock(&ep->lock);
     return IPC_OK;
 #else
@@ -458,16 +477,203 @@ int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
     memcpy(&ep->async_queue[ep->async_tail].regs, &msg->regs, sizeof(struct ipc_msg_regs));
     ep->async_tail = next_tail;
 
+    /* 唤醒 poll 等待者 */
+    endpoint_poll_wakeup(ep);
+
     spin_unlock(&ep->lock);
     return IPC_OK;
 #endif
 }
 
+/**
+ * 检查 endpoint 是否有待接收消息(不加锁版本,调用者持锁)
+ */
+static bool endpoint_has_message_locked(struct ipc_endpoint *ep) {
+    if (ep->send_queue) {
+        return true;
+    }
+#if CFG_IPC_MSG_POOL
+    if (ep->async_head) {
+        return true;
+    }
+#else
+    if (ep->async_head != ep->async_tail) {
+        return true;
+    }
+#endif
+    return false;
+}
+
+/**
+ * 检查 notification 是否有待接收信号(不加锁版本,调用者持锁)
+ */
+static bool notification_has_signal_locked(struct ipc_notification *notif) {
+    return notif->pending_bits != 0;
+}
+
+/**
+ * 唤醒 endpoint poll_queue 中的所有等待者
+ * 调用者必须持有 ep->lock
+ */
+static void endpoint_poll_wakeup(struct ipc_endpoint *ep) {
+    struct poll_entry *pe = ep->poll_queue;
+    while (pe) {
+        pe->triggered = true;
+        sched_wakeup_thread(pe->waiter);
+        pe = pe->next;
+    }
+}
+
+/**
+ * 从 endpoint poll_queue 中移除指定 poll_entry
+ * 调用者必须持有 ep->lock
+ */
+static void endpoint_poll_remove(struct ipc_endpoint *ep, struct poll_entry *entry) {
+    struct poll_entry **pp = &ep->poll_queue;
+    while (*pp) {
+        if (*pp == entry) {
+            *pp = entry->next;
+            return;
+        }
+        pp = &(*pp)->next;
+    }
+}
+
+/**
+ * 从 notification poll_queue 中移除指定 poll_entry
+ * 调用者必须持有 notif->lock
+ */
+static void notification_poll_remove(struct ipc_notification *notif, struct poll_entry *entry) {
+    struct poll_entry **pp = &notif->poll_queue;
+    while (*pp) {
+        if (*pp == entry) {
+            *pp = entry->next;
+            return;
+        }
+        pp = &(*pp)->next;
+    }
+}
+
+/**
+ * 等待多个 endpoint/notification 中的任意一个就绪
+ *
+ * 事件驱动实现:
+ * 1. 首先检查是否有已就绪的对象
+ * 2. 为每个对象创建 poll_entry 加入其 poll_queue
+ * 3. 阻塞等待
+ * 4. 被唤醒后找出就绪的对象
+ * 5. 清理所有 poll_entry
+ */
 cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
-    /* TODO: 实现NIO */
-    (void)set;
-    (void)timeout_ms;
-    return CAP_HANDLE_INVALID;
+    struct process *proc    = process_current();
+    struct thread  *current = sched_current();
+    cap_handle_t    result  = CAP_HANDLE_INVALID;
+
+    if (!set || set->count == 0 || set->count > IPC_WAIT_MAX || !proc || !current) {
+        return CAP_HANDLE_INVALID;
+    }
+
+    /* 在栈上分配 poll entries */
+    struct poll_entry entries[IPC_WAIT_MAX];
+    void             *objects[IPC_WAIT_MAX];   /* 对象指针 */
+    cap_type_t        types[IPC_WAIT_MAX];     /* 对象类型 */
+    uint32_t          valid_count = 0;
+
+    /* 第一遍:查找所有对象,检查是否有已就绪的 */
+    for (uint32_t i = 0; i < set->count; i++) {
+        cap_handle_t handle = set->handles[i];
+
+        /* 尝试作为 endpoint */
+        struct ipc_endpoint *ep = cap_lookup(proc, handle, CAP_TYPE_ENDPOINT, CAP_READ);
+        if (ep) {
+            spin_lock(&ep->lock);
+            if (endpoint_has_message_locked(ep)) {
+                spin_unlock(&ep->lock);
+                return handle; /* 已就绪,直接返回 */
+            }
+            spin_unlock(&ep->lock);
+
+            objects[valid_count] = ep;
+            types[valid_count]   = CAP_TYPE_ENDPOINT;
+            entries[valid_count].handle    = handle;
+            entries[valid_count].waiter    = current;
+            entries[valid_count].triggered = false;
+            entries[valid_count].next      = NULL;
+            valid_count++;
+            continue;
+        }
+
+        /* 尝试作为 notification */
+        struct ipc_notification *notif =
+            cap_lookup(proc, handle, CAP_TYPE_NOTIFICATION, CAP_READ);
+        if (notif) {
+            spin_lock(&notif->lock);
+            if (notification_has_signal_locked(notif)) {
+                spin_unlock(&notif->lock);
+                return handle; /* 已就绪,直接返回 */
+            }
+            spin_unlock(&notif->lock);
+
+            objects[valid_count] = notif;
+            types[valid_count]   = CAP_TYPE_NOTIFICATION;
+            entries[valid_count].handle    = handle;
+            entries[valid_count].waiter    = current;
+            entries[valid_count].triggered = false;
+            entries[valid_count].next      = NULL;
+            valid_count++;
+        }
+    }
+
+    if (valid_count == 0) {
+        return CAP_HANDLE_INVALID;
+    }
+
+    /* 第二遍:将 poll_entry 加入各对象的 poll_queue */
+    for (uint32_t i = 0; i < valid_count; i++) {
+        if (types[i] == CAP_TYPE_ENDPOINT) {
+            struct ipc_endpoint *ep = objects[i];
+            spin_lock(&ep->lock);
+            entries[i].next = ep->poll_queue;
+            ep->poll_queue  = &entries[i];
+            spin_unlock(&ep->lock);
+        } else {
+            struct ipc_notification *notif = objects[i];
+            spin_lock(&notif->lock);
+            entries[i].next  = notif->poll_queue;
+            notif->poll_queue = &entries[i];
+            spin_unlock(&notif->lock);
+        }
+    }
+
+    /* 阻塞等待 */
+    if (!sched_block_timeout(current, timeout_ms)) {
+        result = CAP_HANDLE_INVALID; /* 超时 */
+    } else {
+        /* 找出被触发的 entry */
+        for (uint32_t i = 0; i < valid_count; i++) {
+            if (entries[i].triggered) {
+                result = entries[i].handle;
+                break;
+            }
+        }
+    }
+
+    /* 清理:从所有对象的 poll_queue 中移除 entries */
+    for (uint32_t i = 0; i < valid_count; i++) {
+        if (types[i] == CAP_TYPE_ENDPOINT) {
+            struct ipc_endpoint *ep = objects[i];
+            spin_lock(&ep->lock);
+            endpoint_poll_remove(ep, &entries[i]);
+            spin_unlock(&ep->lock);
+        } else {
+            struct ipc_notification *notif = objects[i];
+            spin_lock(&notif->lock);
+            notification_poll_remove(notif, &entries[i]);
+            spin_unlock(&notif->lock);
+        }
+    }
+
+    return result;
 }
 
 int ipc_reply(struct ipc_message *reply) {
