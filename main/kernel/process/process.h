@@ -217,4 +217,12 @@ int process_kill(pid_t pid, int sig);
  */
 void process_check_signals(void);
 
+/* 内部变量(跨文件共享) */
+extern struct process *process_list;
+extern spinlock_t      process_list_lock;
+extern struct process  kernel_process;
+
+/* 内部函数 */
+void free_pid(pid_t pid);
+
 #endif
