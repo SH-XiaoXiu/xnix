@@ -30,12 +30,6 @@
 /* IRQ */
 #define CFG_IRQ_USER_BUF_SIZE @CFG_IRQ_USER_BUF_SIZE@
 
-/* 调试开关 */
-#cmakedefine CFG_DEBUG_MM
-#cmakedefine CFG_DEBUG_SCHED
-#cmakedefine CFG_DEBUG_IPC
-#cmakedefine ENABLE_VMM_DEBUG
-
 /* VMM - 高半核直接映射 */
 #define CFG_KERNEL_DIRECT_MAP_MB @CFG_KERNEL_DIRECT_MAP_MB@
 

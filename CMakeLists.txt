@@ -53,10 +53,7 @@ option(CFG_IPC_MSG_POOL "Enable IPC global message pool for async buffering" ON)
 # IRQ 配置
 set(CFG_IRQ_USER_BUF_SIZE 64)    # IRQ 用户态缓冲区大小
 
-option(CFG_DEBUG_MM "Debug memory manager" OFF)
-option(CFG_DEBUG_SCHED "Debug scheduler" OFF)
-option(CFG_DEBUG_IPC "Debug IPC" OFF)
-option(CFG_DEBUG "Enable kernel debug logging" ON)
+option(CFG_DEBUG "Enable kernel debug logging" OFF)
 
 configure_file(
         ${CMAKE_SOURCE_DIR}/main/include/xnix/config.h.in

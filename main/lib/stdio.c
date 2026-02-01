@@ -232,8 +232,8 @@ void klog(int level, const char *fmt, ...) {
         console_reset_color();
         break;
     case LOG_DBG:
-        console_set_color(KCOLOR_BLUE);
-        kputs("[DBG] ");
+        console_set_color(KCOLOR_DGRAY);
+        kputs("[DBG]  ");
         break;
     default:
         break;

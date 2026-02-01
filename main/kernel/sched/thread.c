@@ -141,7 +141,7 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
     cpu_id_t cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
     current_policy->enqueue(t, cpu);
 
-    pr_info("Thread %d '%s' created", t->tid, t->name);
+    pr_debug("Thread %d '%s' created", t->tid, t->name);
     return t;
 }
 
@@ -281,7 +281,7 @@ void thread_exit(int code) {
         current->state     = THREAD_EXITED;
         current->exit_code = code;
 
-        pr_info("Thread %d '%s' exited with code %d", current->tid, current->name, code);
+        pr_debug("Thread %d '%s' exited with code %d", current->tid, current->name, code);
 
         /* 检查是否是进程的最后一个线程 */
         struct process *proc = current->owner;
