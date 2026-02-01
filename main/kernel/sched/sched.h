@@ -49,8 +49,10 @@ struct thread {
     struct process *owner; /* 所属进程,内核线程为 NULL */
 
     /* 多核相关 */
-    uint32_t cpus_workable; /* 位图:bit N = 1 表示可在 CPU N 运行(全 1 = 任意核) */
-    cpu_id_t running_on;    /* 当前运行在哪个核上(-1 表示未运行) */
+    uint32_t cpus_workable;   /* 位图:bit N = 1 表示可在 CPU N 运行(全 1 = 任意核) */
+    cpu_id_t running_on;      /* 当前运行在哪个核上(-1 表示未运行) */
+    cpu_id_t migrate_target;  /* 迁移目标 CPU,CPU_ID_INVALID 表示无 */
+    bool     migrate_pending; /* 是否有挂起的迁移请求 */
 
     /* 调度策略 */
     struct sched_policy *policy; /* 线程专属策略(NULL 则用默认策略) */
@@ -203,6 +205,15 @@ struct thread *sched_lookup_blocked(tid_t tid);
  * 从运行队列和阻塞链表移除,设置状态为 EXITED,加入僵尸链表
  */
 void thread_force_exit(struct thread *t);
+
+/**
+ * 迁移线程到目标 CPU
+ *
+ * @param t          要迁移的线程
+ * @param target_cpu 目标 CPU ID
+ * @return 0 成功,-EINVAL 参数无效,-EPERM 亲和性不允许,-EBUSY 线程正在运行
+ */
+int sched_migrate(struct thread *t, cpu_id_t target_cpu);
 
 /**
  * 增加线程引用计数

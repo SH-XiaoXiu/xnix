@@ -154,20 +154,22 @@ static struct thread *sched_spawn(const char *name, void (*entry)(void *), void 
         return NULL;
     }
 
-    t->name          = name;
-    t->state         = THREAD_READY;
-    t->priority      = 0;
-    t->time_slice    = 0;
-    t->cpus_workable = CPUS_ALL;
-    t->running_on    = CPU_ID_INVALID;
-    t->policy        = NULL;
-    t->stack_size    = CFG_THREAD_STACK_SIZE;
-    t->next          = NULL;
-    t->wait_chan     = NULL;
-    t->exit_code     = 0;
-    t->owner         = owner;
-    t->joiner_tid    = TID_INVALID;
-    t->ipc_peer      = TID_INVALID;
+    t->name            = name;
+    t->state           = THREAD_READY;
+    t->priority        = 0;
+    t->time_slice      = 0;
+    t->cpus_workable   = CPUS_ALL;
+    t->running_on      = CPU_ID_INVALID;
+    t->migrate_target  = CPU_ID_INVALID;
+    t->migrate_pending = false;
+    t->policy          = NULL;
+    t->stack_size      = CFG_THREAD_STACK_SIZE;
+    t->next            = NULL;
+    t->wait_chan       = NULL;
+    t->exit_code       = 0;
+    t->owner           = owner;
+    t->joiner_tid      = TID_INVALID;
+    t->ipc_peer        = TID_INVALID;
 
     thread_init_stack(t, entry, arg);
 
@@ -201,13 +203,15 @@ void thread_init_idle(void) {
             idle->tid = 0; /* TID 0 保留给 idle (所有 idle 线程共享 TID 0) */
             /* 为了调试方便, 也可以给不同的 TID, 但 TID 0 通常是特殊的 */
 
-            idle->name          = "idle";
-            idle->state         = THREAD_READY;
-            idle->priority      = 255;
-            idle->stack_size    = CFG_THREAD_STACK_SIZE;
-            idle->stack         = kmalloc(CFG_THREAD_STACK_SIZE);
-            idle->cpus_workable = (1 << i); /* 绑定到特定 CPU */
-            idle->running_on    = CPU_ID_INVALID;
+            idle->name            = "idle";
+            idle->state           = THREAD_READY;
+            idle->priority        = 255;
+            idle->stack_size      = CFG_THREAD_STACK_SIZE;
+            idle->stack           = kmalloc(CFG_THREAD_STACK_SIZE);
+            idle->cpus_workable   = (1 << i); /* 绑定到特定 CPU */
+            idle->running_on      = CPU_ID_INVALID;
+            idle->migrate_target  = CPU_ID_INVALID;
+            idle->migrate_pending = false;
 
             if (idle->stack) {
                 /* 在栈底设置 canary */

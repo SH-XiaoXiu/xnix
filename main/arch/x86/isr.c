@@ -8,6 +8,7 @@
 #include <asm/irq.h>
 #include <asm/irq_defs.h>
 #include <kernel/irq/irq.h>
+#include <kernel/sched/sched.h>
 #include <xnix/debug.h>
 #include <xnix/stdio.h>
 #include <xnix/types.h>
@@ -72,20 +73,22 @@ void irq_handler(struct irq_frame *frame) {
  * IPI 处理函数
  *
  * 处理核间中断:
- * - RESCHED: 触发调度 (阶段 3 实现)
- * - TLB: TLB shootdown (阶段 4 实现)
+ * - RESCHED: 触发重新调度
+ * - TLB: TLB shootdown (待实现)
  * - PANIC: 停止当前核
  */
 void ipi_handler(struct irq_frame *frame) {
-    uint8_t vector = (uint8_t)frame->int_no;
+    uint8_t vector       = (uint8_t)frame->int_no;
+    bool    need_resched = false;
 
     switch (vector) {
     case IPI_VECTOR_RESCHED:
-        /* 调度 IPI: 阶段 3 实现 */
+        /* 调度 IPI:标记需要重新调度 */
+        need_resched = true;
         break;
 
     case IPI_VECTOR_TLB:
-        /* TLB shootdown: 阶段 4 实现 */
+        /* TLB shootdown: 待实现 */
         break;
 
     case IPI_VECTOR_PANIC:
@@ -101,6 +104,11 @@ void ipi_handler(struct irq_frame *frame) {
         break;
     }
 
-    /* 发送 EOI */
+    /* 发送 EOI(必须在 schedule 之前) */
     lapic_eoi();
+
+    /* 如果需要,执行重新调度 */
+    if (need_resched) {
+        schedule();
+    }
 }

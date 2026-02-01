@@ -4,13 +4,16 @@
  */
 
 #include <arch/cpu.h>
+#include <arch/smp.h>
 
+#include <asm/irq.h>
 #include <kernel/capability/capability.h>
 #include <kernel/irq/irq.h>
 #include <kernel/sched/sched.h>
 #include <kernel/sched/tid.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
+#include <xnix/errno.h>
 #include <xnix/stdio.h>
 #include <xnix/sync.h>
 
@@ -33,6 +36,9 @@ static volatile bool in_interrupt = false;
 
 /* 调度器锁,保护运行队列和阻塞链表 */
 spinlock_t sched_lock = SPINLOCK_INIT;
+
+/* 前向声明 */
+static void balance_load(void);
 
 /*
  * 公共 API 实现
@@ -71,6 +77,23 @@ void schedule(void) {
         panic("Stack overflow detected! Thread '%s' (tid=%d) canary corrupted",
               prev->name ? prev->name : "?", prev->tid);
     }
+
+    /* 处理挂起的迁移请求 */
+    if (prev && prev->migrate_pending) {
+        prev->migrate_pending = false;
+        cpu_id_t target       = prev->migrate_target;
+        prev->migrate_target  = CPU_ID_INVALID;
+
+        /* 将线程从当前队列移到目标 CPU 队列 */
+        current_policy->dequeue(prev);
+        current_policy->enqueue(prev, target);
+
+        /* 通知目标 CPU 进行调度 */
+        if (target != cpu && cpu_is_online(target)) {
+            smp_send_ipi(target, IPI_VECTOR_RESCHED);
+        }
+    }
+
     struct thread *next = current_policy->pick_next();
 
     if (!next) {
@@ -207,6 +230,9 @@ void sched_tick(void) {
     /* 检查睡眠线程(sleep.c) */
     sleep_check_wakeup();
 
+    /* 周期性负载均衡 */
+    balance_load();
+
     /* 首次启动:没有 current 但有就绪线程 */
     if (!current && current_policy) {
         struct thread *first = current_policy->pick_next();
@@ -270,8 +296,119 @@ void sched_tick(void) {
     in_interrupt = false;
 }
 
-void sched_migrate(struct thread *t, cpu_id_t target_cpu) {
-    /* TODO: 多核实现 */
-    (void)t;
-    (void)target_cpu;
+int sched_migrate(struct thread *t, cpu_id_t target_cpu) {
+    /* 参数验证 */
+    if (!t) {
+        return -EINVAL;
+    }
+
+    if (target_cpu >= percpu_cpu_count() || !cpu_is_online(target_cpu)) {
+        return -EINVAL;
+    }
+
+    /* 检查 CPU 亲和性 */
+    if (!CPUS_TEST(t->cpus_workable, target_cpu)) {
+        return -EPERM;
+    }
+
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
+    /* 根据线程状态处理 */
+    switch (t->state) {
+    case THREAD_READY:
+        /* READY 线程:直接迁移 */
+        current_policy->dequeue(t);
+        current_policy->enqueue(t, target_cpu);
+
+        /* 通知目标 CPU */
+        if (target_cpu != cpu_current_id() && cpu_is_online(target_cpu)) {
+            spin_unlock_irqrestore(&sched_lock, flags);
+            smp_send_ipi(target_cpu, IPI_VECTOR_RESCHED);
+            return 0;
+        }
+        break;
+
+    case THREAD_RUNNING:
+        /* RUNNING 线程:设置迁移标志,由 schedule() 处理 */
+        t->migrate_pending = true;
+        t->migrate_target  = target_cpu;
+
+        /* 发送 IPI 到线程当前运行的 CPU,触发调度 */
+        cpu_id_t source_cpu = t->running_on;
+        if (source_cpu != CPU_ID_INVALID && source_cpu != cpu_current_id()) {
+            spin_unlock_irqrestore(&sched_lock, flags);
+            smp_send_ipi(source_cpu, IPI_VECTOR_RESCHED);
+            return 0;
+        }
+        break;
+
+    case THREAD_BLOCKED:
+        /* BLOCKED 线程:唤醒时自然会选择 CPU,不需要迁移 */
+        spin_unlock_irqrestore(&sched_lock, flags);
+        return -EBUSY;
+
+    default:
+        spin_unlock_irqrestore(&sched_lock, flags);
+        return -EINVAL;
+    }
+
+    spin_unlock_irqrestore(&sched_lock, flags);
+    return 0;
+}
+
+/*
+ * 周期性负载均衡
+ */
+
+#define BALANCE_INTERVAL 100 /* 每 100 tick 执行一次 (约 1 秒) */
+
+static void balance_load(void) {
+    static uint32_t counter = 0;
+
+    /* 仅在 CPU 0 执行,避免多核竞争 */
+    if (cpu_current_id() != 0) {
+        return;
+    }
+
+    if (++counter < BALANCE_INTERVAL) {
+        return;
+    }
+    counter = 0;
+
+    uint32_t total_cpus = percpu_cpu_count();
+    if (total_cpus <= 1) {
+        return;
+    }
+
+    /* 找到最繁忙和最空闲的 CPU */
+    cpu_id_t busiest  = 0;
+    cpu_id_t idlest   = 0;
+    uint32_t max_load = 0;
+    uint32_t min_load = ~0u;
+
+    for (cpu_id_t i = 0; i < total_cpus; i++) {
+        if (!cpu_is_online(i)) {
+            continue;
+        }
+        struct runqueue *rq = sched_get_runqueue(i);
+        if (rq->nr_running > max_load) {
+            max_load = rq->nr_running;
+            busiest  = i;
+        }
+        if (rq->nr_running < min_load) {
+            min_load = rq->nr_running;
+            idlest   = i;
+        }
+    }
+
+    /* 负载差异超过阈值时迁移(差异 > 2 表示不均衡) */
+    if (max_load > min_load + 2) {
+        struct runqueue *rq = sched_get_runqueue(busiest);
+
+        /* 从队尾取(最近加入的,cache 局部性差) */
+        struct thread *t = rq->tail;
+        if (t && t != rq->current && CPUS_TEST(t->cpus_workable, idlest)) {
+            sched_migrate(t, idlest);
+        }
+    }
 }

@@ -3,8 +3,11 @@
  * @brief 线程阻塞和唤醒机制实现
  */
 
+#include <arch/smp.h>
+
 #include <drivers/timer.h>
 
+#include <asm/irq.h>
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/sync.h>
@@ -101,7 +104,11 @@ void sched_wakeup(void *wait_chan) {
         return;
     }
 
-    uint32_t flags = spin_lock_irqsave(&sched_lock);
+    uint32_t flags    = spin_lock_irqsave(&sched_lock);
+    cpu_id_t this_cpu = cpu_current_id();
+
+    /* 记录需要发送 IPI 的 CPU(位图) */
+    uint32_t ipi_mask = 0;
 
     /* 遍历阻塞链表,唤醒所有 wait_chan 匹配的线程 */
     struct thread **pp = &blocked_list;
@@ -114,15 +121,29 @@ void sched_wakeup(void *wait_chan) {
             t->wait_chan = NULL;
             t->state     = THREAD_READY;
 
-            /* 重新加入运行队列 */
-            cpu_id_t cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
-            current_policy->enqueue(t, cpu);
+            /* 选择目标 CPU 并加入运行队列 */
+            cpu_id_t target_cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
+            current_policy->enqueue(t, target_cpu);
+
+            /* 记录需要通知的 CPU */
+            if (target_cpu != this_cpu && cpu_is_online(target_cpu)) {
+                ipi_mask |= (1u << target_cpu);
+            }
         } else {
             pp = &(*pp)->next;
         }
     }
 
     spin_unlock_irqrestore(&sched_lock, flags);
+
+    /* 批量发送 IPI 到所有需要调度的 CPU */
+    uint32_t total_cpus = percpu_cpu_count();
+    for (cpu_id_t i = 0; i < total_cpus && ipi_mask; i++) {
+        if (ipi_mask & (1u << i)) {
+            smp_send_ipi(i, IPI_VECTOR_RESCHED);
+            ipi_mask &= ~(1u << i);
+        }
+    }
 }
 
 void sched_wakeup_thread(struct thread *t) {
@@ -149,17 +170,25 @@ void sched_wakeup_thread(struct thread *t) {
     t->wait_chan      = NULL;
     t->pending_wakeup = true; /* 标记有挂起的唤醒 */
 
+    cpu_id_t target_cpu = 0;
+
     /* 只有当线程真正处于阻塞状态(成功从阻塞链表移除)时, 才将其加入运行队列 */
     /* 如果线程还在运行(RUNNING)或就绪(READY), 则不需要再次加入, 否则会导致运行队列损坏(double
      * enqueue) */
     if (removed || t->state == THREAD_BLOCKED) {
         t->state = THREAD_READY; /* 修正状态 */
-        /* 重新加入运行队列 */
-        cpu_id_t cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
-        current_policy->enqueue(t, cpu);
+        /* 选择目标 CPU 并加入运行队列 */
+        target_cpu = current_policy->select_cpu ? current_policy->select_cpu(t) : 0;
+        current_policy->enqueue(t, target_cpu);
     }
 
     spin_unlock_irqrestore(&sched_lock, flags);
+
+    /* 如果目标 CPU 不是当前 CPU,发送 IPI 触发调度 */
+    cpu_id_t this_cpu = cpu_current_id();
+    if (target_cpu != this_cpu && cpu_is_online(target_cpu)) {
+        smp_send_ipi(target_cpu, IPI_VECTOR_RESCHED);
+    }
 }
 
 /**
