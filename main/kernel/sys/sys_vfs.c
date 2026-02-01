@@ -7,6 +7,7 @@
 #include <kernel/sys/syscall.h>
 #include <kernel/vfs/vfs.h>
 #include <xnix/errno.h>
+#include <xnix/mm.h>
 #include <xnix/string.h>
 #include <xnix/syscall.h>
 #include <xnix/usraccess.h>
@@ -119,16 +120,22 @@ static int32_t sys_read(const uint32_t *args) {
         size = 4096;
     }
 
-    /* 分配内核缓冲区 */
-    char    kbuf[4096];
+    /* 动态分配内核缓冲区(避免栈溢出) */
+    char *kbuf = kmalloc(size);
+    if (!kbuf) {
+        return -ENOMEM;
+    }
+
     ssize_t ret = vfs_read(fd, kbuf, size);
     if (ret > 0) {
         int err = copy_to_user(user_buf, kbuf, ret);
         if (err < 0) {
+            kfree(kbuf);
             return err;
         }
     }
 
+    kfree(kbuf);
     return (int32_t)ret;
 }
 
@@ -147,14 +154,21 @@ static int32_t sys_write2(const uint32_t *args) {
         size = 4096;
     }
 
-    /* 复制数据到内核 */
-    char kbuf[4096];
-    int  err = copy_from_user(kbuf, user_buf, size);
+    /* 动态分配内核缓冲区(避免栈溢出) */
+    char *kbuf = kmalloc(size);
+    if (!kbuf) {
+        return -ENOMEM;
+    }
+
+    int err = copy_from_user(kbuf, user_buf, size);
     if (err < 0) {
+        kfree(kbuf);
         return err;
     }
 
-    return (int32_t)vfs_write(fd, kbuf, size);
+    ssize_t ret = vfs_write(fd, kbuf, size);
+    kfree(kbuf);
+    return (int32_t)ret;
 }
 
 /* SYS_LSEEK: ebx=fd, ecx=offset, edx=whence */
