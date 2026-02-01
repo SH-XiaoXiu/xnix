@@ -3,9 +3,11 @@
  * @brief VFS 系统调用实现
  */
 
+#include <kernel/process/process.h>
 #include <kernel/sys/syscall.h>
 #include <kernel/vfs/vfs.h>
 #include <xnix/errno.h>
+#include <xnix/string.h>
 #include <xnix/syscall.h>
 #include <xnix/usraccess.h>
 
@@ -35,14 +37,60 @@ static int copy_string_from_user(char *dst, const char *user_src, size_t max_len
     return -ENAMETOOLONG;
 }
 
+/**
+ * 规范化路径(处理 . 和 ..)
+ */
+static void normalize_path(char *path);
+
+/**
+ * 将相对路径转换为绝对路径
+ * 如果路径已经是绝对路径,则只进行规范化
+ */
+static int resolve_path(const char *user_path, char *abs_path, size_t max_len) {
+    char path[VFS_PATH_MAX];
+    int  ret = copy_string_from_user(path, user_path, VFS_PATH_MAX);
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (path[0] == '/') {
+        /* 已经是绝对路径 */
+        if (strlen(path) >= max_len) {
+            return -ENAMETOOLONG;
+        }
+        strcpy(abs_path, path);
+    } else {
+        /* 相对路径 */
+        struct process *proc = process_get_current();
+        if (!proc) {
+            return -ESRCH;
+        }
+
+        size_t cwd_len  = strlen(proc->cwd);
+        size_t path_len = strlen(path);
+        if (cwd_len + 1 + path_len >= max_len) {
+            return -ENAMETOOLONG;
+        }
+
+        strcpy(abs_path, proc->cwd);
+        if (cwd_len > 1) { /* 不是根目录 */
+            abs_path[cwd_len++] = '/';
+        }
+        strcpy(abs_path + cwd_len, path);
+    }
+
+    /* 规范化路径 */
+    normalize_path(abs_path);
+    return 0;
+}
+
 /* SYS_OPEN: ebx=path, ecx=flags */
 static int32_t sys_open(const uint32_t *args) {
     const char *user_path = (const char *)(uintptr_t)args[0];
     uint32_t    flags     = args[1];
 
-    /* 复制路径到内核 */
     char path[VFS_PATH_MAX];
-    int  ret = copy_string_from_user(path, user_path, VFS_PATH_MAX);
+    int  ret = resolve_path(user_path, path, VFS_PATH_MAX);
     if (ret < 0) {
         return ret;
     }
@@ -124,7 +172,7 @@ static int32_t sys_info(const uint32_t *args) {
     struct vfs_info *user_info = (struct vfs_info *)(uintptr_t)args[1];
 
     char path[VFS_PATH_MAX];
-    int  ret = copy_string_from_user(path, user_path, VFS_PATH_MAX);
+    int  ret = resolve_path(user_path, path, VFS_PATH_MAX);
     if (ret < 0) {
         return ret;
     }
@@ -167,7 +215,7 @@ static int32_t sys_opendir(const uint32_t *args) {
     const char *user_path = (const char *)(uintptr_t)args[0];
 
     char path[VFS_PATH_MAX];
-    int  ret = copy_string_from_user(path, user_path, VFS_PATH_MAX);
+    int  ret = resolve_path(user_path, path, VFS_PATH_MAX);
     if (ret < 0) {
         return ret;
     }
@@ -200,7 +248,7 @@ static int32_t sys_mkdir(const uint32_t *args) {
     const char *user_path = (const char *)(uintptr_t)args[0];
 
     char path[VFS_PATH_MAX];
-    int  ret = copy_string_from_user(path, user_path, VFS_PATH_MAX);
+    int  ret = resolve_path(user_path, path, VFS_PATH_MAX);
     if (ret < 0) {
         return ret;
     }
@@ -213,7 +261,7 @@ static int32_t sys_del(const uint32_t *args) {
     const char *user_path = (const char *)(uintptr_t)args[0];
 
     char path[VFS_PATH_MAX];
-    int  ret = copy_string_from_user(path, user_path, VFS_PATH_MAX);
+    int  ret = resolve_path(user_path, path, VFS_PATH_MAX);
     if (ret < 0) {
         return ret;
     }
@@ -249,6 +297,155 @@ static int32_t sys_umount(const uint32_t *args) {
 }
 
 /**
+ * 规范化路径(处理 . 和 ..)
+ */
+static void normalize_path(char *path) {
+    if (!path || path[0] != '/') {
+        return;
+    }
+
+    char  result[VFS_PATH_MAX];
+    char *components[64];
+    int   count = 0;
+
+    /* 分解路径组件 */
+    char *p = path + 1; /* 跳过开头的 / */
+    while (*p && count < 64) {
+        /* 跳过连续的 / */
+        while (*p == '/') {
+            p++;
+        }
+        if (!*p) {
+            break;
+        }
+
+        char *start = p;
+        while (*p && *p != '/') {
+            p++;
+        }
+
+        size_t len = p - start;
+        if (len == 1 && start[0] == '.') {
+            /* 忽略 . */
+            continue;
+        } else if (len == 2 && start[0] == '.' && start[1] == '.') {
+            /* 处理 .. */
+            if (count > 0) {
+                count--;
+            }
+        } else {
+            /* 保存组件 */
+            components[count++] = start;
+            if (*p) {
+                *p++ = '\0';
+            }
+        }
+    }
+
+    /* 重建路径 */
+    char *out = result;
+    *out++    = '/';
+    for (int i = 0; i < count; i++) {
+        size_t len = strlen(components[i]);
+        if (out - result + len + 1 >= VFS_PATH_MAX) {
+            break;
+        }
+        memcpy(out, components[i], len);
+        out += len;
+        if (i < count - 1) {
+            *out++ = '/';
+        }
+    }
+    *out = '\0';
+
+    strcpy(path, result);
+}
+
+/* SYS_CHDIR: ebx=path */
+static int32_t sys_chdir(const uint32_t *args) {
+    const char *user_path = (const char *)(uintptr_t)args[0];
+
+    char path[VFS_PATH_MAX];
+    int  ret = copy_string_from_user(path, user_path, VFS_PATH_MAX);
+    if (ret < 0) {
+        return ret;
+    }
+
+    struct process *proc = process_get_current();
+    if (!proc) {
+        return -ESRCH;
+    }
+
+    /* 构建绝对路径 */
+    char abs_path[VFS_PATH_MAX];
+    if (path[0] == '/') {
+        /* 已经是绝对路径 */
+        strcpy(abs_path, path);
+    } else {
+        /* 相对路径 */
+        size_t cwd_len  = strlen(proc->cwd);
+        size_t path_len = strlen(path);
+        if (cwd_len + 1 + path_len >= VFS_PATH_MAX) {
+            return -ENAMETOOLONG;
+        }
+        strcpy(abs_path, proc->cwd);
+        if (cwd_len > 1) { /* 不是根目录 */
+            abs_path[cwd_len++] = '/';
+        }
+        strcpy(abs_path + cwd_len, path);
+    }
+
+    /* 规范化路径 */
+    normalize_path(abs_path);
+
+    /* 验证目录存在 */
+    struct vfs_info info;
+    ret = vfs_info(abs_path, &info);
+    if (ret < 0) {
+        return ret;
+    }
+    if (info.type != VFS_TYPE_DIR) {
+        return -ENOTDIR;
+    }
+
+    /* 更新 cwd */
+    size_t len = strlen(abs_path);
+    if (len >= PROCESS_CWD_MAX) {
+        return -ENAMETOOLONG;
+    }
+    strcpy(proc->cwd, abs_path);
+
+    return 0;
+}
+
+/* SYS_GETCWD: ebx=buf, ecx=size */
+static int32_t sys_getcwd(const uint32_t *args) {
+    char    *user_buf = (char *)(uintptr_t)args[0];
+    uint32_t size     = args[1];
+
+    if (!user_buf || size == 0) {
+        return -EINVAL;
+    }
+
+    struct process *proc = process_get_current();
+    if (!proc) {
+        return -ESRCH;
+    }
+
+    size_t cwd_len = strlen(proc->cwd);
+    if (cwd_len + 1 > size) {
+        return -ERANGE;
+    }
+
+    int ret = copy_to_user(user_buf, proc->cwd, cwd_len + 1);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return (int32_t)cwd_len;
+}
+
+/**
  * 注册 VFS 系统调用
  */
 void sys_vfs_init(void) {
@@ -261,8 +458,10 @@ void sys_vfs_init(void) {
     syscall_register(SYS_FINFO, sys_finfo, 2, "finfo");
     syscall_register(SYS_OPENDIR, sys_opendir, 1, "opendir");
     syscall_register(SYS_READDIR, sys_readdir, 3, "readdir");
+    syscall_register(SYS_CHDIR, sys_chdir, 1, "chdir");
     syscall_register(SYS_MKDIR, sys_mkdir, 1, "mkdir");
     syscall_register(SYS_DEL, sys_del, 1, "del");
     syscall_register(SYS_MOUNT, sys_mount, 2, "mount");
     syscall_register(SYS_UMOUNT, sys_umount, 1, "umount");
+    syscall_register(SYS_GETCWD, sys_getcwd, 2, "getcwd");
 }

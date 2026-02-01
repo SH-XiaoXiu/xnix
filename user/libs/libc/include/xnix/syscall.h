@@ -258,6 +258,14 @@ static inline int sys_umount(const char *path) {
     return syscall1(SYS_UMOUNT, (uint32_t)(uintptr_t)path);
 }
 
+static inline int sys_chdir(const char *path) {
+    return syscall1(SYS_CHDIR, (uint32_t)(uintptr_t)path);
+}
+
+static inline int sys_getcwd(char *buf, size_t size) {
+    return syscall2(SYS_GETCWD, (uint32_t)(uintptr_t)buf, (uint32_t)size);
+}
+
 /*
  * 内存管理
  */

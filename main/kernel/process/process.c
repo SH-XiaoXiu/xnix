@@ -62,6 +62,8 @@ void process_subsystem_init(void) {
     kernel_process.next_sibling  = NULL;
     kernel_process.next          = NULL;
     kernel_process.refcount      = 1;
+    kernel_process.cwd[0]        = '/';
+    kernel_process.cwd[1]        = '\0';
 
     if (kernel_process.sync_table) {
         spin_init(&kernel_process.sync_table->lock);
@@ -272,6 +274,8 @@ process_t process_create(const char *name) {
     proc->children     = NULL;
     proc->next_sibling = NULL;
     proc->refcount     = 1;
+    proc->cwd[0]       = '/';
+    proc->cwd[1]       = '\0';
 
     if (proc->sync_table) {
         spin_init(&proc->sync_table->lock);
@@ -534,6 +538,9 @@ pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_siz
         creator->children  = proc;
         spin_unlock(&process_list_lock);
         cpu_irq_restore(flags);
+
+        /* 继承父进程的 cwd */
+        strcpy(proc->cwd, creator->cwd);
     }
     for (uint32_t i = 0; i < inherit_count; i++) {
         cap_handle_t dup =
@@ -800,6 +807,9 @@ pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf
         creator->children  = proc;
         spin_unlock(&process_list_lock);
         cpu_irq_restore(flags);
+
+        /* 继承父进程的 cwd */
+        strcpy(proc->cwd, creator->cwd);
     }
 
     int      ret;

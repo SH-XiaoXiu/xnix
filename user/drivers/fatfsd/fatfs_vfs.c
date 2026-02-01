@@ -203,6 +203,17 @@ static int fatfs_write(void *ctx, uint32_t h, const void *buf, uint32_t offset, 
 static int fatfs_info(void *ctx, const char *path, struct vfs_info *info) {
     (void)ctx;
 
+    /* 根目录特殊处理: f_stat 不支持根目录 */
+    if (path[0] == '/' && path[1] == '\0') {
+        info->type  = VFS_TYPE_DIR;
+        info->mode  = 0;
+        info->size  = 0;
+        info->ctime = 0;
+        info->mtime = 0;
+        info->atime = 0;
+        return 0;
+    }
+
     FILINFO fno;
     FRESULT res = f_stat(path, &fno);
     if (res != FR_OK) {

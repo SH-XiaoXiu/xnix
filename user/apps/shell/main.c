@@ -38,8 +38,8 @@ static const struct builtin_cmd builtins[] = {{"help", cmd_help, "Show available
                                               {"run", cmd_run, "Run module by index"},
                                               {"kill", cmd_kill, "Terminate process"},
                                               {"path", cmd_path, "Manage PATH"},
-                                              {"cd", cmd_cd, "Change directory (stub)"},
-                                              {"pwd", cmd_pwd, "Print working directory (stub)"},
+                                              {"cd", cmd_cd, "Change directory"},
+                                              {"pwd", cmd_pwd, "Print working directory"},
                                               {"exit", NULL, "Exit shell"},
                                               {NULL, NULL, NULL}};
 
@@ -327,15 +327,49 @@ static void cmd_path(int argc, char **argv) {
 }
 
 static void cmd_cd(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    printf("cd: not implemented (no working directory concept)\n");
+    const char *path = "/";
+    if (argc > 1) {
+        path = argv[1];
+    }
+
+    int ret = sys_chdir(path);
+    if (ret < 0) {
+        const char *err_msg;
+        switch (ret) {
+        case -2:
+            err_msg = "No such directory";
+            break;
+        case -5:
+            err_msg = "I/O error";
+            break;
+        case -20:
+            err_msg = "Not a directory";
+            break;
+        case -36:
+            err_msg = "Path too long";
+            break;
+        case -110:
+            err_msg = "Connection timed out";
+            break;
+        default:
+            printf("cd: %s: error %d\n", path, ret);
+            return;
+        }
+        printf("cd: %s: %s\n", path, err_msg);
+    }
 }
 
 static void cmd_pwd(int argc, char **argv) {
     (void)argc;
     (void)argv;
-    printf("/\n");
+
+    char cwd[256];
+    int  ret = sys_getcwd(cwd, sizeof(cwd));
+    if (ret < 0) {
+        printf("pwd: error %d\n", ret);
+    } else {
+        printf("%s\n", cwd);
+    }
 }
 
 int main(int argc, char **argv) {
@@ -353,7 +387,12 @@ int main(int argc, char **argv) {
     printf("\n");
 
     while (1) {
-        printf("> ");
+        char cwd[256];
+        if (sys_getcwd(cwd, sizeof(cwd)) >= 0) {
+            printf("%s> ", cwd);
+        } else {
+            printf("> ");
+        }
         fflush(NULL);
 
         if (gets_s(line, sizeof(line)) == NULL) {

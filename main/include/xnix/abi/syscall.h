@@ -87,10 +87,12 @@
 #define SYS_FINFO   406 /* 文件信息(fd): ebx=fd, ecx=info */
 #define SYS_OPENDIR 407 /* 打开目录: ebx=path */
 #define SYS_READDIR 408 /* 读取目录项: ebx=fd, ecx=index, edx=entry */
+#define SYS_CHDIR   409 /* 切换目录: ebx=path */
 #define SYS_MKDIR   410 /* 创建目录: ebx=path */
 #define SYS_DEL     411 /* 删除文件: ebx=path */
 #define SYS_MOUNT   412 /* 挂载: ebx=path, ecx=fs_ep */
 #define SYS_UMOUNT  413 /* 卸载: ebx=path */
+#define SYS_GETCWD  414 /* 获取当前目录: ebx=buf, ecx=size */
 
 /*
  * 系统调用调用约定 (x86)

@@ -33,6 +33,11 @@ struct sync_table {
 };
 
 /**
+ * 当前工作目录最大长度
+ */
+#define PROCESS_CWD_MAX 256
+
+/**
  * 进程控制块 (PCB)
  */
 struct process {
@@ -58,6 +63,9 @@ struct process {
 
     /* 文件描述符表 */
     struct fd_table *fd_table;
+
+    /* 当前工作目录 */
+    char cwd[PROCESS_CWD_MAX];
 
     /* 用户堆 */
     uint32_t heap_start;   /* 堆起始地址(ELF 数据段之后,页对齐) */
