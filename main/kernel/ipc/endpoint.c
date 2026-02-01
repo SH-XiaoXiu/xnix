@@ -3,6 +3,8 @@
  * @brief IPC Endpoint 实现
  */
 
+#include <arch/cpu.h>
+
 #include <kernel/capability/capability.h>
 #include <kernel/ipc/endpoint.h>
 #include <kernel/ipc/msg_pool.h>
@@ -14,11 +16,8 @@
 #include <xnix/string.h>
 #include <xnix/sync.h>
 
-#include "arch/cpu.h"
-
-/*spin_unlock
+/*
  * Endpoint 对象管理
- * spin_unlock
  */
 
 void endpoint_ref(void *ptr) {

@@ -3,16 +3,16 @@
  * @brief Notification 对象实现
  */
 
+#include <arch/cpu.h>
+
 #include <kernel/capability/capability.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/sched/sched.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/process.h>
+#include <xnix/stdio.h>
 #include <xnix/sync.h>
-
-#include "arch/cpu.h"
-#include "xnix/stdio.h"
 
 /*
  * Notification 对象管理

@@ -3,6 +3,8 @@
  * @brief 进程管理实现
  */
 
+#include <arch/cpu.h>
+
 #include <kernel/capability/capability.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
@@ -16,8 +18,6 @@
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/thread.h>
-
-#include "arch/cpu.h"
 
 /* 声明 vmm_kmap/kunmap */
 extern void *vmm_kmap(paddr_t paddr);

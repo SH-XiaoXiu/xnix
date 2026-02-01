@@ -3,12 +3,12 @@
  * @brief 能力系统实现
  */
 
+#include <arch/cpu.h>
+
 #include <kernel/capability/capability.h>
 #include <kernel/process/process.h>
 #include <xnix/config.h>
 #include <xnix/mm.h>
-
-#include "arch/cpu.h"
 
 /* 对象类型的引用计数函数表 */
 static struct {

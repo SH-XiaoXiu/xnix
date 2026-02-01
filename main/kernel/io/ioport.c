@@ -1,8 +1,8 @@
+#include <arch/cpu.h>
+
 #include <kernel/capability/capability.h>
 #include <kernel/io/ioport.h>
 #include <xnix/mm.h>
-
-#include "arch/cpu.h"
 
 void ioport_ref(void *ptr) {
     struct ioport_range *r = ptr;
