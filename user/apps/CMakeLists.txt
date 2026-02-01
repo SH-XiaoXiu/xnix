@@ -31,6 +31,11 @@ foreach (APP_DIR ${APP_DIRS})
         continue()
     endif ()
 
+    # 跳过 bin 目录（有独立的 CMakeLists.txt）
+    if (APP_DIR STREQUAL "bin")
+        continue()
+    endif ()
+
     # 检查是否有 main.c
     if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${APP_DIR}/main.c)
         message(STATUS "Skipping app ${APP_DIR}: no main.c")
@@ -94,3 +99,8 @@ set(APP_TARGETS "${_APP_TARGETS}" PARENT_SCOPE)
 set(APP_NAMES "${_APP_NAMES}" PARENT_SCOPE)
 
 message(STATUS "App targets: ${_APP_TARGETS}")
+
+# ============================================
+# bin 工具（独立构建，不打包进 ISO）
+# ============================================
+add_subdirectory(bin)
