@@ -6,34 +6,57 @@
 #ifndef XNIX_CONFIG_H
 #define XNIX_CONFIG_H
 
-/* 调度器 */
+/* ============================================
+ * 资源表大小配置
+ * ============================================
+ * 注意：这些值的语义由 CMake 编译时选择的模式决定
+ * - 动态模式（默认）：作为初始容量，满了会自动扩容
+ * - 静态模式：作为固定最大值，满了返回失败
+ * 代码本身不区分模式，由编译的文件决定行为
+ */
+#define CFG_MAX_THREADS       @CFG_MAX_THREADS@
+#define CFG_MAX_PROCESSES     @CFG_MAX_PROCESSES@
+
+/* ============================================
+ * 类型大小配置（编译裁切）
+ * ============================================ */
+#define CFG_TID_BITS          @CFG_TID_BITS@
+#define CFG_PRIORITY_BITS     @CFG_PRIORITY_BITS@
+#define CFG_SLICE_BITS        @CFG_SLICE_BITS@
+
+/* ============================================
+ * 调度器配置
+ * ============================================ */
 #define CFG_SCHED_HZ          @CFG_SCHED_HZ@
-#define CFG_THREAD_STACK_SIZE @CFG_THREAD_STACK_SIZE@
 #define CFG_DEF_TIME_SLICE    @CFG_DEF_TIME_SLICE@
 
-/* 资源限制 (初始值) */
-#define CFG_INITIAL_PROCESSES @CFG_INITIAL_PROCESSES@
-#define CFG_INITIAL_THREADS   @CFG_INITIAL_THREADS@
+/* ============================================
+ * 内存配置
+ * ============================================ */
+#define CFG_THREAD_STACK_SIZE @CFG_THREAD_STACK_SIZE@
+#define CFG_KERNEL_DIRECT_MAP_MB @CFG_KERNEL_DIRECT_MAP_MB@
 
-/* CPU */
+/* ============================================
+ * CPU 配置
+ * ============================================ */
 #define CFG_MAX_CPUS          @CFG_MAX_CPUS@
 
-/* 驱动 */
-#define CFG_MAX_CONSOLES      @CFG_MAX_CONSOLES@
-
-/* IPC */
+/* ============================================
+ * IPC 配置
+ * ============================================ */
 #define CFG_CAP_TABLE_SIZE    @CFG_CAP_TABLE_SIZE@
 #define CFG_IPC_MSG_REGS      @CFG_IPC_MSG_REGS@
 #define CFG_IPC_MSG_CAPS_MAX  @CFG_IPC_MSG_CAPS_MAX@
 #cmakedefine01 CFG_IPC_MSG_POOL
 
-/* IRQ */
+/* ============================================
+ * IRQ 配置
+ * ============================================ */
 #define CFG_IRQ_USER_BUF_SIZE @CFG_IRQ_USER_BUF_SIZE@
 
-/* VMM - 高半核直接映射 */
-#define CFG_KERNEL_DIRECT_MAP_MB @CFG_KERNEL_DIRECT_MAP_MB@
-
-/* 全局调试开关 */
+/* ============================================
+ * 调试配置
+ * ============================================ */
 #cmakedefine CFG_DEBUG
 
 #endif

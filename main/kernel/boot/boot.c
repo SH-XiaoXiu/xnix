@@ -3,6 +3,7 @@
 #include <asm/mmu.h>
 #include <asm/multiboot.h>
 #include <xnix/boot.h>
+#include <xnix/driver.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 
@@ -147,6 +148,8 @@ __attribute__((weak)) void boot_init(uint32_t magic, const struct multiboot_info
         if (mb_info->flags & MULTIBOOT_INFO_CMDLINE) {
             /* cmdline 是物理地址,需要转换为虚拟地址 */
             cmdline = (const char *)PHYS_TO_VIRT(mb_info->cmdline);
+            /* 保存命令行供驱动选择使用 */
+            boot_save_cmdline(cmdline);
         }
 
         /* 保存模块信息 */

@@ -18,6 +18,7 @@
 #include <xnix/boot.h>
 #include <xnix/config.h>
 #include <xnix/console.h>
+#include <xnix/driver.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
@@ -70,6 +71,10 @@ static void boot_phase_core(void) {
     hal_probe_smp_late();
     boot_print_banner();
 
+    /* Boot 裁切:根据命令行选择 IRQ 控制器 */
+    const char *irqchip_prefer = boot_get_cmdline_value("xnix.irqchip");
+    irqchip_select_and_init(irqchip_prefer);
+
     irq_init();
     pr_ok("IRQ subsystem.");
 }
@@ -106,6 +111,10 @@ static void boot_phase_smp(void) {
  * Late - 定时器,异步输出
  */
 static void boot_phase_late(void) {
+    /* Boot 裁切:根据命令行选择定时器 */
+    const char *timer_prefer = boot_get_cmdline_value("xnix.timer");
+    timer_drv_select_best(timer_prefer);
+
     timer_set_callback(sched_tick);
     timer_init(CFG_SCHED_HZ);
     pr_ok("Timer (%d Hz)", CFG_SCHED_HZ);

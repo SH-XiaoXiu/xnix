@@ -145,7 +145,7 @@ pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_siz
     }
 
     process_add_thread(proc, (struct thread *)t);
-    pr_ok("Spawned %s process (PID %d)", name ? name : "?", proc->pid);
+    pr_debug("Spawned %s process (PID %d)", name ? name : "?", proc->pid);
     return proc->pid;
 }
 

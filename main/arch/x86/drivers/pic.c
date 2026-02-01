@@ -2,11 +2,14 @@
  * @file pic.c
  * @brief x86 8259 PIC 驱动
  * @author XiaoXiu
+ *
+ * 使用驱动注册框架,支持 Boot 裁切
  */
 
 #include <arch/cpu.h>
 
 #include <kernel/irq/irq.h>
+#include <xnix/driver.h>
 
 #define PIC1_CMD  0x20
 #define PIC1_DATA 0x21
@@ -55,6 +58,26 @@ static void pic_eoi(uint8_t irq) {
     outb(PIC1_CMD, PIC_EOI);
 }
 
+/**
+ * PIC 探测:总是可用(作为 fallback)
+ */
+static bool pic_probe(void) {
+    return true;
+}
+
+/* 使用新的驱动注册框架 */
+static struct irqchip_driver pic_driver = {
+    .name     = "pic",
+    .priority = 10, /* 低优先级,作为 fallback */
+    .probe    = pic_probe,
+    .init     = pic_init,
+    .enable   = pic_enable,
+    .disable  = pic_disable,
+    .eoi      = pic_eoi,
+    .next     = NULL,
+};
+
+/* 保留旧接口以兼容现有代码 */
 static const struct irqchip_ops pic_chip = {
     .name    = "8259-pic",
     .init    = pic_init,
@@ -64,5 +87,8 @@ static const struct irqchip_ops pic_chip = {
 };
 
 void pic_register(void) {
+    /* 注册到新框架 */
+    irqchip_register(&pic_driver);
+    /* 同时设置为默认(兼容旧代码) */
     irq_set_chip(&pic_chip);
 }

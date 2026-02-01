@@ -1,6 +1,9 @@
 /**
  * @file capability.c
- * @brief 能力系统实现
+ * @brief 能力系统公共实现
+ *
+ * 包含静态和动态版本共用的函数.
+ * cap_table_create, cap_table_destroy, cap_alloc 由静态或动态版本提供.
  */
 
 #include <arch/cpu.h>
@@ -9,6 +12,7 @@
 #include <kernel/process/process.h>
 #include <xnix/config.h>
 #include <xnix/mm.h>
+#include <xnix/string.h>
 
 /* 对象类型的引用计数函数表 */
 static struct {
@@ -24,88 +28,24 @@ void cap_register_type(cap_type_t type, cap_ref_fn ref, cap_unref_fn unref) {
     cap_type_ops[type].unref = unref;
 }
 
-static void cap_ref_object(cap_type_t type, void *object) {
+void cap_ref_object(cap_type_t type, void *object) {
     if (type < 16 && cap_type_ops[type].ref) {
         cap_type_ops[type].ref(object);
     }
 }
 
-static void cap_unref_object(cap_type_t type, void *object) {
+void cap_unref_object(cap_type_t type, void *object) {
     if (type < 16 && cap_type_ops[type].unref) {
         cap_type_ops[type].unref(object);
     }
 }
 
-struct cap_table *cap_table_create(void) {
-    struct cap_table *table = kzalloc(sizeof(struct cap_table));
-    if (!table) {
-        return NULL;
-    }
-
-    /* 初始化所有槽位为空 */
-    for (uint32_t i = 0; i < CFG_CAP_TABLE_SIZE; i++) {
-        table->caps[i].type   = CAP_TYPE_NONE;
-        table->caps[i].rights = 0;
-        table->caps[i].object = NULL;
-    }
-
-    return table;
-}
-
-void cap_table_destroy(struct cap_table *table) {
-    if (!table) {
-        return;
-    }
-
-    /* 释放所有能力 */
-    for (uint32_t i = 0; i < CFG_CAP_TABLE_SIZE; i++) {
-        if (table->caps[i].type != CAP_TYPE_NONE) {
-            cap_unref_object(table->caps[i].type, table->caps[i].object);
-        }
-    }
-
-    kfree(table);
-}
-
-cap_handle_t cap_alloc(struct process *proc, cap_type_t type, void *object, cap_rights_t rights) {
-    if (!proc || !proc->cap_table || !object) {
-        return CAP_HANDLE_INVALID;
-    }
-
-    struct cap_table *table = proc->cap_table;
-    uint32_t          flags = cpu_irq_save();
-    spin_lock(&table->lock);
-
-    /* 查找空闲槽位 */
-    cap_handle_t handle = CAP_HANDLE_INVALID;
-    for (uint32_t i = 0; i < CFG_CAP_TABLE_SIZE; i++) {
-        if (table->caps[i].type == CAP_TYPE_NONE) {
-            handle = i;
-            break;
-        }
-    }
-
-    if (handle == CAP_HANDLE_INVALID) {
-        spin_unlock(&table->lock);
-        cpu_irq_restore(flags);
-        return CAP_HANDLE_INVALID;
-    }
-
-    /* 分配能力 */
-    table->caps[handle].type   = type;
-    table->caps[handle].rights = rights;
-    table->caps[handle].object = object;
-
-    /* 增加对象引用计数 */
-    cap_ref_object(type, object);
-
-    spin_unlock(&table->lock);
-    cpu_irq_restore(flags);
-    return handle;
-}
+/*
+ * 公共函数(两个版本共用)
+ */
 
 void cap_free(struct process *proc, cap_handle_t handle) {
-    if (!proc || !proc->cap_table || handle >= CFG_CAP_TABLE_SIZE) {
+    if (!proc || !proc->cap_table || handle >= cap_table_capacity(proc->cap_table)) {
         return;
     }
 
@@ -133,7 +73,7 @@ void cap_free(struct process *proc, cap_handle_t handle) {
 
 void *cap_lookup(struct process *proc, cap_handle_t handle, cap_type_t expected_type,
                  cap_rights_t required_rights) {
-    if (!proc || !proc->cap_table || handle >= CFG_CAP_TABLE_SIZE) {
+    if (!proc || !proc->cap_table || handle >= cap_table_capacity(proc->cap_table)) {
         return NULL;
     }
 
@@ -164,7 +104,8 @@ void *cap_lookup(struct process *proc, cap_handle_t handle, cap_type_t expected_
 
 cap_handle_t cap_duplicate_to(struct process *src, cap_handle_t src_handle, struct process *dst,
                               cap_rights_t new_rights) {
-    if (!src || !src->cap_table || !dst || !dst->cap_table || src_handle >= CFG_CAP_TABLE_SIZE) {
+    if (!src || !src->cap_table || !dst || !dst->cap_table ||
+        src_handle >= cap_table_capacity(src->cap_table)) {
         return CAP_HANDLE_INVALID;
     }
 

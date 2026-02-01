@@ -3,6 +3,7 @@
  * @brief x86 I/O APIC 驱动
  *
  * I/O APIC 负责将外部中断路由到各个 CPU 的 LAPIC
+ * 使用驱动注册框架,支持 Boot 裁切
  */
 
 #include <arch/cpu.h>
@@ -10,6 +11,7 @@
 #include <asm/apic.h>
 #include <asm/smp_defs.h>
 #include <kernel/irq/irq.h>
+#include <xnix/driver.h>
 #include <xnix/stdio.h>
 #include <xnix/vmm.h>
 
@@ -177,12 +179,35 @@ static const struct irqchip_ops apic_chip = {
     .eoi     = apic_chip_eoi,
 };
 
+/**
+ * APIC 探测:检查硬件是否支持 APIC
+ */
+static bool apic_probe(void) {
+    extern struct smp_info g_smp_info;
+    return g_smp_info.apic_available;
+}
+
+/* 使用新的驱动注册框架 */
+static struct irqchip_driver apic_driver = {
+    .name     = "apic",
+    .priority = 100, /* 高优先级,优先于 PIC */
+    .probe    = apic_probe,
+    .init     = apic_chip_init,
+    .enable   = apic_chip_enable,
+    .disable  = apic_chip_disable,
+    .eoi      = apic_chip_eoi,
+    .next     = NULL,
+};
+
 void apic_register(void) {
     extern struct smp_info g_smp_info;
 
+    /* 注册到新框架 */
+    irqchip_register(&apic_driver);
+
+    /* 兼容旧代码:如果 APIC 可用,设置为当前芯片并初始化 */
     if (g_smp_info.apic_available) {
         irq_set_chip(&apic_chip);
-        /* 初始化 APIC 芯片 (禁用 PIC,初始化 LAPIC/IOAPIC) */
         apic_chip_init();
     }
 }

@@ -2,6 +2,8 @@
  * @file pit.c
  * @brief x86 8254 PIT 驱动
  * @author XiaoXiu
+ *
+ * 使用驱动注册框架,支持 Boot 裁切
  */
 
 #include <arch/cpu.h>
@@ -9,6 +11,7 @@
 #include <drivers/timer.h>
 
 #include <kernel/irq/irq.h>
+#include <xnix/driver.h>
 
 #define PIT_CHANNEL0      0x40
 #define PIT_CHANNEL2_DATA 0x42
@@ -41,13 +44,34 @@ static uint64_t pit_get_ticks(void) {
     return pit_ticks;
 }
 
+/**
+ * PIT 探测:总是可用(作为 fallback)
+ */
+static bool pit_probe(void) {
+    return true;
+}
+
+/* 旧接口(保留兼容) */
 static struct timer_driver pit_timer = {
     .name      = "8254-pit",
     .init      = pit_init,
     .get_ticks = pit_get_ticks,
 };
 
+/* 新驱动注册框架 */
+static struct timer_driver_ext pit_driver_ext = {
+    .name      = "pit",
+    .priority  = 10, /* 低优先级,作为 fallback */
+    .probe     = pit_probe,
+    .init      = pit_init,
+    .get_ticks = pit_get_ticks,
+    .next      = NULL,
+};
+
 void pit_register(void) {
+    /* 注册到新框架 */
+    timer_drv_register(&pit_driver_ext);
+    /* 同时注册到旧框架(兼容) */
     timer_register(&pit_timer);
 }
 

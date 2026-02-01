@@ -15,6 +15,9 @@
 /* 架构层:架构相关类型 */
 #include <asm/types.h>
 
+/* 配置层:可调整的内核配置 */
+#include <xnix/config.h>
+
 /*
  * 架构相关类型别名
  *
@@ -65,5 +68,32 @@ typedef enum {
     KCOLOR_WHITE   = 15,
     KCOLOR_DEFAULT = -1,
 } kcolor_t;
+
+/*
+ * 内核内部可配置类型(编译裁切)
+ *
+ * 这些类型用于内核内部数据结构,大小可通过配置调整以节省内存.
+ * 注意:ABI 类型(tid_t, pid_t)保持 32 位不变,以保证用户态兼容.
+ */
+
+/* 优先级类型 */
+#if CFG_PRIORITY_BITS == 8
+typedef int8_t priority_t;
+#define PRIORITY_MIN INT8_MIN
+#define PRIORITY_MAX INT8_MAX
+#else
+typedef int32_t priority_t;
+#define PRIORITY_MIN INT32_MIN
+#define PRIORITY_MAX INT32_MAX
+#endif
+
+/* 时间片类型 */
+#if CFG_SLICE_BITS == 16
+typedef uint16_t time_slice_t;
+#define TIME_SLICE_MAX UINT16_MAX
+#else
+typedef uint32_t time_slice_t;
+#define TIME_SLICE_MAX UINT32_MAX
+#endif
 
 #endif /* XNIX_TYPES_H */

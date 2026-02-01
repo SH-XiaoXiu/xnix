@@ -27,11 +27,23 @@ struct capability {
 
 /**
  * 进程能力表
+ *
+ * 统一使用指针+容量结构,支持静态和动态两种模式:
+ * - 静态模式:初始化后容量固定,分配失败直接返回错误
+ * - 动态模式:容量不足时自动扩容
+ *
+ * 模式由 CMake 选择编译哪个实现文件决定,代码中无条件编译.
  */
 struct cap_table {
-    struct capability caps[CFG_CAP_TABLE_SIZE];
-    spinlock_t        lock;
+    struct capability *caps;     /* 能力数组(动态分配) */
+    uint32_t           capacity; /* 当前容量 */
+    spinlock_t         lock;
 };
+
+/**
+ * 获取能力表当前容量
+ */
+uint32_t cap_table_capacity(struct cap_table *table);
 
 /**
  * 创建能力表

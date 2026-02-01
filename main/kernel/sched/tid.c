@@ -17,8 +17,8 @@ static uint32_t   tid_capacity = 0;
 static spinlock_t tid_lock     = SPINLOCK_INIT;
 
 void tid_init(void) {
-    /* 分配 TID Bitmap (初始容量使用配置值) */
-    tid_capacity       = (CFG_INITIAL_THREADS + 31) & ~31; /* 32 对齐 */
+    /* 分配 TID Bitmap (使用配置的最大值作为初始容量,动态模式下可扩容) */
+    tid_capacity       = (CFG_MAX_THREADS + 31) & ~31; /* 32 对齐 */
     size_t bitmap_size = (tid_capacity / 8);
     tid_bitmap         = kzalloc(bitmap_size);
     if (!tid_bitmap) {

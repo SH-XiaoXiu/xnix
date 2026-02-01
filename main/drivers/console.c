@@ -5,14 +5,16 @@
  * 支持同步/异步两种模式:
  * - 同步驱动(VGA): putc 时立即调用
  * - 异步驱动(Serial): 写入 ring buffer,由消费者线程处理
+ *
+ * 始终使用链表管理驱动注册(开销可忽略)
  */
 
+#include <xnix/config.h>
 #include <xnix/console.h>
 #include <xnix/ringbuf.h>
 #include <xnix/string.h>
 #include <xnix/thread.h>
 
-#define MAX_CONSOLES         4
 #define CONSOLE_RINGBUF_SIZE 4096
 
 /* ANSI 颜色码 (kcolor_t 到 ANSI 序列的映射) */
@@ -35,7 +37,9 @@ static const char *ansi_colors[] = {
     "\x1b[97m", /* KCOLOR_WHITE */
 };
 
-static struct console *consoles[MAX_CONSOLES];
+/* 链表管理控制台驱动 */
+static struct console *console_list  = NULL;
+static struct console *console_tail  = NULL;
 static int             console_count = 0;
 
 /* Ring buffer for async drivers */
@@ -48,10 +52,20 @@ static bool           g_emergency_mode = false;
 static void (*g_emergency_putc)(char c) = NULL;
 
 int console_register(struct console *c) {
-    if (console_count >= MAX_CONSOLES || !c) {
+    if (!c) {
         return -1;
     }
-    consoles[console_count++] = c;
+
+    c->next = NULL;
+
+    if (!console_list) {
+        console_list = c;
+        console_tail = c;
+    } else {
+        console_tail->next = c;
+        console_tail       = c;
+    }
+    console_count++;
     return 0;
 }
 
@@ -60,9 +74,12 @@ int console_replace(const char *name, struct console *c) {
         return -1;
     }
 
-    for (int i = 0; i < console_count; i++) {
-        if (consoles[i] && consoles[i]->name && !strcmp(consoles[i]->name, name)) {
-            consoles[i] = c;
+    for (struct console *cur = console_list; cur; cur = cur->next) {
+        if (cur->name && !strcmp(cur->name, name)) {
+            /* 保留链表结构,只替换内容 */
+            c->next   = cur->next;
+            *cur      = *c;
+            cur->next = c->next;
             return 0;
         }
     }
@@ -73,17 +90,17 @@ int console_replace(const char *name, struct console *c) {
 void console_init(void) {
     ringbuf_init(&g_ringbuf, g_ringbuf_data, CONSOLE_RINGBUF_SIZE);
 
-    for (int i = 0; i < console_count; i++) {
-        if (consoles[i]->init) {
-            consoles[i]->init();
+    for (struct console *c = console_list; c; c = c->next) {
+        if (c->init) {
+            c->init();
         }
     }
 }
 
 void console_start_consumers(void) {
-    for (int i = 0; i < console_count; i++) {
-        if (consoles[i]->start_consumer) {
-            consoles[i]->start_consumer();
+    for (struct console *c = console_list; c; c = c->next) {
+        if (c->start_consumer) {
+            c->start_consumer();
         }
     }
 }
@@ -131,9 +148,9 @@ extern struct thread *sched_current(void);
 void console_putc(char c) {
     /* 同步驱动立即调用 */
     bool has_sync_output = false;
-    for (int i = 0; i < console_count; i++) {
-        if ((consoles[i]->flags & CONSOLE_ASYNC) == 0 && consoles[i]->putc) {
-            consoles[i]->putc(c);
+    for (struct console *con = console_list; con; con = con->next) {
+        if ((con->flags & CONSOLE_ASYNC) == 0 && con->putc) {
+            con->putc(c);
             has_sync_output = true;
         }
     }
@@ -183,9 +200,9 @@ void console_putc(char c) {
 }
 
 void console_puts(const char *s) {
-    for (int i = 0; i < console_count; i++) {
-        if ((consoles[i]->flags & CONSOLE_ASYNC) == 0 && consoles[i]->puts) {
-            consoles[i]->puts(s);
+    for (struct console *con = console_list; con; con = con->next) {
+        if ((con->flags & CONSOLE_ASYNC) == 0 && con->puts) {
+            con->puts(s);
         }
     }
 
@@ -241,9 +258,9 @@ void console_reset_color(void) {
 
 void console_clear(void) {
     /* 同步驱动立即调用 */
-    for (int i = 0; i < console_count; i++) {
-        if ((consoles[i]->flags & CONSOLE_ASYNC) == 0 && consoles[i]->clear) {
-            consoles[i]->clear();
+    for (struct console *con = console_list; con; con = con->next) {
+        if ((con->flags & CONSOLE_ASYNC) == 0 && con->clear) {
+            con->clear();
         }
     }
 

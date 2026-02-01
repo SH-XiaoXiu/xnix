@@ -20,7 +20,7 @@ extern void vfs_mount_init(void);
 
 void vfs_init(void) {
     vfs_mount_init();
-    kprintf("VFS: initialized\n");
+    pr_ok("VFS: initialized\n");
 }
 
 /**

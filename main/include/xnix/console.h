@@ -35,6 +35,9 @@ struct console {
     void (*reset_color)(void);
     void (*clear)(void);
     void (*start_consumer)(void); /* 启动异步消费者线程(可选) */
+
+    /* 链表指针(用于驱动注册链表) */
+    struct console *next;
 };
 
 /**

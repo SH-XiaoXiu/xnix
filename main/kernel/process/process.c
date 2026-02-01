@@ -28,8 +28,8 @@ static uint32_t  pid_capacity = 0;
 struct process kernel_process;
 
 void process_subsystem_init(void) {
-    /* 分配 PID Bitmap */
-    pid_capacity       = (CFG_INITIAL_PROCESSES + 31) & ~31;
+    /* 分配 PID Bitmap (使用配置的最大值作为初始容量,动态模式下可扩容) */
+    pid_capacity       = (CFG_MAX_PROCESSES + 31) & ~31;
     size_t bitmap_size = (pid_capacity / 8);
     pid_bitmap         = kzalloc(bitmap_size);
     if (!pid_bitmap) {
