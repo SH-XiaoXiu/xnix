@@ -9,6 +9,7 @@
 #ifndef KERNEL_PROCESS_H
 #define KERNEL_PROCESS_H
 
+#include <xnix/abi/process.h>
 #include <xnix/capability.h>
 #include <xnix/process.h>
 #include <xnix/sync.h>
@@ -155,6 +156,17 @@ struct spawn_inherit_cap {
 
 pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
                               const struct spawn_inherit_cap *inherit_caps, uint32_t inherit_count);
+
+/**
+ * 从 ELF 创建进程(带 argv)
+ * @param name     进程名
+ * @param elf_data ELF 数据
+ * @param elf_size ELF 大小
+ * @param argc     参数数量
+ * @param argv     参数数组
+ */
+pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf_size, int argc,
+                                  char argv[][ABI_EXEC_MAX_ARG_LEN]);
 
 /**
  * 终止当前进程
