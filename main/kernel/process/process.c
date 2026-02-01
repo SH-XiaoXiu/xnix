@@ -72,6 +72,9 @@ void process_subsystem_init(void) {
 
     process_list = &kernel_process;
 
+    /* 注册 PROCESS 能力类型 */
+    cap_register_type(CAP_TYPE_PROCESS, (cap_ref_fn)process_ref, (cap_unref_fn)process_unref);
+
     pr_info("Process subsystem initialized (kernel PID 0)");
 }
 

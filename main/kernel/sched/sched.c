@@ -5,6 +5,7 @@
 
 #include <arch/cpu.h>
 
+#include <kernel/capability/capability.h>
 #include <kernel/irq/irq.h>
 #include <kernel/sched/sched.h>
 #include <kernel/sched/tid.h>
@@ -169,6 +170,9 @@ void sched_init(void) {
 
     /* 初始化 idle 线程 */
     thread_init_idle();
+
+    /* 注册 THREAD 能力类型 */
+    cap_register_type(CAP_TYPE_THREAD, (cap_ref_fn)thread_ref, (cap_unref_fn)thread_unref);
 }
 
 void sched_set_policy(struct sched_policy *policy) {

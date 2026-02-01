@@ -53,6 +53,39 @@ void sched_cleanup_zombie(void) {
 }
 
 /**
+ * 增加线程引用计数
+ */
+void thread_ref(struct thread *t) {
+    if (!t) {
+        return;
+    }
+
+    uint32_t flags = cpu_irq_save();
+    t->refcount++;
+    cpu_irq_restore(flags);
+}
+
+/**
+ * 减少线程引用计数
+ *
+ * 注意:线程的实际释放由 sched_cleanup_zombie 处理,
+ * 这里只管理 Capability 系统的引用计数.
+ * 当 refcount 归零时,表示没有外部引用,
+ * 但线程可能仍在运行或等待 join.
+ */
+void thread_unref(struct thread *t) {
+    if (!t) {
+        return;
+    }
+
+    uint32_t flags = cpu_irq_save();
+    if (t->refcount > 0) {
+        t->refcount--;
+    }
+    cpu_irq_restore(flags);
+}
+
+/**
  * 线程入口包装器
  * 从寄存器读取 entry 和 arg(ebx=entry, esi=arg)
  */

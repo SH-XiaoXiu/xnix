@@ -81,6 +81,9 @@ struct thread {
     bool     is_detached;     /* 是否为 detached 模式 */
     bool     has_been_joined; /* 是否已被 join 过,防止重复 join */
     tid_t    joiner_tid;      /* 等待此线程的 joiner TID,TID_INVALID 表示无 */
+
+    /* 引用计数(用于 CAP) */
+    uint32_t refcount;
 };
 
 /* CPU 位图操作 */
@@ -200,6 +203,16 @@ struct thread *sched_lookup_blocked(tid_t tid);
  * 从运行队列和阻塞链表移除,设置状态为 EXITED,加入僵尸链表
  */
 void thread_force_exit(struct thread *t);
+
+/**
+ * 增加线程引用计数
+ */
+void thread_ref(struct thread *t);
+
+/**
+ * 减少线程引用计数
+ */
+void thread_unref(struct thread *t);
 
 thread_t       thread_create_with_owner(const char *name, void (*entry)(void *), void *arg,
                                         struct process *owner);
