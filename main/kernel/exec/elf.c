@@ -349,7 +349,7 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
         stack_mem[i - 1] = page;
     }
 
-    pr_info("ELF loaded, entry point %x", hdr.e_entry);
+    pr_debug("ELF loaded, entry point %x", hdr.e_entry);
     *out_entry = hdr.e_entry;
     return 0;
 
