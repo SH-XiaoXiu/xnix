@@ -15,10 +15,24 @@
 #define MAX_CONSOLES         4
 #define CONSOLE_RINGBUF_SIZE 4096
 
-/* ANSI 颜色码,用于异步输出 */
+/* ANSI 颜色码 (kcolor_t 到 ANSI 序列的映射) */
 static const char *ansi_colors[] = {
-    "\033[30m", "\033[34m", "\033[32m", "\033[36m", "\033[31m", "\033[35m", "\033[33m", "\033[37m",
-    "\033[90m", "\033[94m", "\033[92m", "\033[96m", "\033[91m", "\033[95m", "\033[93m", "\033[97m",
+    "\x1b[30m", /* KCOLOR_BLACK */
+    "\x1b[34m", /* KCOLOR_BLUE */
+    "\x1b[32m", /* KCOLOR_GREEN */
+    "\x1b[36m", /* KCOLOR_CYAN */
+    "\x1b[31m", /* KCOLOR_RED */
+    "\x1b[35m", /* KCOLOR_MAGENTA */
+    "\x1b[33m", /* KCOLOR_BROWN/YELLOW */
+    "\x1b[37m", /* KCOLOR_LIGHT_GREY */
+    "\x1b[90m", /* KCOLOR_DARK_GREY */
+    "\x1b[94m", /* KCOLOR_LIGHT_BLUE */
+    "\x1b[92m", /* KCOLOR_LIGHT_GREEN */
+    "\x1b[96m", /* KCOLOR_LIGHT_CYAN */
+    "\x1b[91m", /* KCOLOR_LIGHT_RED */
+    "\x1b[95m", /* KCOLOR_PINK */
+    "\x1b[93m", /* KCOLOR_YELLOW */
+    "\x1b[97m", /* KCOLOR_WHITE */
 };
 
 static struct console *consoles[MAX_CONSOLES];
@@ -214,35 +228,15 @@ void console_puts(const char *s) {
 }
 
 void console_set_color(kcolor_t color) {
-    /* 同步驱动立即调用 */
-    for (int i = 0; i < console_count; i++) {
-        if ((consoles[i]->flags & CONSOLE_ASYNC) == 0 && consoles[i]->set_color) {
-            consoles[i]->set_color(color);
-        }
-    }
-
-    /* 异步驱动: 写入 ANSI 序列到 buffer */
-    if (g_async_enabled && color >= 0 && color <= 15) {
-        uint32_t flags = spin_lock_irqsave(&g_ringbuf.lock);
-        ringbuf_puts_locked(ansi_colors[color]);
-        spin_unlock_irqrestore(&g_ringbuf.lock, flags);
+    /* 统一使用 ANSI 序列输出颜色 */
+    if (color >= 0 && color <= 15) {
+        console_puts(ansi_colors[color]);
     }
 }
 
 void console_reset_color(void) {
-    /* 同步驱动立即调用 */
-    for (int i = 0; i < console_count; i++) {
-        if ((consoles[i]->flags & CONSOLE_ASYNC) == 0 && consoles[i]->reset_color) {
-            consoles[i]->reset_color();
-        }
-    }
-
-    /* 异步驱动: 写入 ANSI 重置序列到 buffer */
-    if (g_async_enabled) {
-        uint32_t flags = spin_lock_irqsave(&g_ringbuf.lock);
-        ringbuf_puts_locked("\033[0m");
-        spin_unlock_irqrestore(&g_ringbuf.lock, flags);
-    }
+    /* 统一使用 ANSI 序列重置颜色 */
+    console_puts("\x1b[0m");
 }
 
 void console_clear(void) {

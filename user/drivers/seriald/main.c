@@ -30,12 +30,7 @@ static int console_handler(struct ipc_message *msg) {
         }
         break;
     }
-    case UDM_CONSOLE_SET_COLOR:
-        serial_set_color(UDM_MSG_ARG(msg, 0));
-        break;
-    case UDM_CONSOLE_RESET_COLOR:
-        serial_reset_color();
-        break;
+    /* SET_COLOR 和 RESET_COLOR 不再使用,颜色通过 ANSI 序列在文本中传递 */
     case UDM_CONSOLE_CLEAR:
         serial_clear();
         break;

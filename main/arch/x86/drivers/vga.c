@@ -46,6 +46,18 @@ static uint16_t *vga_buffer;
 static int       vga_x, vga_y;
 static uint8_t   vga_attr;
 
+/* ANSI 解析状态 */
+enum ansi_state {
+    ANSI_NORMAL,
+    ANSI_ESC,
+    ANSI_CSI,
+};
+
+static enum ansi_state ansi_state = ANSI_NORMAL;
+static int             ansi_params[4];
+static int             ansi_param_count;
+static int             ansi_param_value;
+
 static inline uint8_t make_attr(uint8_t fg, uint8_t bg) {
     return fg | (bg << 4);
 }
@@ -91,7 +103,98 @@ static void vga_init(void) {
     vga_update_cursor();
 }
 
-static void vga_putc(char c) {
+/* 前向声明 */
+static void vga_clear(void);
+
+/* ANSI 颜色码到 VGA 颜色的映射 */
+static const uint8_t ansi_to_vga[] = {
+    VGA_BLACK,      /* 0 -> 30 */
+    VGA_RED,        /* 1 -> 31 */
+    VGA_GREEN,      /* 2 -> 32 */
+    VGA_BROWN,      /* 3 -> 33 (yellow) */
+    VGA_BLUE,       /* 4 -> 34 */
+    VGA_MAGENTA,    /* 5 -> 35 */
+    VGA_CYAN,       /* 6 -> 36 */
+    VGA_LIGHT_GREY, /* 7 -> 37 */
+};
+
+static const uint8_t ansi_to_vga_bright[] = {
+    VGA_DARK_GREY,   /* 0 -> 90 or 1;30 */
+    VGA_LIGHT_RED,   /* 1 -> 91 or 1;31 */
+    VGA_LIGHT_GREEN, /* 2 -> 92 or 1;32 */
+    VGA_YELLOW,      /* 3 -> 93 or 1;33 */
+    VGA_LIGHT_BLUE,  /* 4 -> 94 or 1;34 */
+    VGA_PINK,        /* 5 -> 95 or 1;35 */
+    VGA_LIGHT_CYAN,  /* 6 -> 96 or 1;36 */
+    VGA_WHITE,       /* 7 -> 97 or 1;37 */
+};
+
+/* 处理 ANSI SGR (Select Graphic Rendition) 命令 */
+static void ansi_handle_sgr(void) {
+    int bold = 0;
+
+    for (int i = 0; i < ansi_param_count; i++) {
+        int p = ansi_params[i];
+        if (p == 0) {
+            /* 重置 */
+            vga_attr = make_attr(VGA_LIGHT_GREY, VGA_BLACK);
+            bold     = 0;
+        } else if (p == 1) {
+            /* 粗体/亮色 */
+            bold = 1;
+        } else if (p >= 30 && p <= 37) {
+            /* 标准前景色 */
+            uint8_t color = bold ? ansi_to_vga_bright[p - 30] : ansi_to_vga[p - 30];
+            vga_attr      = make_attr(color, VGA_BLACK);
+        } else if (p >= 90 && p <= 97) {
+            /* 亮色前景 */
+            vga_attr = make_attr(ansi_to_vga_bright[p - 90], VGA_BLACK);
+        }
+    }
+
+    /* 如果没有参数,默认为重置 */
+    if (ansi_param_count == 0) {
+        vga_attr = make_attr(VGA_LIGHT_GREY, VGA_BLACK);
+    }
+}
+
+/* 处理 ANSI CSI 序列结束 */
+static void ansi_handle_csi(char cmd) {
+    /* 保存最后一个参数 */
+    if (ansi_param_count < 4) {
+        ansi_params[ansi_param_count++] = ansi_param_value;
+    }
+
+    switch (cmd) {
+    case 'm':
+        ansi_handle_sgr();
+        break;
+    case 'H':
+    case 'f':
+        /* 光标位置 - 简单实现 */
+        vga_y = (ansi_param_count > 0 && ansi_params[0] > 0) ? ansi_params[0] - 1 : 0;
+        vga_x = (ansi_param_count > 1 && ansi_params[1] > 0) ? ansi_params[1] - 1 : 0;
+        if (vga_y >= VGA_HEIGHT) {
+            vga_y = VGA_HEIGHT - 1;
+        }
+        if (vga_x >= VGA_WIDTH) {
+            vga_x = VGA_WIDTH - 1;
+        }
+        vga_update_cursor();
+        break;
+    case 'J':
+        /* 清屏 */
+        if (ansi_params[0] == 2) {
+            vga_clear();
+        }
+        break;
+    default:
+        /* 忽略未知命令 */
+        break;
+    }
+}
+
+static void vga_putc_raw(char c) {
     if (c == '\n') {
         vga_x = 0;
         vga_y++;
@@ -100,7 +203,6 @@ static void vga_putc(char c) {
     } else if (c == '\t') {
         vga_x = (vga_x + 8) & ~7;
     } else if (c == '\b') {
-        /* Backspace: 光标后退一格 */
         if (vga_x > 0) {
             vga_x--;
         }
@@ -120,20 +222,51 @@ static void vga_putc(char c) {
     vga_update_cursor();
 }
 
+static void vga_putc(char c) {
+    switch (ansi_state) {
+    case ANSI_NORMAL:
+        if (c == '\x1b') {
+            ansi_state = ANSI_ESC;
+        } else {
+            vga_putc_raw(c);
+        }
+        break;
+
+    case ANSI_ESC:
+        if (c == '[') {
+            ansi_state       = ANSI_CSI;
+            ansi_param_count = 0;
+            ansi_param_value = 0;
+        } else {
+            /* 不是 CSI 序列,回到正常模式 */
+            ansi_state = ANSI_NORMAL;
+        }
+        break;
+
+    case ANSI_CSI:
+        if (c >= '0' && c <= '9') {
+            ansi_param_value = ansi_param_value * 10 + (c - '0');
+        } else if (c == ';') {
+            if (ansi_param_count < 4) {
+                ansi_params[ansi_param_count++] = ansi_param_value;
+            }
+            ansi_param_value = 0;
+        } else if (c >= 0x40 && c <= 0x7E) {
+            /* 命令字符 */
+            ansi_handle_csi(c);
+            ansi_state = ANSI_NORMAL;
+        } else {
+            /* 无效字符,放弃解析 */
+            ansi_state = ANSI_NORMAL;
+        }
+        break;
+    }
+}
+
 static void vga_puts(const char *s) {
     while (*s) {
         vga_putc(*s++);
     }
-}
-
-static void vga_set_color(kcolor_t color) {
-    if (color >= 0 && color <= 15) {
-        vga_attr = make_attr((uint8_t)color, VGA_BLACK);
-    }
-}
-
-static void vga_reset_color(void) {
-    vga_attr = make_attr(VGA_LIGHT_GREY, VGA_BLACK);
 }
 
 static void vga_clear(void) {
@@ -152,8 +285,8 @@ static struct console vga_console = {
     .init        = vga_init,
     .putc        = vga_putc,
     .puts        = vga_puts,
-    .set_color   = vga_set_color,
-    .reset_color = vga_reset_color,
+    .set_color   = NULL, /* 颜色通过 ANSI 序列处理 */
+    .reset_color = NULL, /* 颜色通过 ANSI 序列处理 */
     .clear       = vga_clear,
 };
 

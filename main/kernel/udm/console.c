@@ -78,37 +78,6 @@ static void udm_console_puts(const char *s) {
     }
 }
 
-static void udm_console_set_color(kcolor_t color) {
-    if (g_console_ep == CAP_HANDLE_INVALID) {
-        return;
-    }
-
-    /* 颜色变化前先刷新缓冲区 */
-    udm_console_flush();
-
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = UDM_CONSOLE_SET_COLOR;
-    msg.regs.data[1] = (uint32_t)color;
-
-    ipc_send_async(g_console_ep, &msg);
-}
-
-static void udm_console_reset_color(void) {
-    if (g_console_ep == CAP_HANDLE_INVALID) {
-        return;
-    }
-
-    /* 颜色变化前先刷新缓冲区 */
-    udm_console_flush();
-
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = UDM_CONSOLE_RESET_COLOR;
-
-    ipc_send_async(g_console_ep, &msg);
-}
-
 static void udm_console_clear(void) {
     if (g_console_ep == CAP_HANDLE_INVALID) {
         return;
@@ -130,8 +99,8 @@ static struct console udm_console_driver = {
     .init        = NULL,
     .putc        = udm_console_putc,
     .puts        = udm_console_puts,
-    .set_color   = udm_console_set_color,
-    .reset_color = udm_console_reset_color,
+    .set_color   = NULL, /* 颜色通过 ANSI 序列处理 */
+    .reset_color = NULL, /* 颜色通过 ANSI 序列处理 */
     .clear       = udm_console_clear,
 };
 

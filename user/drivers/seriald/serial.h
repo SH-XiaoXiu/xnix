@@ -25,15 +25,6 @@ void serial_putc(char c);
  */
 void serial_puts(const char *s);
 
-/**
- * 设置颜色(ANSI 转义序列)
- */
-void serial_set_color(uint32_t color);
-
-/**
- * 重置颜色
- */
-void serial_reset_color(void);
 
 /**
  * 清屏

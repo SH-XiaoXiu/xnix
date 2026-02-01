@@ -27,11 +27,6 @@ static spinlock_t serial_lock = SPINLOCK_INIT;
 #define REG_LINE_STATUS 5
 #define LSR_TX_EMPTY    0x20
 
-/* ANSI 颜色码 */
-static const char *ansi_colors[] = {
-    "\033[30m", "\033[34m", "\033[32m", "\033[36m", "\033[31m", "\033[35m", "\033[33m", "\033[37m",
-    "\033[90m", "\033[94m", "\033[92m", "\033[96m", "\033[91m", "\033[95m", "\033[93m", "\033[97m",
-};
 
 /* 声明紧急输出注册函数 */
 extern void console_register_emergency_putc(void (*putc)(char c));
@@ -63,26 +58,6 @@ static void serial_puts_sync(const char *s) {
     spin_unlock_irqrestore(&serial_lock, flags);
 }
 
-/* 同步模式下的颜色支持 */
-static void serial_set_color_sync(kcolor_t color) {
-    if (color >= 0 && color <= 15) {
-        uint32_t    flags = spin_lock_irqsave(&serial_lock);
-        const char *seq   = ansi_colors[color];
-        while (*seq) {
-            serial_putc_hw(*seq++);
-        }
-        spin_unlock_irqrestore(&serial_lock, flags);
-    }
-}
-
-static void serial_reset_color_sync(void) {
-    uint32_t    flags = spin_lock_irqsave(&serial_lock);
-    const char *seq   = "\033[0m";
-    while (*seq) {
-        serial_putc_hw(*seq++);
-    }
-    spin_unlock_irqrestore(&serial_lock, flags);
-}
 
 /* 消费者线程 */
 static void serial_consumer_thread(void *arg) {
@@ -122,8 +97,8 @@ static struct console serial_console = {
     .init           = serial_init,
     .putc           = serial_putc_sync,
     .puts           = serial_puts_sync,
-    .set_color      = serial_set_color_sync,
-    .reset_color    = serial_reset_color_sync,
+    .set_color      = NULL, /* 颜色通过 ANSI 序列处理 */
+    .reset_color    = NULL, /* 颜色通过 ANSI 序列处理 */
     .clear          = NULL,
     .start_consumer = serial_start_consumer,
 };

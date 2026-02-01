@@ -53,21 +53,6 @@ void serial_puts(const char *s) {
     }
 }
 
-void serial_set_color(uint32_t color) {
-    static const char *ansi_colors[] = {
-        "\033[30m", "\033[34m", "\033[32m", "\033[36m", "\033[31m", "\033[35m",
-        "\033[33m", "\033[37m", "\033[90m", "\033[94m", "\033[92m", "\033[96m",
-        "\033[91m", "\033[95m", "\033[93m", "\033[97m",
-    };
-
-    if (color <= 15) {
-        serial_puts(ansi_colors[color]);
-    }
-}
-
-void serial_reset_color(void) {
-    serial_puts("\033[0m");
-}
 
 void serial_clear(void) {
     serial_puts("\033[2J\033[H");
