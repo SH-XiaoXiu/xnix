@@ -95,11 +95,16 @@ cap_handle_t endpoint_create(void) {
     return handle;
 }
 
-/*spin_unlock
+/*
  * 消息传递辅助函数
- *spin_unlock */
+ */
 
-/* 从 Sender 拷贝消息到 Receiver (包括寄存器和 Buffer) */
+/**
+ * 从 Sender 拷贝消息到 Receiver
+ *
+ * 注意:buffer.data 在此处已经是内核缓冲区(由 sys_ipc.c 的
+ * copy_from_user/copy_to_user 处理),所以直接 memcpy 是安全的.
+ */
 static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_message *src_msg,
                          struct ipc_message *dst_msg) {
     (void)src;
@@ -111,8 +116,7 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
     /* 拷贝寄存器 */
     memcpy(&dst_msg->regs, &src_msg->regs, sizeof(struct ipc_msg_regs));
 
-    /* 拷贝 Buffer */
-    /* TODO: 校验 buffer 大小和有效性, 处理 page fault */
+    /* 拷贝 Buffer(内核缓冲区之间) */
     if (src_msg->buffer.data && src_msg->buffer.size > 0 && dst_msg->buffer.data &&
         dst_msg->buffer.size >= src_msg->buffer.size) {
         memcpy(dst_msg->buffer.data, src_msg->buffer.data, src_msg->buffer.size);
@@ -125,17 +129,15 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
     dst_msg->caps.count = 0;
 }
 
-/*spin_unlock
+/*
  * IPC 原语实现
- *spin_unlock */
+ */
 static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
                              struct ipc_message *reply_buf, uint32_t timeout_ms) {
     struct process      *proc = process_current();
     struct thread       *current;
     struct ipc_endpoint *ep;
     struct thread       *receiver;
-
-    (void)timeout_ms; /* TODO: 支持超时 */
 
     if (!proc) {
         return IPC_ERR_INVALID;
@@ -154,29 +156,27 @@ static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
     /* 检查是否有等待接收的线程 */
     if (ep->recv_queue) {
         receiver            = ep->recv_queue;
-        ep->recv_queue      = receiver->wait_next; /* 移出队列 */
+        ep->recv_queue      = receiver->wait_next;
         receiver->wait_next = NULL;
         spin_unlock(&ep->lock);
 
-        // 拷贝消息: 当前发送者 -> 接收者
-        // 接收者正在 ipc_receive 中等待, 其 ipc_reply_msg 指向接收缓冲区
-        // 注意: ipc_receive 会复用 ipc_reply_msg 字段来存储接收缓冲区指针
+        /* 拷贝消息到接收者 */
         ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
 
-        /* 记录发送者 TID,以便 Receiver 回复 */
+        /* 记录发送者 TID,以便接收者回复 */
         receiver->ipc_peer = current->tid;
 
         /* 唤醒接收者 */
         sched_wakeup_thread(receiver);
 
-        /* 发送者进入等待回复状态 */
-        /* 注: Rendezvous 模型 Send/Call 阻塞发送者,直到接收者回复*/
-        current->ipc_req_msg   = msg;       /* 保存发送 buffer (保存起来便于内核随时访问) */
-        current->ipc_reply_msg = reply_buf; /* 保存回复 buffer */
+        /* 保存发送和回复缓冲区 */
+        current->ipc_req_msg   = msg;
+        current->ipc_reply_msg = reply_buf;
 
-        /* 阻塞自己,等待 Reply */
-        /* 注意: Receiver 处理完后会调用 ipc_reply(sender_tid) 来唤醒我们 */
-        sched_block(current);
+        /* 阻塞等待回复 */
+        if (!sched_block_timeout(current, timeout_ms)) {
+            return IPC_ERR_TIMEOUT;
+        }
 
         return IPC_OK;
     }
@@ -190,16 +190,23 @@ static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
     current->ipc_req_msg   = msg;
     current->ipc_reply_msg = reply_buf;
 
-    /* 阻塞自己,等待接收者提取消息 */
-    sched_block(current);
+    /* 阻塞等待接收者 */
+    if (!sched_block_timeout(current, timeout_ms)) {
+        /* 超时,从发送队列中移除自己 */
+        spin_lock(&ep->lock);
+        struct thread **pp = &ep->send_queue;
+        while (*pp) {
+            if (*pp == current) {
+                *pp = current->wait_next;
+                break;
+            }
+            pp = &(*pp)->wait_next;
+        }
+        current->wait_next = NULL;
+        spin_unlock(&ep->lock);
+        return IPC_ERR_TIMEOUT;
+    }
 
-    // 在微内核同步 IPC 中,调用流程通常是 call/send → 阻塞等待 → receive → reply → 唤醒发送者
-    /* 被唤醒了 */
-    /* 情况 1: 接收者取走了消息 (Sender -> Receiver) */
-    /* 此时依然需要等待 Reply*/
-    /* 实际上,如果是这种情况, Receiver 取走消息时应该只是把我们从 send_queue 移走, */
-    /* 但不应该唤醒我们(除非是爆炸了或超时). */
-    /* 我们应该继续阻塞,直到 Reply 到达. */
     return IPC_OK;
 }
 
@@ -220,8 +227,6 @@ int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc
                     uint32_t timeout_ms) {
     struct thread *current;
     struct thread *receiver;
-
-    (void)timeout_ms;
 
     if (!ep) {
         return IPC_ERR_INVALID;
@@ -246,7 +251,10 @@ int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc
 
         current->ipc_req_msg   = msg;
         current->ipc_reply_msg = reply_buf;
-        sched_block(current);
+
+        if (!sched_block_timeout(current, timeout_ms)) {
+            return IPC_ERR_TIMEOUT;
+        }
 
         return IPC_OK;
     }
@@ -257,7 +265,22 @@ int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc
 
     current->ipc_req_msg   = msg;
     current->ipc_reply_msg = reply_buf;
-    sched_block(current);
+
+    if (!sched_block_timeout(current, timeout_ms)) {
+        /* 超时,从发送队列中移除自己 */
+        spin_lock(&ep->lock);
+        struct thread **pp = &ep->send_queue;
+        while (*pp) {
+            if (*pp == current) {
+                *pp = current->wait_next;
+                break;
+            }
+            pp = &(*pp)->wait_next;
+        }
+        current->wait_next = NULL;
+        spin_unlock(&ep->lock);
+        return IPC_ERR_TIMEOUT;
+    }
 
     return IPC_OK;
 }
@@ -267,8 +290,6 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
     struct thread       *current;
     struct ipc_endpoint *ep;
     struct thread       *sender;
-
-    (void)timeout_ms;
 
     if (!proc) {
         return IPC_ERR_INVALID;
@@ -336,15 +357,27 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
     ep->recv_queue     = current;
     spin_unlock(&ep->lock);
 
-    /* 保存接收 buffer 指针到 ipc_reply_msg (复用字段) */
+    /* 保存接收 buffer 指针到 ipc_reply_msg(复用字段) */
     current->ipc_reply_msg = msg;
 
     /* 阻塞等待发送者 */
-    sched_block(current);
+    if (!sched_block_timeout(current, timeout_ms)) {
+        /* 超时,从接收队列中移除自己 */
+        spin_lock(&ep->lock);
+        struct thread **pp = &ep->recv_queue;
+        while (*pp) {
+            if (*pp == current) {
+                *pp = current->wait_next;
+                break;
+            }
+            pp = &(*pp)->wait_next;
+        }
+        current->wait_next = NULL;
+        spin_unlock(&ep->lock);
+        return IPC_ERR_TIMEOUT;
+    }
 
     /* 被唤醒,说明收到消息了 */
-    /* 此时 msg 已经被填充, ipc_peer 已经被设置 */
-
     return IPC_OK;
 }
 

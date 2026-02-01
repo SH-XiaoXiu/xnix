@@ -18,6 +18,9 @@
 /* 最小分配单元(避免碎片) */
 #define MIN_ALLOC 16
 
+/* 最小 sbrk 请求大小(减少系统调用) */
+#define MIN_SBRK_SIZE 4096
+
 /* 块头部 */
 struct block_header {
     size_t               size;  /* 数据区大小(不含头部) */
@@ -36,9 +39,9 @@ static struct block_header *free_list = NULL;
 static struct block_header *request_memory(size_t size) {
     size_t total = HEADER_SIZE + size;
 
-    /* 至少请求 4KB,减少系统调用 */
-    if (total < 4096) {
-        total = 4096;
+    /* 至少请求 MIN_SBRK_SIZE,减少系统调用 */
+    if (total < MIN_SBRK_SIZE) {
+        total = MIN_SBRK_SIZE;
     }
 
     void *ptr = sys_sbrk((int32_t)total);

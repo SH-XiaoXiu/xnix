@@ -3,7 +3,10 @@
  * @brief 线程阻塞和唤醒机制实现
  */
 
+#include <drivers/timer.h>
+
 #include <kernel/sched/sched.h>
+#include <xnix/config.h>
 #include <xnix/sync.h>
 
 /* 阻塞线程链表(等待唤醒) */
@@ -157,4 +160,66 @@ void sched_wakeup_thread(struct thread *t) {
     }
 
     spin_unlock_irqrestore(&sched_lock, flags);
+}
+
+/**
+ * 带超时的阻塞
+ *
+ * @param wait_chan  等待通道
+ * @param timeout_ms 超时时间(毫秒),0 表示无限等待
+ * @return true 正常唤醒,false 超时唤醒
+ */
+bool sched_block_timeout(void *wait_chan, uint32_t timeout_ms) {
+    struct thread *current = sched_current();
+    if (!current) {
+        return false;
+    }
+
+    struct sched_policy *current_policy = sched_get_policy();
+    uint32_t             flags          = spin_lock_irqsave(&sched_lock);
+
+    /* 检查是否有挂起的唤醒 */
+    if (current->pending_wakeup) {
+        current->pending_wakeup = false;
+        spin_unlock_irqrestore(&sched_lock, flags);
+        return true;
+    }
+
+    current->state     = THREAD_BLOCKED;
+    current->wait_chan = wait_chan;
+
+    /* 设置超时唤醒时间 */
+    if (timeout_ms > 0) {
+        uint32_t ticks = (timeout_ms * CFG_SCHED_HZ + 999) / 1000;
+        if (ticks == 0) {
+            ticks = 1;
+        }
+        current->wakeup_tick = timer_get_ticks() + ticks;
+    } else {
+        current->wakeup_tick = 0;
+    }
+
+    if (current_policy && current_policy->dequeue) {
+        current_policy->dequeue(current);
+    }
+
+    /* 加入阻塞链表 */
+    current->next = blocked_list;
+    blocked_list  = current;
+
+    spin_unlock_irqrestore(&sched_lock, flags);
+
+    schedule();
+
+    /* 被唤醒后判断是否超时 */
+    current->pending_wakeup = false;
+
+    /* 如果 wakeup_tick 被清零,说明是超时唤醒 */
+    if (timeout_ms > 0 && current->wakeup_tick == 0) {
+        return false; /* 超时 */
+    }
+
+    /* 正常唤醒,清除超时设置 */
+    current->wakeup_tick = 0;
+    return true;
 }

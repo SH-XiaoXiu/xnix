@@ -540,7 +540,8 @@ pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_siz
         cpu_irq_restore(flags);
 
         /* 继承父进程的 cwd */
-        strcpy(proc->cwd, creator->cwd);
+        strncpy(proc->cwd, creator->cwd, PROCESS_CWD_MAX - 1);
+        proc->cwd[PROCESS_CWD_MAX - 1] = '\0';
     }
     for (uint32_t i = 0; i < inherit_count; i++) {
         cap_handle_t dup =
@@ -809,7 +810,8 @@ pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf
         cpu_irq_restore(flags);
 
         /* 继承父进程的 cwd */
-        strcpy(proc->cwd, creator->cwd);
+        strncpy(proc->cwd, creator->cwd, PROCESS_CWD_MAX - 1);
+        proc->cwd[PROCESS_CWD_MAX - 1] = '\0';
     }
 
     int      ret;

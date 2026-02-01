@@ -166,6 +166,15 @@ void sched_yield(void);
 void sched_blocked_list_add(struct thread *t);
 
 /**
+ * 带超时的阻塞
+ *
+ * @param wait_chan  等待通道
+ * @param timeout_ms 超时时间(毫秒),0 表示无限等待
+ * @return true 正常唤醒,false 超时唤醒
+ */
+bool sched_block_timeout(void *wait_chan, uint32_t timeout_ms);
+
+/**
  * 从阻塞链表移除线程
  */
 void sched_blocked_list_remove(struct thread *t);

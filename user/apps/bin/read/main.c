@@ -13,6 +13,8 @@
 #include <xnix/syscall.h>
 #include <xnix/udm/vfs.h>
 
+#define READ_BUF_SIZE 256
+
 static int simple_atoi(const char *s) {
     int n = 0;
     while (*s >= '0' && *s <= '9') {
@@ -34,9 +36,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    const char *path = argv[1];
-    int max_lines = 0;    /* 0 = 不限制 */
-    int max_bytes = 0;    /* 0 = 不限制 */
+    const char *path      = argv[1];
+    int         max_lines = 0; /* 0 = 不限制 */
+    int         max_bytes = 0; /* 0 = 不限制 */
 
     /* 解析参数 */
     for (int i = 2; i < argc; i++) {
@@ -58,10 +60,10 @@ int main(int argc, char **argv) {
     }
 
     /* 读取并输出 */
-    char buf[256];
-    int total_bytes = 0;
-    int total_lines = 0;
-    int done = 0;
+    char buf[READ_BUF_SIZE];
+    int  total_bytes = 0;
+    int  total_lines = 0;
+    int  done        = 0;
 
     while (!done) {
         int to_read = sizeof(buf);

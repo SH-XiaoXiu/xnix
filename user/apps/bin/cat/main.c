@@ -7,6 +7,8 @@
 #include <xnix/syscall.h>
 #include <xnix/udm/vfs.h>
 
+#define READ_BUF_SIZE 256
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: cat <file>\n");
@@ -21,7 +23,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    char buf[256];
+    char buf[READ_BUF_SIZE];
     int  n;
     while ((n = sys_read(fd, buf, sizeof(buf))) > 0) {
         sys_write(1, buf, n); /* 直接输出原始字节 */
