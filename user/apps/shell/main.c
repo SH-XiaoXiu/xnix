@@ -3,135 +3,247 @@
  * @brief Xnix Shell
  */
 
+#include "path.h"
+
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <xnix/abi/process.h>
 #include <xnix/syscall.h>
 #include <xnix/udm/vfs.h>
 
 #define MAX_LINE 256
-
-/* 模块索引约定 */
-#define MODULE_DEMO_BASE 4
+#define MAX_ARGS 16
 
 /* 内置命令 */
-static void cmd_help(void);
-static void cmd_echo(const char *args);
-static void cmd_clear(void);
-static void cmd_run(const char *args);
-static void cmd_kill(const char *args);
-static void cmd_ls(const char *args);
-static void cmd_cat(const char *args);
-static void cmd_write(const char *args);
-static void cmd_mkdir(const char *args);
-static void cmd_rm(const char *args);
+static void cmd_help(int argc, char **argv);
+static void cmd_echo(int argc, char **argv);
+static void cmd_clear(int argc, char **argv);
+static void cmd_run(int argc, char **argv);
+static void cmd_kill(int argc, char **argv);
+static void cmd_path(int argc, char **argv);
+static void cmd_cd(int argc, char **argv);
+static void cmd_pwd(int argc, char **argv);
 
-static void execute_command(char *line) {
-    /* 跳过前导空格 */
-    while (*line == ' ') {
-        line++;
-    }
+/* 内置命令表 */
+struct builtin_cmd {
+    const char *name;
+    void (*handler)(int argc, char **argv);
+    const char *help;
+};
 
-    if (*line == '\0') {
-        return;
-    }
-
-    /* 分离命令和参数 */
-    char *cmd  = line;
-    char *args = NULL;
-
-    char *space = strchr(line, ' ');
-    if (space) {
-        *space = '\0';
-        args   = space + 1;
-        /* 跳过参数前导空格 */
-        while (*args == ' ') {
-            args++;
-        }
-    }
-
-    /* 匹配命令 */
-    if (strcmp(cmd, "help") == 0) {
-        cmd_help();
-    } else if (strcmp(cmd, "echo") == 0) {
-        cmd_echo(args);
-    } else if (strcmp(cmd, "clear") == 0) {
-        cmd_clear();
-    } else if (strcmp(cmd, "run") == 0) {
-        cmd_run(args);
-    } else if (strcmp(cmd, "kill") == 0) {
-        cmd_kill(args);
-    } else if (strcmp(cmd, "ls") == 0) {
-        cmd_ls(args);
-    } else if (strcmp(cmd, "cat") == 0) {
-        cmd_cat(args);
-    } else if (strcmp(cmd, "write") == 0) {
-        cmd_write(args);
-    } else if (strcmp(cmd, "mkdir") == 0) {
-        cmd_mkdir(args);
-    } else if (strcmp(cmd, "rm") == 0) {
-        cmd_rm(args);
-    } else {
-        printf("Unknown command: %s\n", cmd);
-        printf("Type 'help' for available commands.\n");
-    }
-}
-
-static void cmd_help(void) {
-    printf("Available commands:\n");
-    printf("  help             - Show this help\n");
-    printf("  echo <text>      - Echo text\n");
-    printf("  clear            - Clear screen\n");
-    printf("  run <index>      - Run module (index starts from %d)\n", MODULE_DEMO_BASE);
-    printf("  kill <pid>       - Terminate process\n");
-    printf("  ls [path]        - List directory\n");
-    printf("  cat <file>       - Display file contents\n");
-    printf("  write <file> <t> - Write text to file\n");
-    printf("  mkdir <path>     - Create directory\n");
-    printf("  rm <path>        - Delete file or empty directory\n");
-}
-
-static void cmd_echo(const char *args) {
-    if (args && *args) {
-        printf("%s\n", args);
-    } else {
-        printf("\n");
-    }
-}
-
-static void cmd_clear(void) {
-    /* ANSI 清屏序列 */
-    printf("\033[2J\033[H");
-}
+static const struct builtin_cmd builtins[] = {{"help", cmd_help, "Show available commands"},
+                                              {"echo", cmd_echo, "Echo text"},
+                                              {"clear", cmd_clear, "Clear screen"},
+                                              {"run", cmd_run, "Run module by index"},
+                                              {"kill", cmd_kill, "Terminate process"},
+                                              {"path", cmd_path, "Manage PATH"},
+                                              {"cd", cmd_cd, "Change directory (stub)"},
+                                              {"pwd", cmd_pwd, "Print working directory (stub)"},
+                                              {"exit", NULL, "Exit shell"},
+                                              {NULL, NULL, NULL}};
 
 /* 简单的 atoi */
 static int simple_atoi(const char *s) {
-    int n = 0;
+    int n   = 0;
+    int neg = 0;
+    if (*s == '-') {
+        neg = 1;
+        s++;
+    }
     while (*s >= '0' && *s <= '9') {
         n = n * 10 + (*s - '0');
         s++;
     }
-    return n;
+    return neg ? -n : n;
 }
 
-static void cmd_run(const char *args) {
-    if (!args || !*args) {
+/**
+ * 解析命令行为 argc/argv
+ */
+static int parse_cmdline(char *line, char **argv, int max_args) {
+    int argc = 0;
+
+    while (*line && argc < max_args - 1) {
+        /* 跳过空格 */
+        while (*line == ' ' || *line == '\t') {
+            line++;
+        }
+
+        if (!*line) {
+            break;
+        }
+
+        /* 记录参数开始 */
+        argv[argc++] = line;
+
+        /* 找到参数结束 */
+        while (*line && *line != ' ' && *line != '\t') {
+            line++;
+        }
+
+        if (*line) {
+            *line++ = '\0';
+        }
+    }
+
+    argv[argc] = NULL;
+    return argc;
+}
+
+/**
+ * 查找内置命令
+ */
+static const struct builtin_cmd *find_builtin(const char *name) {
+    for (int i = 0; builtins[i].name; i++) {
+        if (strcmp(builtins[i].name, name) == 0) {
+            return &builtins[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * 执行外部命令
+ */
+static void run_external(const char *path, int argc, char **argv) {
+    struct abi_exec_args exec_args;
+    memset(&exec_args, 0, sizeof(exec_args));
+
+    /* 复制路径 */
+    size_t path_len = strlen(path);
+    if (path_len >= ABI_EXEC_PATH_MAX) {
+        path_len = ABI_EXEC_PATH_MAX - 1;
+    }
+    memcpy(exec_args.path, path, path_len);
+    exec_args.path[path_len] = '\0';
+
+    /* 复制参数 */
+    exec_args.argc = argc;
+    if (exec_args.argc > ABI_EXEC_MAX_ARGS) {
+        exec_args.argc = ABI_EXEC_MAX_ARGS;
+    }
+
+    for (int i = 0; i < exec_args.argc; i++) {
+        size_t len = strlen(argv[i]);
+        if (len >= ABI_EXEC_MAX_ARG_LEN) {
+            len = ABI_EXEC_MAX_ARG_LEN - 1;
+        }
+        memcpy(exec_args.argv[i], argv[i], len);
+        exec_args.argv[i][len] = '\0';
+    }
+
+    /* 执行 */
+    int pid = sys_exec(&exec_args);
+    if (pid < 0) {
+        const char *err_msg;
+        switch (pid) {
+        case -2:
+            err_msg = "file not found";
+            break;
+        case -12:
+            err_msg = "out of memory";
+            break;
+        case -22:
+            err_msg = "invalid executable";
+            break;
+        default:
+            err_msg = "unknown error";
+            break;
+        }
+        printf("%s: %s\n", argv[0], err_msg);
+        return;
+    }
+
+    /* 设置为前台进程 */
+    sys_set_foreground(pid);
+
+    /* 等待进程退出 */
+    int status;
+    int ret = sys_waitpid(pid, &status, 0);
+
+    /* 清除前台进程 */
+    sys_set_foreground(0);
+
+    if (ret > 0 && status != 0) {
+        printf("Process %d exited with status %d\n", pid, status);
+    }
+}
+
+static void execute_command(char *line) {
+    char *argv[MAX_ARGS];
+    int   argc = parse_cmdline(line, argv, MAX_ARGS);
+
+    if (argc == 0) {
+        return;
+    }
+
+    /* 检查内置命令 */
+    const struct builtin_cmd *cmd = find_builtin(argv[0]);
+    if (cmd) {
+        if (cmd->handler) {
+            cmd->handler(argc, argv);
+        } else if (strcmp(cmd->name, "exit") == 0) {
+            printf("Use Ctrl+D or close terminal to exit.\n");
+        }
+        return;
+    }
+
+    /* 外部命令:PATH 搜索 */
+    char path[256];
+    if (path_find(argv[0], path, sizeof(path))) {
+        run_external(path, argc, argv);
+    } else {
+        printf("Command not found: %s\n", argv[0]);
+        printf("Type 'help' for available commands.\n");
+    }
+}
+
+static void cmd_help(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    printf("Built-in commands:\n");
+    for (int i = 0; builtins[i].name; i++) {
+        printf("  %-10s - %s\n", builtins[i].name, builtins[i].help);
+    }
+    printf("\nExternal commands are searched in PATH.\n");
+    printf("Use 'path' to view/modify PATH.\n");
+}
+
+static void cmd_echo(int argc, char **argv) {
+    for (int i = 1; i < argc; i++) {
+        if (i > 1) {
+            printf(" ");
+        }
+        printf("%s", argv[i]);
+    }
+    printf("\n");
+}
+
+static void cmd_clear(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    printf("\033[2J\033[H");
+}
+
+static void cmd_run(int argc, char **argv) {
+    if (argc < 2) {
         printf("Usage: run <module_index>\n");
-        printf("  Module indices start from %d for demos\n", MODULE_DEMO_BASE);
         return;
     }
 
-    int index = simple_atoi(args);
-    if (index < MODULE_DEMO_BASE) {
-        printf("Error: module index must be >= %d\n", MODULE_DEMO_BASE);
+    int index = simple_atoi(argv[1]);
+    if (index < 4) {
+        printf("Error: module index must be >= 4\n");
         return;
     }
 
-    /* 构造进程名 */
     char name[16];
     snprintf(name, sizeof(name), "mod%d", index);
 
-    struct spawn_args spawn = {0};
+    struct spawn_args spawn;
+    memset(&spawn, 0, sizeof(spawn));
     for (int i = 0; name[i] && i < 15; i++) {
         spawn.name[i] = name[i];
     }
@@ -146,14 +258,11 @@ static void cmd_run(const char *args) {
 
     printf("Started module %d (pid=%d)\n", index, pid);
 
-    /* 设置为前台进程 */
     sys_set_foreground(pid);
 
-    /* 等待进程退出 */
     int status;
     int ret = sys_waitpid(pid, &status, 0);
 
-    /* 清除前台进程 */
     sys_set_foreground(0);
 
     if (ret > 0) {
@@ -161,13 +270,13 @@ static void cmd_run(const char *args) {
     }
 }
 
-static void cmd_kill(const char *args) {
-    if (!args || !*args) {
+static void cmd_kill(int argc, char **argv) {
+    if (argc < 2) {
         printf("Usage: kill <pid>\n");
         return;
     }
 
-    int pid = simple_atoi(args);
+    int pid = simple_atoi(argv[1]);
     if (pid <= 1) {
         printf("Error: cannot kill pid %d\n", pid);
         return;
@@ -181,127 +290,62 @@ static void cmd_kill(const char *args) {
     }
 }
 
-static void cmd_ls(const char *args) {
-    const char *path = (args && *args) ? args : "/";
-
-    int fd = sys_opendir(path);
-    if (fd < 0) {
-        printf("ls: cannot open '%s': error %d\n", path, fd);
+static void cmd_path(int argc, char **argv) {
+    if (argc < 2) {
+        /* 显示当前 PATH */
+        int count = path_count();
+        if (count == 0) {
+            printf("PATH is empty\n");
+        } else {
+            printf("PATH:\n");
+            for (int i = 0; i < count; i++) {
+                printf("  %s\n", path_get(i));
+            }
+        }
         return;
     }
 
-    struct vfs_dirent entry;
-    uint32_t          index = 0;
-
-    while (sys_readdir(fd, index, &entry) == 0) {
-        const char *type_str = (entry.type == VFS_TYPE_DIR) ? "d" : "-";
-        printf("%s %s\n", type_str, entry.name);
-        index++;
-    }
-
-    if (index == 0) {
-        printf("(empty)\n");
-    }
-
-    sys_close(fd);
-}
-
-static void cmd_cat(const char *args) {
-    if (!args || !*args) {
-        printf("Usage: cat <file>\n");
-        return;
-    }
-
-    int fd = sys_open(args, VFS_O_RDONLY);
-    if (fd < 0) {
-        printf("cat: cannot open '%s': error %d\n", args, fd);
-        return;
-    }
-
-    char buf[256];
-    int  n;
-    while ((n = sys_read(fd, buf, sizeof(buf) - 1)) > 0) {
-        buf[n] = '\0';
-        printf("%s", buf);
-    }
-
-    printf("\n"); /* 确保输出后换行 */
-
-    if (n < 0) {
-        printf("cat: read error: %d\n", n);
-    }
-
-    sys_close(fd);
-}
-
-static void cmd_write(const char *args) {
-    if (!args || !*args) {
-        printf("Usage: write <file> <text>\n");
-        return;
-    }
-
-    /* 分离文件名和内容 */
-    const char *file = args;
-    const char *text = strchr(args, ' ');
-    if (!text) {
-        printf("Usage: write <file> <text>\n");
-        return;
-    }
-
-    /* 复制文件名 */
-    char path[128];
-    int  len = text - file;
-    if (len >= (int)sizeof(path)) {
-        len = sizeof(path) - 1;
-    }
-    memcpy(path, file, len);
-    path[len] = '\0';
-
-    text++; /* 跳过空格 */
-
-    int fd = sys_open(path, VFS_O_WRONLY | VFS_O_CREAT | VFS_O_TRUNC);
-    if (fd < 0) {
-        printf("write: cannot open '%s': error %d\n", path, fd);
-        return;
-    }
-
-    int text_len = strlen(text);
-    int n        = sys_write2(fd, text, text_len);
-    if (n < 0) {
-        printf("write: write error: %d\n", n);
+    if (strcmp(argv[1], "add") == 0) {
+        if (argc < 3) {
+            printf("Usage: path add <directory>\n");
+            return;
+        }
+        if (path_add(argv[2])) {
+            printf("Added: %s\n", argv[2]);
+        } else {
+            printf("Failed to add path\n");
+        }
+    } else if (strcmp(argv[1], "clear") == 0) {
+        path_clear();
+        printf("PATH cleared\n");
+    } else if (strcmp(argv[1], "reset") == 0) {
+        path_init();
+        printf("PATH reset to default\n");
     } else {
-        printf("Wrote %d bytes to %s\n", n, path);
-    }
-
-    sys_close(fd);
-}
-
-static void cmd_mkdir(const char *args) {
-    if (!args || !*args) {
-        printf("Usage: mkdir <path>\n");
-        return;
-    }
-
-    int ret = sys_mkdir(args);
-    if (ret < 0) {
-        printf("mkdir: cannot create '%s': error %d\n", args, ret);
+        printf("Usage: path [add <dir> | clear | reset]\n");
     }
 }
 
-static void cmd_rm(const char *args) {
-    if (!args || !*args) {
-        printf("Usage: rm <path>\n");
-        return;
-    }
-
-    int ret = sys_del(args);
-    if (ret < 0) {
-        printf("rm: cannot remove '%s': error %d\n", args, ret);
-    }
+static void cmd_cd(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    printf("cd: not implemented (no working directory concept)\n");
 }
 
-int main(void) {
+static void cmd_pwd(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    printf("/\n");
+}
+
+int main(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
     char line[MAX_LINE];
+
+    /* 初始化 PATH */
+    path_init();
 
     printf("\n");
     printf("Xnix Shell\n");
