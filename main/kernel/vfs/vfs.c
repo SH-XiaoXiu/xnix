@@ -8,6 +8,7 @@
 #include <kernel/ipc/endpoint.h>
 #include <kernel/process/process.h>
 #include <kernel/vfs/vfs.h>
+#include <stddef.h>
 #include <xnix/errno.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
@@ -471,4 +472,69 @@ int vfs_del(const char *path) {
     req.buffer.size++;
 
     return vfs_ipc_call(mount->fs_ep, &req, &reply);
+}
+
+int vfs_load_file(const char *path, void **out_data, uint32_t *out_size) {
+    if (!path || path[0] != '/' || !out_data || !out_size) {
+        return -EINVAL;
+    }
+
+    /* 获取文件信息 */
+    struct vfs_info info;
+    int             ret = vfs_info(path, &info);
+    if (ret < 0) {
+        return ret;
+    }
+
+    /* 检查是否为普通文件 */
+    if (info.type != VFS_TYPE_FILE) {
+        return -EISDIR;
+    }
+
+    /* 文件大小限制(最大 4MB) */
+    if (info.size > (uint64_t)(4 * 1024 * 1024)) {
+        return -EFBIG;
+    }
+
+    uint32_t file_size = (uint32_t)info.size;
+    if (file_size == 0) {
+        return -EINVAL;
+    }
+
+    /* 分配内核内存 */
+    void *data = kmalloc(file_size);
+    if (!data) {
+        return -ENOMEM;
+    }
+
+    /* 打开文件 */
+    int fd = vfs_open(path, VFS_O_RDONLY);
+    if (fd < 0) {
+        kfree(data);
+        return fd;
+    }
+
+    /* 读取文件内容 */
+    uint32_t offset = 0;
+    while (offset < file_size) {
+        uint32_t chunk = file_size - offset;
+        if (chunk > 4096) {
+            chunk = 4096;
+        }
+
+        ssize_t n = vfs_read(fd, (uint8_t *)data + offset, chunk);
+        if (n <= 0) {
+            vfs_close(fd);
+            kfree(data);
+            return n < 0 ? (int)n : -EIO;
+        }
+
+        offset += (uint32_t)n;
+    }
+
+    vfs_close(fd);
+
+    *out_data = data;
+    *out_size = file_size;
+    return 0;
 }

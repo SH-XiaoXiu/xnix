@@ -193,4 +193,13 @@ int vfs_mkdir(const char *path);
  */
 int vfs_del(const char *path);
 
+/**
+ * 加载文件到内核内存
+ * @param path     文件路径
+ * @param out_data 输出数据指针(需 kfree 释放)
+ * @param out_size 输出文件大小
+ * @return 0 成功,负数失败
+ */
+int vfs_load_file(const char *path, void **out_data, uint32_t *out_size);
+
 #endif /* KERNEL_VFS_H */
