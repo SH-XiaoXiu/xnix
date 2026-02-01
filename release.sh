@@ -38,11 +38,7 @@ cd "$BUILD_DIR"
 info "配置 CMake (Release 模式)..."
 cmake "$SCRIPT_DIR" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCFG_DEBUG=OFF \
-    -DCFG_DEBUG_MM=OFF \
-    -DCFG_DEBUG_SCHED=OFF \
-    -DCFG_DEBUG_IPC=OFF \
-    -DENABLE_VMM_DEBUG=OFF
+    -DCFG_DEBUG=OFF
 
 info "编译内核和用户程序..."
 make -j"$(nproc)"

@@ -20,6 +20,7 @@ CMAKE_OPTS=""
 QEMU_MEMORY="4096M"
 QEMU_CPUS="2"
 QEMU_HDA=""
+QEMU_HDA_SRC=""
 QEMU_EXTRA=""
 
 # 帮助信息
@@ -33,9 +34,10 @@ Xnix 构建运行脚本
   -h, --help              显示此帮助信息
   -c, --compile           只编译不运行
   -r, --run               编译并运行（默认，增量编译）
-  -f, --fresh             清理重新构建并运行（清理 + 编译 + 运行）
+  -f, --fresh             清理重新构建并运行（清理缓存 + 编译 + 运行）
   -i, --iso               使用 ISO 模式运行
   -d, --debug             调试模式（等待 GDB 连接 :1234）
+  -v, --verbose           启用内核详细日志（pr_debug 输出）
 
 清理选项:
   --clean                 只清理编译产物（保留 CMake 缓存）
@@ -51,6 +53,7 @@ QEMU 配置:
   --mem <size>            内存大小（默认: 128M）
   --smp <n>               CPU 核心数（默认: 1）
   --hda <file>            硬盘镜像文件（FAT 格式）
+  --install <src>         从源镜像复制到 --hda 目标（每次干净启动）
   --qemu <args>           额外 QEMU 参数
 
 CMake 配置:
@@ -61,7 +64,8 @@ CMake 配置:
   ./run                                    # 增量编译运行
   ./run -f                                 # 干净构建运行
   ./run -i                                 # 使用 ISO 运行
-  ./run -d                                 # 调试模式
+  ./run -d                                 # 调试模式（GDB）
+  ./run -v                                 # 详细日志模式
   ./run -c                                 # 只编译
   ./run --clean                            # 只清理不编译
   ./run --rebuild                          # 完全重建（包括重新配置）
@@ -69,6 +73,7 @@ CMake 配置:
   ./run -f --mem 256M --smp 2              # 干净构建 + 自定义配置
   ./run -DCFG_MAX_CPUS=4 -DENABLE_SMP=ON   # 修改编译选项
   ./run --qemu "-serial file:serial.log"   # 额外 QEMU 参数
+  ./run --install dev.vhd --hda xnix.img   # 从开发盘复制后运行
 
 EOF
 }
@@ -102,6 +107,10 @@ while [[ $# -gt 0 ]]; do
             NO_RUN=false
             shift
             ;;
+        -v|--verbose)
+            CMAKE_OPTS="$CMAKE_OPTS -DCFG_DEBUG=ON"
+            shift
+            ;;
         --clean)
             CLEAN=true
             NO_RUN=true
@@ -131,6 +140,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --hda)
             QEMU_HDA="$2"
+            shift 2
+            ;;
+        --install)
+            QEMU_HDA_SRC="$2"
             shift 2
             ;;
         --qemu)
@@ -178,12 +191,14 @@ if $REBUILD; then
     rm -rf "$BUILD_DIR"
 fi
 
-# 干净构建（清理编译产物但保留 CMake 缓存）
+# 干净构建（清理编译产物和 CMake 缓存）
 if $FRESH; then
     echo "清理构建..."
     if [ -d "$BUILD_DIR" ]; then
         cd "$BUILD_DIR"
         make clean 2>/dev/null || cmake --build . --target clean || true
+        # 删除 CMake 缓存，强制重新配置
+        rm -f CMakeCache.txt
         echo "已清理"
     fi
 fi
@@ -194,8 +209,8 @@ if [ ! -d "$BUILD_DIR" ]; then
     mkdir -p "$BUILD_DIR"
     cd "$BUILD_DIR"
     cmake $CMAKE_OPTS ..
-elif [ -n "$CMAKE_OPTS" ]; then
-    echo "重新配置 CMake..."
+elif [ ! -f "$BUILD_DIR/CMakeCache.txt" ] || [ -n "$CMAKE_OPTS" ]; then
+    echo "配置 CMake..."
     cd "$BUILD_DIR"
     cmake $CMAKE_OPTS ..
 else
@@ -206,7 +221,7 @@ fi
 if $USE_ISO || [ "$ACTION" = "compile" ]; then
     echo "编译（$JOBS 个核心）..."
     if $USE_ISO; then
-        cmake --build . -j$JOBS --target iso
+        cmake --build . -j$JOBS --target iso --target bin_tools
     else
         cmake --build . -j$JOBS
     fi
@@ -229,6 +244,20 @@ QEMU_ARGS="-serial stdio -no-reboot"
 
 # 内存和 CPU
 QEMU_ARGS="$QEMU_ARGS -m $QEMU_MEMORY -smp $QEMU_CPUS"
+
+# 硬盘安装(从源镜像复制到目标)
+if [ -n "$QEMU_HDA_SRC" ]; then
+    if [ -z "$QEMU_HDA" ]; then
+        # 默认目标为 build/xnix_disk.img
+        QEMU_HDA="$BUILD_DIR/xnix_disk.img"
+    fi
+    if [ ! -f "$QEMU_HDA_SRC" ]; then
+        echo "错误: 源镜像不存在: $QEMU_HDA_SRC"
+        exit 1
+    fi
+    echo "从 $QEMU_HDA_SRC 复制到 $QEMU_HDA..."
+    cp "$QEMU_HDA_SRC" "$QEMU_HDA"
+fi
 
 # 硬盘
 if [ -n "$QEMU_HDA" ]; then
