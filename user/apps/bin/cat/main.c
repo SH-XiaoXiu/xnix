@@ -23,12 +23,9 @@ int main(int argc, char **argv) {
 
     char buf[256];
     int  n;
-    while ((n = sys_read(fd, buf, sizeof(buf) - 1)) > 0) {
-        buf[n] = '\0';
-        printf("%s", buf);
+    while ((n = sys_read(fd, buf, sizeof(buf))) > 0) {
+        sys_write(1, buf, n); /* 直接输出原始字节 */
     }
-
-    printf("\n");
 
     if (n < 0) {
         printf("cat: read error: %d\n", n);
