@@ -206,7 +206,7 @@ static void user_thread_entry_with_args(void *arg) {
 /**
  * 内部核心 spawn 函数
  */
-static pid_t spawn_internal(const char *name, void *elf_data, uint32_t elf_size,
+static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
                             const struct spawn_inherit_cap *inherit_caps, uint32_t inherit_count,
                             int argc, char argv[][ABI_EXEC_MAX_ARG_LEN]) {
     struct process *proc = (struct process *)process_create(name);
@@ -284,34 +284,34 @@ static pid_t spawn_internal(const char *name, void *elf_data, uint32_t elf_size,
  */
 
 pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
-    return spawn_internal("init", elf_data, elf_size, NULL, 0, 0, NULL);
+    return spawn_core("init", elf_data, elf_size, NULL, 0, 0, NULL);
 }
 
 pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size) {
-    return spawn_internal(name, elf_data, elf_size, NULL, 0, 0, NULL);
+    return spawn_core(name, elf_data, elf_size, NULL, 0, 0, NULL);
 }
 
 pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
                               const struct spawn_inherit_cap *inherit_caps,
                               uint32_t                        inherit_count) {
-    return spawn_internal(name, elf_data, elf_size, inherit_caps, inherit_count, 0, NULL);
+    return spawn_core(name, elf_data, elf_size, inherit_caps, inherit_count, 0, NULL);
 }
 
 pid_t process_spawn_module_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
                                         const struct spawn_inherit_cap *inherit_caps,
                                         uint32_t inherit_count, int argc,
                                         char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_internal(name, elf_data, elf_size, inherit_caps, inherit_count, argc, argv);
+    return spawn_core(name, elf_data, elf_size, inherit_caps, inherit_count, argc, argv);
 }
 
 pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf_size, int argc,
                                   char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_internal(name, elf_data, elf_size, NULL, 0, argc, argv);
+    return spawn_core(name, elf_data, elf_size, NULL, 0, argc, argv);
 }
 
 pid_t process_spawn_elf_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
                                      const struct spawn_inherit_cap *inherit_caps,
                                      uint32_t inherit_count, int argc,
                                      char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_internal(name, elf_data, elf_size, inherit_caps, inherit_count, argc, argv);
+    return spawn_core(name, elf_data, elf_size, inherit_caps, inherit_count, argc, argv);
 }
