@@ -271,12 +271,12 @@ void fb_late_init(void) {
         }
     }
 
-    /* 设置虚拟地址(恒等映射) */
-    fb_addr = (uint32_t *)(uint32_t)fb_phys_addr;
-
     pr_info("FB: Mapped %ux%u@%u at 0x%x, RGB pos=%u/%u/%u size=%u/%u/%u", fb_width, fb_height,
             fb_bpp, (uint32_t)fb_phys_addr, fb_red_pos, fb_green_pos, fb_blue_pos, fb_red_size,
             fb_green_size, fb_blue_size);
+
+    /* 设置虚拟地址(恒等映射) - 放在日志之后,避免 fb_console 同步渲染拖慢串口 */
+    fb_addr = (uint32_t *)(uint32_t)fb_phys_addr;
 
     /* 调用 fb_console 初始化 */
     if (fb_console_late_init_cb) {
