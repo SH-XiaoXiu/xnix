@@ -23,7 +23,6 @@
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
-#include <xnix/udm/console.h>
 #include <xnix/vfs.h>
 
 #include "xnix/debug.h"
@@ -138,8 +137,7 @@ static void boot_phase_late(void) {
  * Services - 仅启动 init 进程
  *
  * 内核只负责:
- * 创建必要的 cap(serial_ep, io_cap, vfs_ep, ata_io_cap, fat_vfs_ep)
- * 启动 init 进程并传递这些 cap
+ * 启动 init 进程
  *
  * seriald,ramfsd,fatfsd 等服务的启动由 init 进程负责(通过 sys_spawn)
  */
@@ -149,34 +147,6 @@ static void boot_start_services(void) {
         pr_warn("No modules found");
         return;
     }
-
-    /* 创建 UDM console endpoint 和 I/O port capability */
-    cap_handle_t serial_ep = endpoint_create();
-    cap_handle_t io_cap    = CAP_HANDLE_INVALID;
-
-    if (serial_ep != CAP_HANDLE_INVALID) {
-        udm_console_set_endpoint(serial_ep);
-        io_cap = ioport_create_range((struct process *)process_current(), 0x3F8, 0x3FF,
-                                     CAP_READ | CAP_WRITE | CAP_GRANT);
-    }
-
-    /* 创建 VFS endpoint (用于 ramfsd) */
-    cap_handle_t vfs_ep = endpoint_create();
-
-    /* 创建 ATA I/O port capability (0x1F0-0x1F7: 数据端口, 0x3F6-0x3F7: 控制端口) */
-    cap_handle_t ata_io_cap = ioport_create_range((struct process *)process_current(), 0x1F0, 0x1F7,
-                                                  CAP_READ | CAP_WRITE | CAP_GRANT);
-    cap_handle_t ata_ctrl_cap = ioport_create_range((struct process *)process_current(), 0x3F6,
-                                                    0x3F7, CAP_READ | CAP_WRITE | CAP_GRANT);
-
-    /* 创建 FAT VFS endpoint (用于 fatfsd) */
-    cap_handle_t fat_vfs_ep = endpoint_create();
-
-    /* 创建 FB endpoint (用于 fbd) */
-    cap_handle_t fb_ep = endpoint_create();
-
-    /* 创建 rootfs VFS endpoint (用于 rootfsd) */
-    cap_handle_t rootfs_ep = endpoint_create();
 
     /* 获取 init 模块 */
     uint32_t init_mod_index = boot_get_initmod_index();
@@ -222,40 +192,12 @@ static void boot_start_services(void) {
         }
     }
 
-    /*
-     * 传递给 init 的 capability:
-     *   handle 0: serial_ep (用于 printf 输出)
-     *   handle 1: io_cap (传递给 seriald)
-     *   handle 2: vfs_ep (传递给 ramfsd)
-     *   handle 3: ata_io_cap (传递给 fatfsd)
-     *   handle 4: ata_ctrl_cap (传递给 fatfsd)
-     *   handle 5: fat_vfs_ep (传递给 fatfsd)
-     *   handle 6: fb_ep (传递给 fbd)
-     *   handle 7: rootfs_ep (传递给 rootfsd)
-     */
     pid_t init_pid = PID_INVALID;
-    if (serial_ep != CAP_HANDLE_INVALID && io_cap != CAP_HANDLE_INVALID &&
-        vfs_ep != CAP_HANDLE_INVALID && ata_io_cap != CAP_HANDLE_INVALID &&
-        ata_ctrl_cap != CAP_HANDLE_INVALID && fat_vfs_ep != CAP_HANDLE_INVALID &&
-        fb_ep != CAP_HANDLE_INVALID && rootfs_ep != CAP_HANDLE_INVALID) {
-        struct spawn_inherit_cap init_inherit[8] = {
-            {.src = serial_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 0},
-            {.src = io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 1},
-            {.src = vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 2},
-            {.src = ata_io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 3},
-            {.src = ata_ctrl_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 4},
-            {.src = fat_vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 5},
-            {.src = fb_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 6},
-            {.src = rootfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 7},
-        };
-        if (init_argc > 0) {
-            init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, init_inherit,
-                                                         8, init_argc, init_argv);
-        } else {
-            init_pid = process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 8);
-        }
+    if (init_argc > 0) {
+        init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, NULL, 0, init_argc,
+                                                     init_argv);
     } else {
-        init_pid = process_spawn_module("init", mod_addr, mod_size);
+        init_pid = process_spawn_module_ex("init", mod_addr, mod_size, NULL, 0);
     }
 
     if (init_pid == PID_INVALID) {

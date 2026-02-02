@@ -14,9 +14,11 @@
 
 #define SVC_NAME_MAX     16
 #define SVC_PATH_MAX     64
+#define SVC_CAP_NAME_MAX 32
 #define SVC_CAPS_MAX     4
 #define SVC_DEPS_MAX     4
 #define SVC_MAX_SERVICES 16
+#define SVC_MAX_CAP_DEFS 32
 #define SVC_READY_DIR    "/run"
 
 /**
@@ -43,9 +45,26 @@ typedef enum {
  * Capability 传递描述
  */
 struct svc_cap_desc {
+    char     name[SVC_CAP_NAME_MAX];
     uint32_t src_handle; /* 源 handle */
     uint32_t rights;     /* 权限 */
     uint32_t dst_hint;   /* 目标 handle 提示 */
+};
+
+typedef enum {
+    SVC_CAP_TYPE_NONE = 0,
+    SVC_CAP_TYPE_ENDPOINT,
+    SVC_CAP_TYPE_IOPORT,
+} svc_cap_type_t;
+
+struct svc_cap_def {
+    char          name[SVC_CAP_NAME_MAX];
+    svc_cap_type_t type;
+    uint16_t      ioport_start;
+    uint16_t      ioport_end;
+    uint32_t      rights;
+    bool          created;
+    uint32_t      handle;
 };
 
 /**
@@ -94,6 +113,8 @@ struct svc_runtime {
 struct svc_manager {
     struct svc_config  configs[SVC_MAX_SERVICES];
     struct svc_runtime runtime[SVC_MAX_SERVICES];
+    struct svc_cap_def cap_defs[SVC_MAX_CAP_DEFS];
+    int                cap_def_count;
     int                count;
 };
 
@@ -140,7 +161,8 @@ int svc_find_by_name(struct svc_manager *mgr, const char *name);
  * @param max_caps 最大 cap 数量
  * @return 解析出的 cap 数量
  */
-int svc_parse_caps(const char *caps_str, struct svc_cap_desc *caps, int max_caps);
+int svc_parse_caps(struct svc_manager *mgr, const char *caps_str, struct svc_cap_desc *caps,
+                   int max_caps);
 
 /**
  * 检查服务是否可以启动

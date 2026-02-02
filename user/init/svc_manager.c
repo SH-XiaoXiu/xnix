@@ -17,48 +17,91 @@
 /* 全局 tick 计数器 */
 static uint32_t g_ticks = 0;
 
-/**
- * Capability 名称到 handle 的映射
- * init 从内核继承这些 cap(顺序由内核决定)
- */
-static const struct {
-    const char *name;
-    uint32_t    handle;
-    uint32_t    rights;
-} g_cap_map[] = {
-    {"serial_ep", 0, CAP_READ | CAP_WRITE | CAP_GRANT},
-    {"ioport", 1, CAP_READ | CAP_WRITE | CAP_GRANT},
-    {"vfs_ep", 2, CAP_READ | CAP_WRITE | CAP_GRANT},
-    {"ata_io", 3, CAP_READ | CAP_WRITE | CAP_GRANT},
-    {"ata_ctrl", 4, CAP_READ | CAP_WRITE | CAP_GRANT},
-    {"fat_vfs_ep", 5, CAP_READ | CAP_WRITE | CAP_GRANT},
-    {"fb_ep", 6, CAP_READ | CAP_WRITE | CAP_GRANT},
-    {"rootfs_ep", 7, CAP_READ | CAP_WRITE | CAP_GRANT},
-    {NULL, 0, 0},
-};
+static bool parse_cap_section(const char *section, char *name, size_t name_size) {
+    const char *prefix     = "cap.";
+    size_t      prefix_len = strlen(prefix);
 
-/**
- * 查找 capability 名称对应的 handle
- */
-static int find_cap_handle(const char *name) {
-    for (int i = 0; g_cap_map[i].name != NULL; i++) {
-        if (strcmp(g_cap_map[i].name, name) == 0) {
-            return (int)g_cap_map[i].handle;
-        }
+    if (strncmp(section, prefix, prefix_len) != 0) {
+        return false;
     }
-    return -1;
+
+    const char *cap_name = section + prefix_len;
+    size_t      len      = strlen(cap_name);
+    if (len == 0 || len >= name_size) {
+        return false;
+    }
+
+    memcpy(name, cap_name, len);
+    name[len] = '\0';
+    return true;
 }
 
-/**
- * 获取 capability 的默认权限
- */
-static uint32_t get_cap_rights(const char *name) {
-    for (int i = 0; g_cap_map[i].name != NULL; i++) {
-        if (strcmp(g_cap_map[i].name, name) == 0) {
-            return g_cap_map[i].rights;
+static struct svc_cap_def *cap_def_find(struct svc_manager *mgr, const char *name) {
+    for (int i = 0; i < mgr->cap_def_count; i++) {
+        if (strcmp(mgr->cap_defs[i].name, name) == 0) {
+            return &mgr->cap_defs[i];
         }
     }
-    return CAP_READ | CAP_WRITE;
+    return NULL;
+}
+
+static struct svc_cap_def *cap_def_get_or_add(struct svc_manager *mgr, const char *name) {
+    struct svc_cap_def *def = cap_def_find(mgr, name);
+    if (def) {
+        return def;
+    }
+
+    if (mgr->cap_def_count >= SVC_MAX_CAP_DEFS) {
+        return NULL;
+    }
+
+    def = &mgr->cap_defs[mgr->cap_def_count++];
+    memset(def, 0, sizeof(*def));
+    snprintf(def->name, sizeof(def->name), "%s", name);
+    def->type   = SVC_CAP_TYPE_NONE;
+    def->rights = CAP_READ | CAP_WRITE | CAP_GRANT;
+    def->handle = CAP_HANDLE_INVALID;
+    return def;
+}
+
+static int cap_def_create(struct svc_cap_def *def) {
+    if (def->created) {
+        return 0;
+    }
+
+    int h = -1;
+    switch (def->type) {
+        case SVC_CAP_TYPE_ENDPOINT:
+            h = sys_endpoint_create();
+            break;
+        case SVC_CAP_TYPE_IOPORT:
+            h = sys_ioport_create_range(def->ioport_start, def->ioport_end, def->rights);
+            break;
+        default:
+            return -1;
+    }
+
+    if (h < 0) {
+        return h;
+    }
+
+    def->handle  = (uint32_t)h;
+    def->created = true;
+    return 0;
+}
+
+static int cap_get_or_create(struct svc_manager *mgr, const char *name, uint32_t *out_handle,
+                             uint32_t *out_rights) {
+    struct svc_cap_def *def = cap_def_find(mgr, name);
+    if (!def) {
+        return -1;
+    }
+    if (cap_def_create(def) < 0) {
+        return -1;
+    }
+    *out_handle = def->handle;
+    *out_rights = def->rights;
+    return 0;
 }
 
 uint32_t svc_get_ticks(void) {
@@ -70,6 +113,54 @@ void svc_manager_init(struct svc_manager *mgr) {
 
     /* 确保 /run 目录存在 */
     sys_mkdir(SVC_READY_DIR);
+
+    struct svc_cap_def *cap = NULL;
+
+    cap = cap_def_get_or_add(mgr, "serial_ep");
+    if (cap) {
+        cap->type = SVC_CAP_TYPE_ENDPOINT;
+    }
+
+    cap = cap_def_get_or_add(mgr, "ioport");
+    if (cap) {
+        cap->type         = SVC_CAP_TYPE_IOPORT;
+        cap->ioport_start = 0x3F8;
+        cap->ioport_end   = 0x3FF;
+    }
+
+    cap = cap_def_get_or_add(mgr, "vfs_ep");
+    if (cap) {
+        cap->type = SVC_CAP_TYPE_ENDPOINT;
+    }
+
+    cap = cap_def_get_or_add(mgr, "ata_io");
+    if (cap) {
+        cap->type         = SVC_CAP_TYPE_IOPORT;
+        cap->ioport_start = 0x1F0;
+        cap->ioport_end   = 0x1F7;
+    }
+
+    cap = cap_def_get_or_add(mgr, "ata_ctrl");
+    if (cap) {
+        cap->type         = SVC_CAP_TYPE_IOPORT;
+        cap->ioport_start = 0x3F6;
+        cap->ioport_end   = 0x3F7;
+    }
+
+    cap = cap_def_get_or_add(mgr, "fat_vfs_ep");
+    if (cap) {
+        cap->type = SVC_CAP_TYPE_ENDPOINT;
+    }
+
+    cap = cap_def_get_or_add(mgr, "fb_ep");
+    if (cap) {
+        cap->type = SVC_CAP_TYPE_ENDPOINT;
+    }
+
+    cap = cap_def_get_or_add(mgr, "rootfs_ep");
+    if (cap) {
+        cap->type = SVC_CAP_TYPE_ENDPOINT;
+    }
 }
 
 /**
@@ -128,11 +219,61 @@ static int parse_dep_list(const char *value, char deps[][SVC_NAME_MAX], int max_
     return count;
 }
 
+static uint32_t parse_u32_auto(const char *s) {
+    if (!s) {
+        return 0;
+    }
+
+    while (*s == ' ' || *s == '\t') {
+        s++;
+    }
+
+    uint32_t base = 10;
+    if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        base = 16;
+        s += 2;
+    }
+
+    uint32_t v = 0;
+    while (*s) {
+        uint32_t digit = 0;
+        char     c     = *s;
+        if (c >= '0' && c <= '9') {
+            digit = (uint32_t)(c - '0');
+        } else if (base == 16 && c >= 'a' && c <= 'f') {
+            digit = 10u + (uint32_t)(c - 'a');
+        } else if (base == 16 && c >= 'A' && c <= 'F') {
+            digit = 10u + (uint32_t)(c - 'A');
+        } else {
+            break;
+        }
+
+        uint32_t nv = v * base + digit;
+        if (nv < v) {
+            return 0xFFFFFFFFu;
+        }
+        v = nv;
+        s++;
+    }
+
+    return v;
+}
+
+static uint16_t parse_u16_auto(const char *s) {
+    uint32_t v = parse_u32_auto(s);
+    if (v > 0xFFFFu) {
+        v = 0xFFFFu;
+    }
+    return (uint16_t)v;
+}
+
 /**
  * 解析 caps 字符串
  * 格式: "cap_name:dst_hint cap_name:dst_hint ..."
  */
-int svc_parse_caps(const char *caps_str, struct svc_cap_desc *caps, int max_caps) {
+int svc_parse_caps(struct svc_manager *mgr, const char *caps_str, struct svc_cap_desc *caps,
+                   int max_caps) {
+    (void)mgr;
     int         count = 0;
     const char *p     = caps_str;
 
@@ -159,24 +300,18 @@ int svc_parse_caps(const char *caps_str, struct svc_cap_desc *caps, int max_caps
             *colon               = '\0';
             const char *cap_name = cap_spec;
             const char *dst_str  = colon + 1;
+            snprintf(caps[count].name, sizeof(caps[count].name), "%s", cap_name);
+            caps[count].src_handle = CAP_HANDLE_INVALID;
+            caps[count].rights     = 0;
+            caps[count].dst_hint   = 0;
 
-            int handle = find_cap_handle(cap_name);
-            if (handle >= 0) {
-                caps[count].src_handle = (uint32_t)handle;
-                caps[count].rights     = get_cap_rights(cap_name);
-                caps[count].dst_hint   = 0;
-
-                /* 解析 dst_hint */
-                for (const char *s = dst_str; *s; s++) {
-                    if (*s >= '0' && *s <= '9') {
-                        caps[count].dst_hint = caps[count].dst_hint * 10 + (*s - '0');
-                    }
+            for (const char *s = dst_str; *s; s++) {
+                if (*s >= '0' && *s <= '9') {
+                    caps[count].dst_hint = caps[count].dst_hint * 10 + (*s - '0');
                 }
-
-                count++;
-            } else {
-                printf("[svc] Unknown capability: %s\n", cap_name);
             }
+
+            count++;
         }
     }
 
@@ -189,7 +324,36 @@ int svc_parse_caps(const char *caps_str, struct svc_cap_desc *caps, int max_caps
 struct ini_ctx {
     struct svc_manager *mgr;
     struct svc_config  *current; /* 当前正在解析的服务 */
+    struct svc_cap_def *current_cap;
 };
+
+static void svc_resolve_caps(struct svc_manager *mgr) {
+    for (int i = 0; i < mgr->count; i++) {
+        struct svc_config *cfg = &mgr->configs[i];
+
+        for (int j = 0; j < cfg->cap_count; j++) {
+            struct svc_cap_desc *cap = &cfg->caps[j];
+            if (cap->name[0] == '\0') {
+                continue;
+            }
+
+            if (cap->src_handle == CAP_HANDLE_INVALID) {
+                uint32_t h      = CAP_HANDLE_INVALID;
+                uint32_t rights = 0;
+                if (cap_get_or_create(mgr, cap->name, &h, &rights) < 0) {
+                    printf("Unknown capability: %s\n", cap->name);
+                    continue;
+                }
+                cap->src_handle = h;
+                cap->rights     = rights;
+            }
+        }
+
+        if (cfg->mount[0] != '\0' && cfg->cap_count > 0) {
+            cfg->mount_ep = cfg->caps[0].src_handle;
+        }
+    }
+}
 
 /**
  * INI 解析回调
@@ -198,90 +362,115 @@ static bool ini_handler(const char *section, const char *key, const char *value,
     struct ini_ctx     *ictx = (struct ini_ctx *)ctx;
     struct svc_manager *mgr  = ictx->mgr;
 
-    /* 跳过 [general] [core] 等非服务 section */
     char svc_name[SVC_NAME_MAX];
-    if (!parse_service_section(section, svc_name, sizeof(svc_name))) {
-        ictx->current = NULL;
+    if (parse_service_section(section, svc_name, sizeof(svc_name))) {
+        ictx->current_cap = NULL;
+
+        if (ictx->current == NULL || strcmp(ictx->current->name, svc_name) != 0) {
+            int idx = svc_find_by_name(mgr, svc_name);
+            if (idx < 0) {
+                if (mgr->count >= SVC_MAX_SERVICES) {
+                    printf("Too many services\n");
+                    return true;
+                }
+                idx                    = mgr->count++;
+                struct svc_config *cfg = &mgr->configs[idx];
+                memset(cfg, 0, sizeof(*cfg));
+                memcpy(cfg->name, svc_name, strlen(svc_name));
+                cfg->name[strlen(svc_name)] = '\0';
+                cfg->type                   = SVC_TYPE_MODULE;
+            }
+            ictx->current = &mgr->configs[idx];
+        }
+
+        struct svc_config *cfg = ictx->current;
+
+        if (strcmp(key, "type") == 0) {
+            if (strcmp(value, "module") == 0) {
+                cfg->type = SVC_TYPE_MODULE;
+            } else if (strcmp(value, "path") == 0) {
+                cfg->type = SVC_TYPE_PATH;
+            }
+        } else if (strcmp(key, "module") == 0) {
+            cfg->module_index = 0;
+            for (const char *s = value; *s; s++) {
+                if (*s >= '0' && *s <= '9') {
+                    cfg->module_index = cfg->module_index * 10 + (*s - '0');
+                }
+            }
+        } else if (strcmp(key, "path") == 0) {
+            size_t len = strlen(value);
+            if (len >= SVC_PATH_MAX) {
+                len = SVC_PATH_MAX - 1;
+            }
+            memcpy(cfg->path, value, len);
+            cfg->path[len] = '\0';
+        } else if (strcmp(key, "after") == 0) {
+            cfg->after_count = parse_dep_list(value, cfg->after, SVC_DEPS_MAX);
+        } else if (strcmp(key, "ready") == 0) {
+            cfg->ready_count = parse_dep_list(value, cfg->ready, SVC_DEPS_MAX);
+        } else if (strcmp(key, "wait_path") == 0) {
+            size_t len = strlen(value);
+            if (len >= SVC_PATH_MAX) {
+                len = SVC_PATH_MAX - 1;
+            }
+            memcpy(cfg->wait_path, value, len);
+            cfg->wait_path[len] = '\0';
+        } else if (strcmp(key, "delay") == 0) {
+            cfg->delay_ms = 0;
+            for (const char *s = value; *s; s++) {
+                if (*s >= '0' && *s <= '9') {
+                    cfg->delay_ms = cfg->delay_ms * 10 + (*s - '0');
+                }
+            }
+        } else if (strcmp(key, "respawn") == 0) {
+            cfg->respawn = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+        } else if (strcmp(key, "caps") == 0) {
+            cfg->cap_count = svc_parse_caps(mgr, value, cfg->caps, SVC_CAPS_MAX);
+        } else if (strcmp(key, "mount") == 0) {
+            size_t len = strlen(value);
+            if (len >= SVC_PATH_MAX) {
+                len = SVC_PATH_MAX - 1;
+            }
+            memcpy(cfg->mount, value, len);
+            cfg->mount[len] = '\0';
+        }
+
         return true;
     }
 
-    /* 查找或创建服务配置 */
-    if (ictx->current == NULL || strcmp(ictx->current->name, svc_name) != 0) {
-        int idx = svc_find_by_name(mgr, svc_name);
-        if (idx < 0) {
-            /* 新服务 */
-            if (mgr->count >= SVC_MAX_SERVICES) {
-                printf("[svc] Too many services\n");
-                return true;
-            }
-            idx                    = mgr->count++;
-            struct svc_config *cfg = &mgr->configs[idx];
-            memset(cfg, 0, sizeof(*cfg));
-            memcpy(cfg->name, svc_name, strlen(svc_name));
-            cfg->name[strlen(svc_name)] = '\0';
-            cfg->type                   = SVC_TYPE_MODULE;
+    char cap_name[SVC_CAP_NAME_MAX];
+    if (parse_cap_section(section, cap_name, sizeof(cap_name))) {
+        ictx->current = NULL;
+
+        if (ictx->current_cap == NULL || strcmp(ictx->current_cap->name, cap_name) != 0) {
+            ictx->current_cap = cap_def_get_or_add(mgr, cap_name);
         }
-        ictx->current = &mgr->configs[idx];
+
+        struct svc_cap_def *cap = ictx->current_cap;
+        if (!cap) {
+            printf("Too many cap defs\n");
+            return true;
+        }
+
+        if (strcmp(key, "type") == 0) {
+            if (strcmp(value, "endpoint") == 0) {
+                cap->type = SVC_CAP_TYPE_ENDPOINT;
+            } else if (strcmp(value, "ioport") == 0) {
+                cap->type = SVC_CAP_TYPE_IOPORT;
+            }
+        } else if (strcmp(key, "start") == 0) {
+            cap->ioport_start = parse_u16_auto(value);
+        } else if (strcmp(key, "end") == 0) {
+            cap->ioport_end = parse_u16_auto(value);
+        } else if (strcmp(key, "rights") == 0) {
+            cap->rights = parse_u32_auto(value) & (CAP_READ | CAP_WRITE | CAP_GRANT);
+        }
+        return true;
     }
 
-    struct svc_config *cfg = ictx->current;
-
-    /* 解析键值 */
-    if (strcmp(key, "type") == 0) {
-        if (strcmp(value, "module") == 0) {
-            cfg->type = SVC_TYPE_MODULE;
-        } else if (strcmp(value, "path") == 0) {
-            cfg->type = SVC_TYPE_PATH;
-        }
-    } else if (strcmp(key, "module") == 0) {
-        cfg->module_index = 0;
-        for (const char *s = value; *s; s++) {
-            if (*s >= '0' && *s <= '9') {
-                cfg->module_index = cfg->module_index * 10 + (*s - '0');
-            }
-        }
-    } else if (strcmp(key, "path") == 0) {
-        size_t len = strlen(value);
-        if (len >= SVC_PATH_MAX) {
-            len = SVC_PATH_MAX - 1;
-        }
-        memcpy(cfg->path, value, len);
-        cfg->path[len] = '\0';
-    } else if (strcmp(key, "after") == 0) {
-        cfg->after_count = parse_dep_list(value, cfg->after, SVC_DEPS_MAX);
-    } else if (strcmp(key, "ready") == 0) {
-        cfg->ready_count = parse_dep_list(value, cfg->ready, SVC_DEPS_MAX);
-    } else if (strcmp(key, "wait_path") == 0) {
-        size_t len = strlen(value);
-        if (len >= SVC_PATH_MAX) {
-            len = SVC_PATH_MAX - 1;
-        }
-        memcpy(cfg->wait_path, value, len);
-        cfg->wait_path[len] = '\0';
-    } else if (strcmp(key, "delay") == 0) {
-        cfg->delay_ms = 0;
-        for (const char *s = value; *s; s++) {
-            if (*s >= '0' && *s <= '9') {
-                cfg->delay_ms = cfg->delay_ms * 10 + (*s - '0');
-            }
-        }
-    } else if (strcmp(key, "respawn") == 0) {
-        cfg->respawn = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-    } else if (strcmp(key, "caps") == 0) {
-        cfg->cap_count = svc_parse_caps(value, cfg->caps, SVC_CAPS_MAX);
-    } else if (strcmp(key, "mount") == 0) {
-        size_t len = strlen(value);
-        if (len >= SVC_PATH_MAX) {
-            len = SVC_PATH_MAX - 1;
-        }
-        memcpy(cfg->mount, value, len);
-        cfg->mount[len] = '\0';
-
-        /* mount 路径暗示了 endpoint handle(从 caps 中找) */
-        if (cfg->cap_count > 0) {
-            cfg->mount_ep = cfg->caps[0].src_handle;
-        }
-    }
+    ictx->current     = NULL;
+    ictx->current_cap = NULL;
 
     return true;
 }
@@ -290,6 +479,7 @@ int svc_load_config(struct svc_manager *mgr, const char *path) {
     struct ini_ctx ctx = {
         .mgr     = mgr,
         .current = NULL,
+        .current_cap = NULL,
     };
 
     int ret = ini_parse_file(path, ini_handler, &ctx);
@@ -297,7 +487,8 @@ int svc_load_config(struct svc_manager *mgr, const char *path) {
         return ret;
     }
 
-    printf("[svc] Loaded %d services from %s\n", mgr->count, path);
+    svc_resolve_caps(mgr);
+    printf("Loaded %d services from %s\n", mgr->count, path);
     return 0;
 }
 
@@ -305,6 +496,7 @@ int svc_load_config_string(struct svc_manager *mgr, const char *content) {
     struct ini_ctx ctx = {
         .mgr     = mgr,
         .current = NULL,
+        .current_cap = NULL,
     };
 
     int ret = ini_parse_buffer(content, strlen(content), ini_handler, &ctx);
@@ -312,7 +504,8 @@ int svc_load_config_string(struct svc_manager *mgr, const char *content) {
         return ret;
     }
 
-    printf("[svc] Loaded %d services from embedded config\n", mgr->count);
+    svc_resolve_caps(mgr);
+    printf("Loaded %d services from embedded config\n", mgr->count);
     return 0;
 }
 
@@ -393,10 +586,10 @@ static int do_mount(struct svc_config *cfg) {
         return 0;
     }
 
-    printf("[svc] Mounting %s on %s (ep=%u)\n", cfg->name, cfg->mount, cfg->mount_ep);
+    printf("Mounting %s on %s (ep=%u)\n", cfg->name, cfg->mount, cfg->mount_ep);
     int ret = sys_mount(cfg->mount, cfg->mount_ep);
     if (ret < 0) {
-        printf("[svc] Failed to mount %s: %d\n", cfg->mount, ret);
+        printf("Failed to mount %s: %d\n", cfg->mount, ret);
     }
     return ret;
 }
@@ -405,7 +598,7 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     struct svc_config  *cfg = &mgr->configs[idx];
     struct svc_runtime *rt  = &mgr->runtime[idx];
 
-    printf("[svc] Starting %s...\n", cfg->name);
+    printf("Starting %s...\n", cfg->name);
 
     rt->state = SVC_STATE_STARTING;
 
@@ -460,12 +653,12 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     }
 
     if (pid < 0) {
-        printf("[svc] Failed to start %s: %d\n", cfg->name, pid);
+        printf("Failed to start %s: %d\n", cfg->name, pid);
         rt->state = SVC_STATE_FAILED;
         return pid;
     }
 
-    printf("[svc] %s started (pid=%d)\n", cfg->name, pid);
+    printf("%s started (pid=%d)\n", cfg->name, pid);
     rt->state = SVC_STATE_RUNNING;
     rt->pid   = pid;
     rt->ready = false;
@@ -480,12 +673,12 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
             rt->ready = true;
         } else {
             /* 非根挂载:等待 ready 文件 */
-            printf("[svc] Waiting for %s to be ready...\n", cfg->name);
+            printf("Waiting for %s to be ready...\n", cfg->name);
             if (wait_for_ready(cfg->name, 5000)) {
                 rt->ready = true;
                 do_mount(cfg);
             } else {
-                printf("[svc] Timeout waiting for %s\n", cfg->name);
+                printf("Timeout waiting for %s\n", cfg->name);
             }
         }
     }
@@ -505,7 +698,7 @@ void svc_tick(struct svc_manager *mgr) {
         if (rt->state == SVC_STATE_RUNNING && !rt->ready) {
             if (svc_check_ready_file(cfg->name)) {
                 rt->ready = true;
-                printf("[svc] %s is ready\n", cfg->name);
+                printf("%s is ready\n", cfg->name);
             }
         }
     }
@@ -546,7 +739,7 @@ void svc_handle_exit(struct svc_manager *mgr, int pid, int status) {
         struct svc_runtime *rt = &mgr->runtime[i];
         if (rt->pid == pid) {
             struct svc_config *cfg = &mgr->configs[i];
-            printf("[svc] %s exited (status=%d)\n", cfg->name, status);
+            printf("%s exited (status=%d)\n", cfg->name, status);
 
             rt->state = SVC_STATE_STOPPED;
             rt->pid   = -1;
@@ -559,7 +752,7 @@ void svc_handle_exit(struct svc_manager *mgr, int pid, int status) {
 
             /* 检查是否需要重启 */
             if (cfg->respawn) {
-                printf("[svc] Respawning %s...\n", cfg->name);
+                printf("Respawning %s...\n", cfg->name);
                 rt->state = SVC_STATE_PENDING;
             }
 

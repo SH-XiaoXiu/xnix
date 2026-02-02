@@ -72,6 +72,33 @@ static int32_t sys_ioport_inw(const uint32_t *args) {
     return (int32_t)inw(port);
 }
 
+/* SYS_IOPORT_CREATE_RANGE: ebx=start, ecx=end, edx=rights */
+static int32_t sys_ioport_create_range(const uint32_t *args) {
+    uint16_t        start  = (uint16_t)args[0];
+    uint16_t        end    = (uint16_t)args[1];
+    uint32_t        rights = args[2] & (CAP_READ | CAP_WRITE | CAP_GRANT);
+    struct process *proc   = (struct process *)process_current();
+
+    if (process_get_pid(proc) != XNIX_PID_INIT) {
+        return -EPERM;
+    }
+
+    if (start > end) {
+        return -EINVAL;
+    }
+
+    if (rights == 0) {
+        rights = CAP_READ | CAP_WRITE;
+    }
+
+    cap_handle_t h = ioport_create_range(proc, start, end, rights);
+    if (h == CAP_HANDLE_INVALID) {
+        return -ENOMEM;
+    }
+
+    return (int32_t)h;
+}
+
 /**
  * 注册 I/O 系统调用
  */
@@ -80,4 +107,5 @@ void sys_io_init(void) {
     syscall_register(SYS_IOPORT_INB, sys_ioport_inb, 2, "ioport_inb");
     syscall_register(SYS_IOPORT_OUTW, sys_ioport_outw, 3, "ioport_outw");
     syscall_register(SYS_IOPORT_INW, sys_ioport_inw, 2, "ioport_inw");
+    syscall_register(SYS_IOPORT_CREATE_RANGE, sys_ioport_create_range, 3, "ioport_create_range");
 }

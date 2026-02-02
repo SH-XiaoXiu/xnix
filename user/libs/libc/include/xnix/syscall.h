@@ -93,6 +93,10 @@ static inline int sys_ioport_inw(uint32_t io_cap, uint16_t port) {
     return syscall2(SYS_IOPORT_INW, io_cap, (uint32_t)port);
 }
 
+static inline int sys_ioport_create_range(uint16_t start, uint16_t end, uint32_t rights) {
+    return syscall3(SYS_IOPORT_CREATE_RANGE, (uint32_t)start, (uint32_t)end, rights);
+}
+
 static inline void sys_sleep(uint32_t ms) {
     syscall1(SYS_SLEEP, ms);
 }

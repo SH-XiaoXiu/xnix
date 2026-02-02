@@ -253,6 +253,7 @@ file(WRITE ${CMAKE_BINARY_DIR}/include/module_index.h "${MODULE_H}")
 # ============================================
 # 生成 core_services.h（嵌入式配置）
 # ============================================
+set(INIT_CAPS_CONF_PATH "${CMAKE_CURRENT_SOURCE_DIR}/init/caps.conf")
 set(CORE_CONF "[core]\ninclude = /sys/etc/services.conf\n\n")
 
 foreach (SVC ${CORE_SERVICES})
@@ -270,6 +271,11 @@ foreach (SVC ${CORE_SERVICES})
     endif ()
     string(APPEND CORE_CONF "\n")
 endforeach ()
+
+if (EXISTS ${INIT_CAPS_CONF_PATH})
+    file(READ ${INIT_CAPS_CONF_PATH} INIT_CAPS_CONF_CONTENT)
+    string(APPEND CORE_CONF "\n${INIT_CAPS_CONF_CONTENT}\n")
+endif ()
 
 # 转换为 C 字符串
 string(REPLACE "\\" "\\\\" CORE_CONF_ESC "${CORE_CONF}")
@@ -310,6 +316,13 @@ foreach (SVC ${USER_SERVICES})
 endforeach ()
 
 file(WRITE ${CMAKE_BINARY_DIR}/generated/services.conf "${USER_CONF}")
+
+if (EXISTS ${INIT_CAPS_CONF_PATH})
+    if (NOT DEFINED INIT_CAPS_CONF_CONTENT)
+        file(READ ${INIT_CAPS_CONF_PATH} INIT_CAPS_CONF_CONTENT)
+    endif ()
+    file(APPEND ${CMAKE_BINARY_DIR}/generated/services.conf "\n${INIT_CAPS_CONF_CONTENT}\n")
+endif ()
 
 # ============================================
 # init.elf（依赖生成的头文件）

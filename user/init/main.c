@@ -17,6 +17,7 @@
 
 #include "svc_manager.h"
 
+#include <acolor.h>
 #include <core_services.h>
 #include <module_index.h>
 #include <stdio.h>
@@ -39,7 +40,7 @@ static void parse_args(int argc, char **argv) {
     for (int i = 0; i < argc; i++) {
         if (strncmp(argv[i], "config=", 7) == 0) {
             g_user_config_path = argv[i] + 7;
-            printf("[init] User config: %s\n", g_user_config_path);
+            printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " User config: %s\n", g_user_config_path);
         }
     }
 }
@@ -57,7 +58,7 @@ static void reap_children(void) {
 }
 
 int main(int argc, char **argv) {
-    printf("[init] init process started (PID %d)\n", sys_getpid());
+    printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " init process started (PID %d)\n", sys_getpid());
 
     /* 解析启动参数 */
     if (argc > 0) {
@@ -68,17 +69,17 @@ int main(int argc, char **argv) {
     svc_manager_init(&g_mgr);
 
     /* 加载嵌入式核心服务配置 */
-    printf("[init] Loading embedded core services config\n");
+    printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " Loading embedded core services config\n");
     int ret = svc_load_config_string(&g_mgr, CORE_SERVICES_CONF);
     if (ret < 0) {
-        printf("[init] Failed to load core services: %d\n", ret);
-        printf("[init] System cannot start without core services\n");
+        printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " Failed to load core services: %d\n", ret);
+        printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " System cannot start without core services\n");
         while (1) {
             msleep(1000);
         }
     }
 
-    printf("[init] Starting core services...\n");
+    printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " Starting core services...\n");
 
     /* 主循环:先启动核心服务,等待 /sys 可用后加载用户配置 */
     bool user_config_loaded = false;
@@ -94,10 +95,11 @@ int main(int argc, char **argv) {
         if (!user_config_loaded) {
             struct vfs_info info;
             if (sys_info(g_user_config_path, &info) == 0) {
-                printf("[init] Loading %s\n", g_user_config_path);
+                printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " Loading %s\n", g_user_config_path);
                 ret = svc_load_config(&g_mgr, g_user_config_path);
                 if (ret < 0) {
-                    printf("[init] User config load failed: %d\n", ret);
+                    printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " User config load failed: %d\n",
+                           ret);
                 }
                 user_config_loaded = true;
             }

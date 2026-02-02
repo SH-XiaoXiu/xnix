@@ -3,6 +3,7 @@
  * @brief Xnix Shell
  */
 
+#include "acolor.h"
 #include "path.h"
 
 #include <signal.h>
@@ -213,8 +214,8 @@ static void execute_command(char *line) {
     if (path_find(argv[0], path, sizeof(path))) {
         run_external(path, argc, argv, background);
     } else {
-        printf("Command not found: %s\n", argv[0]);
-        printf("Type 'help' for available commands.\n");
+        printf(ACOLOR_BWHITE "Command not found: %s\n", argv[0]);
+        printf(ACOLOR_BWHITE "Type 'help' for available commands.%s\n", ACOLOR_RESET);
     }
 }
 
@@ -402,16 +403,17 @@ int main(int argc, char **argv) {
 
     printf("\n");
     printf("Xnix Shell\n");
-    printf("Type 'help' for available commands.\n");
+    printf(ACOLOR_BWHITE "Type 'help' for available commands.%s\n", ACOLOR_RESET);
     printf("\n");
 
     while (1) {
         char cwd[256];
         if (sys_getcwd(cwd, sizeof(cwd)) >= 0) {
-            printf("%s> ", cwd);
+            printf(ACOLOR_BWHITE "%s> ", cwd);
         } else {
-            printf("> ");
+            printf(ACOLOR_BWHITE "> ");
         }
+        printf(ACOLOR_RESET);
         fflush(NULL);
 
         if (gets_s(line, sizeof(line)) == NULL) {
