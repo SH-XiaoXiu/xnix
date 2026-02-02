@@ -48,9 +48,12 @@ void irq_set_handler(uint8_t irq, irq_handler_t handler) {
 void irq_dispatch(uint8_t irq, irq_frame_t *frame) {
     if (irq < ARCH_NR_IRQS && irq_handlers[irq]) {
         irq_handlers[irq](frame);
-    }
-    /* IRQ 0 (timer) 的 EOI 由 sched_tick 负责,避免上下文切换时双重 EOI */
-    if (irq != 0) {
+        /* IRQ 0 (timer) 的 EOI 由 handler (sched_tick) 负责 */
+        if (irq != 0) {
+            irq_eoi(irq);
+        }
+    } else {
+        /* 无 handler 时直接发送 EOI,避免中断被阻塞 */
         irq_eoi(irq);
     }
 }

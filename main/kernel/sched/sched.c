@@ -235,11 +235,11 @@ void sched_tick(void) {
 
     /* 首次启动:没有 current 但有就绪线程 */
     if (!current && current_policy) {
-        struct thread *first = current_policy->pick_next();
+        uint32_t         flags = spin_lock_irqsave(&sched_lock);
+        cpu_id_t         cpu   = cpu_current_id();
+        struct runqueue *rq    = sched_get_runqueue(cpu);
+        struct thread   *first = current_policy->pick_next();
         if (first) {
-            cpu_id_t         cpu = cpu_current_id();
-            struct runqueue *rq  = sched_get_runqueue(cpu);
-
             first->state      = THREAD_RUNNING;
             first->running_on = cpu;
             rq->current       = first;
@@ -247,10 +247,16 @@ void sched_tick(void) {
             /* 架构特定的线程切换 */
             arch_thread_switch(first);
 
+            /*
+             * 先发送 EOI,再释放锁,最后切换.
+             * context_switch_first 不返回,新线程会自己启用中断.
+             */
             irq_eoi(0);
+            spin_unlock(&sched_lock);
             context_switch_first(&first->ctx);
             /* 不会返回 */
         }
+        spin_unlock_irqrestore(&sched_lock, flags);
         in_interrupt = false;
         irq_eoi(0);
         return;
@@ -260,16 +266,14 @@ void sched_tick(void) {
     cpu_id_t       cpu  = cpu_current_id();
     struct thread *idle = sched_get_idle_thread(cpu);
     if (current == idle) {
-        /* 检查是否有可运行线程 */
-        if (current_policy) {
-            struct thread *next = current_policy->pick_next();
-            if (next) {
-                /* 有可运行线程,切换过去 */
-                irq_eoi(0);
-                schedule();
-                in_interrupt = false;
-                return;
-            }
+        /* 检查是否有可运行线程(只读检查,不需要锁) */
+        struct runqueue *rq = sched_get_runqueue(cpu);
+        if (rq->nr_running > 0) {
+            /* 有可运行线程,切换过去 */
+            irq_eoi(0);
+            schedule();
+            in_interrupt = false;
+            return;
         }
         /* 没有可运行线程,idle 继续运行 */
         in_interrupt = false;
