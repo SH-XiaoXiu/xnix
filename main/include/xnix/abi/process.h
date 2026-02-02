@@ -6,6 +6,7 @@
 #ifndef XNIX_ABI_PROCESS_H
 #define XNIX_ABI_PROCESS_H
 
+#include <xnix/abi/capability.h>
 #include <xnix/abi/stdint.h>
 
 /*
@@ -14,15 +15,18 @@
 #define ABI_EXEC_MAX_ARGS    16  /* 最大参数数量 */
 #define ABI_EXEC_MAX_ARG_LEN 256 /* 单个参数最大长度 */
 #define ABI_EXEC_PATH_MAX    256 /* 路径最大长度 */
+#define ABI_EXEC_MAX_CAPS    8   /* 最大传递 cap 数量 */
 
 /**
  * exec 系统调用参数结构
  */
 struct abi_exec_args {
-    char     path[ABI_EXEC_PATH_MAX];                       /* 可执行文件路径 */
-    int32_t  argc;                                          /* 参数数量 */
-    char     argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN]; /* 参数数组 */
-    uint32_t flags;                                         /* 执行标志(保留) */
+    char                 path[ABI_EXEC_PATH_MAX];                       /* 可执行文件路径 */
+    int32_t              argc;                                          /* 参数数量 */
+    char                 argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN]; /* 参数数组 */
+    uint32_t             flags;                                         /* 执行标志(保留) */
+    uint32_t             cap_count;                                     /* 传递的 cap 数量 */
+    struct abi_spawn_cap caps[ABI_EXEC_MAX_CAPS];                       /* 传递的 caps */
 };
 
 /*

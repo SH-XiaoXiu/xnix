@@ -426,6 +426,14 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
         exec_args.argc  = 0;
         exec_args.flags = 0;
 
+        /* 传递 capabilities */
+        exec_args.cap_count = (uint32_t)cfg->cap_count;
+        for (int i = 0; i < cfg->cap_count && i < ABI_EXEC_MAX_CAPS; i++) {
+            exec_args.caps[i].src      = cfg->caps[i].src_handle;
+            exec_args.caps[i].rights   = cfg->caps[i].rights;
+            exec_args.caps[i].dst_hint = cfg->caps[i].dst_hint;
+        }
+
         pid = sys_exec(&exec_args);
     } else {
         /* 从 Multiboot module 加载 */

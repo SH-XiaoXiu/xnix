@@ -187,9 +187,22 @@ static int32_t sys_exec(const uint32_t *args) {
     }
     name_buf[name_len] = '\0';
 
-    /* 创建进程(带 argv),使用物理地址 */
-    pid_t pid =
-        process_spawn_elf_with_args(name_buf, elf_paddr, elf_size, kargs->argc, kargs->argv);
+    /* 构建 capability 继承列表 */
+    uint32_t cap_count = kargs->cap_count;
+    if (cap_count > ABI_EXEC_MAX_CAPS) {
+        cap_count = ABI_EXEC_MAX_CAPS;
+    }
+
+    struct spawn_inherit_cap inherit_caps[ABI_EXEC_MAX_CAPS];
+    for (uint32_t i = 0; i < cap_count; i++) {
+        inherit_caps[i].src          = (cap_handle_t)kargs->caps[i].src;
+        inherit_caps[i].rights       = kargs->caps[i].rights;
+        inherit_caps[i].expected_dst = (cap_handle_t)kargs->caps[i].dst_hint;
+    }
+
+    /* 创建进程(带 argv 和 caps),使用物理地址 */
+    pid_t pid = process_spawn_elf_ex_with_args(name_buf, elf_paddr, elf_size, inherit_caps,
+                                               cap_count, kargs->argc, kargs->argv);
 
     /* 释放资源 */
     kfree(elf_data);
