@@ -170,6 +170,14 @@ pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_siz
                               const struct spawn_inherit_cap *inherit_caps, uint32_t inherit_count);
 
 /**
+ * 创建进程(带 capability 继承和 argv)
+ */
+pid_t process_spawn_module_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
+                                        const struct spawn_inherit_cap *inherit_caps,
+                                        uint32_t inherit_count, int argc,
+                                        char argv[][ABI_EXEC_MAX_ARG_LEN]);
+
+/**
  * 从 ELF 创建进程(带 argv)
  * @param name     进程名
  * @param elf_data ELF 数据

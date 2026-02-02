@@ -25,6 +25,7 @@ file(MAKE_DIRECTORY ${BIN_OUTPUT_DIR})
 
 # 收集所有 bin 目标
 set(_BIN_TARGETS "")
+set(_BIN_NAMES "")
 
 # 自动发现所有子目录
 file(GLOB BIN_DIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*)
@@ -90,6 +91,7 @@ foreach (BIN_DIR ${BIN_DIRS})
     )
 
     list(APPEND _BIN_TARGETS bin_${BIN_ELF})
+    list(APPEND _BIN_NAMES ${BIN_NAME})
 endforeach ()
 
 # 创建聚合目标
@@ -97,3 +99,26 @@ if (_BIN_TARGETS)
     add_custom_target(bin_tools ALL DEPENDS ${_BIN_TARGETS})
     message(STATUS "Bin tools target: bin_tools (${_BIN_TARGETS})")
 endif ()
+
+# 导出 bin 工具列表（供 iso 模块使用）
+set(BIN_TOOL_TARGETS "${_BIN_TARGETS}" CACHE INTERNAL "Bin tool targets")
+set(BIN_TOOL_NAMES "${_BIN_NAMES}" CACHE INTERNAL "Bin tool names")
+set(BIN_TOOL_OUTPUT_DIR "${BIN_OUTPUT_DIR}" CACHE INTERNAL "Bin tool output directory")
+
+# 为每个 bin 工具生成服务配置（遵守 ISO 规范）
+# 默认 core=false，可通过 bin/xxx/service.conf 覆盖
+foreach (BIN_NAME ${_BIN_NAMES})
+    set(SVC_CONF "${CMAKE_CURRENT_SOURCE_DIR}/${BIN_NAME}/service.conf")
+    if (EXISTS ${SVC_CONF})
+        # 有 service.conf，由 user/CMakeLists.txt 处理
+        continue()
+    endif ()
+    # 自动生成默认配置
+    set(SVC_bin_${BIN_NAME}_TYPE "bin" CACHE INTERNAL "")
+    set(SVC_bin_${BIN_NAME}_CORE FALSE CACHE INTERNAL "")
+    set(SVC_bin_${BIN_NAME}_PATH "/sys/bin/${BIN_NAME}.elf" CACHE INTERNAL "")
+    set(SVC_bin_${BIN_NAME}_AFTER "" CACHE INTERNAL "")
+    set(SVC_bin_${BIN_NAME}_CAPS "" CACHE INTERNAL "")
+    set(SVC_bin_${BIN_NAME}_MOUNT "" CACHE INTERNAL "")
+    set(SVC_bin_${BIN_NAME}_RESPAWN FALSE CACHE INTERNAL "")
+endforeach ()

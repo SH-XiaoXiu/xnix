@@ -58,6 +58,8 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
 
     # 加载驱动配置（如果存在）
     set(DRIVER_EXTRA_LIBS "")
+    set(DRIVER_EXTRA_SOURCES "")
+    set(DRIVER_EXTRA_INCLUDES "")
     if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}/CMakeLists.txt)
         include(${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}/CMakeLists.txt)
     endif ()
@@ -66,6 +68,7 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
     add_executable(${DRIVER_ELF}
             ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.s
             ${DRIVER_SOURCES}
+            ${DRIVER_EXTRA_SOURCES}
     )
 
     target_compile_options(${DRIVER_ELF} PRIVATE ${USER_C_FLAGS})
@@ -77,6 +80,7 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
             ${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}
             ${CMAKE_SOURCE_DIR}/main/include
             ${CMAKE_BINARY_DIR}/include
+            ${DRIVER_EXTRA_INCLUDES}
     )
     # 链接库
     target_link_libraries(${DRIVER_ELF} PRIVATE c udm vfs pthread ${DRIVER_EXTRA_LIBS})
@@ -106,23 +110,4 @@ set(DRIVER_NAMES "${_DRIVER_NAMES}" PARENT_SCOPE)
 
 message(STATUS "Driver targets: ${_DRIVER_TARGETS}")
 
-# 生成模块索引头文件
-# 模块 0 = init, 驱动从模块 1 开始
-set(MODULE_INDEX_CONTENT "/* 自动生成，勿手动修改 */\n")
-string(APPEND MODULE_INDEX_CONTENT "#ifndef _MODULE_INDEX_H\n#define _MODULE_INDEX_H\n\n")
-string(APPEND MODULE_INDEX_CONTENT "#define MODULE_INIT 0\n")
-
-set(_IDX 1)
-foreach (_NAME ${_DRIVER_NAMES})
-    string(TOUPPER ${_NAME} _UPPER)
-    string(APPEND MODULE_INDEX_CONTENT "#define MODULE_${_UPPER} ${_IDX}\n")
-    math(EXPR _IDX "${_IDX} + 1")
-endforeach ()
-
-# shell 在驱动之后
-string(APPEND MODULE_INDEX_CONTENT "#define MODULE_SHELL ${_IDX}\n")
-math(EXPR _IDX "${_IDX} + 1")
-string(APPEND MODULE_INDEX_CONTENT "#define MODULE_DEMO_BASE ${_IDX}\n")
-string(APPEND MODULE_INDEX_CONTENT "\n#endif /* _MODULE_INDEX_H */\n")
-
-file(WRITE ${CMAKE_BINARY_DIR}/include/module_index.h "${MODULE_INDEX_CONTENT}")
+# module_index.h 现在由 cmake/generate_services.cmake 自动生成

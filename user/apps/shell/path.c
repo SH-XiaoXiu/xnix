@@ -16,8 +16,8 @@ void path_init(void) {
     path_clear();
 
     /* 默认搜索路径 */
-    path_add("/bin");
-    path_add("/mnt/bin");
+    path_add("/sys/bin"); /* 系统工具 */
+    path_add("/mnt/bin"); /* 用户工具 */
 }
 
 bool path_add(const char *dir) {

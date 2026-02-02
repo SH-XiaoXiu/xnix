@@ -15,6 +15,7 @@
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <kernel/sys/syscall.h>
+#include <xnix/abi/process.h>
 #include <xnix/boot.h>
 #include <xnix/config.h>
 #include <xnix/console.h>
@@ -22,6 +23,7 @@
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
+#include <xnix/string.h>
 #include <xnix/udm/console.h>
 #include <xnix/vfs.h>
 
@@ -172,6 +174,9 @@ static void boot_start_services(void) {
     /* 创建 FB endpoint (用于 fbd) */
     cap_handle_t fb_ep = endpoint_create();
 
+    /* 创建 rootfs VFS endpoint (用于 rootfsd) */
+    cap_handle_t rootfs_ep = endpoint_create();
+
     /* 获取 init 模块 */
     uint32_t init_mod_index = boot_get_initmod_index();
     if (init_mod_index >= mods_count) {
@@ -188,6 +193,34 @@ static void boot_start_services(void) {
 
     pr_info("Loading init module (%u bytes)", mod_size);
 
+    /* 解析 init module 的 cmdline 为 argc/argv */
+    const char *init_cmdline = boot_get_module_cmdline(init_mod_index);
+    int         init_argc    = 0;
+    char        init_argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN];
+
+    if (init_cmdline && init_cmdline[0]) {
+        pr_info("Init cmdline: %s", init_cmdline);
+
+        /* 解析空格分隔的参数 */
+        const char *p = init_cmdline;
+        while (*p && init_argc < ABI_EXEC_MAX_ARGS) {
+            while (*p == ' ') {
+                p++;
+            }
+            if (*p == '\0') {
+                break;
+            }
+
+            /* 提取一个参数 */
+            int i = 0;
+            while (*p && *p != ' ' && i < ABI_EXEC_MAX_ARG_LEN - 1) {
+                init_argv[init_argc][i++] = *p++;
+            }
+            init_argv[init_argc][i] = '\0';
+            init_argc++;
+        }
+    }
+
     /*
      * 传递给 init 的 capability:
      *   handle 0: serial_ep (用于 printf 输出)
@@ -197,12 +230,13 @@ static void boot_start_services(void) {
      *   handle 4: ata_ctrl_cap (传递给 fatfsd)
      *   handle 5: fat_vfs_ep (传递给 fatfsd)
      *   handle 6: fb_ep (传递给 fbd)
+     *   handle 7: rootfs_ep (传递给 rootfsd)
      */
     if (serial_ep != CAP_HANDLE_INVALID && io_cap != CAP_HANDLE_INVALID &&
         vfs_ep != CAP_HANDLE_INVALID && ata_io_cap != CAP_HANDLE_INVALID &&
         ata_ctrl_cap != CAP_HANDLE_INVALID && fat_vfs_ep != CAP_HANDLE_INVALID &&
-        fb_ep != CAP_HANDLE_INVALID) {
-        struct spawn_inherit_cap init_inherit[7] = {
+        fb_ep != CAP_HANDLE_INVALID && rootfs_ep != CAP_HANDLE_INVALID) {
+        struct spawn_inherit_cap init_inherit[8] = {
             {.src = serial_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 0},
             {.src = io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 1},
             {.src = vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 2},
@@ -210,8 +244,14 @@ static void boot_start_services(void) {
             {.src = ata_ctrl_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 4},
             {.src = fat_vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 5},
             {.src = fb_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 6},
+            {.src = rootfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 7},
         };
-        process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 7);
+        if (init_argc > 0) {
+            process_spawn_module_ex_with_args("init", mod_addr, mod_size, init_inherit, 8,
+                                              init_argc, init_argv);
+        } else {
+            process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 8);
+        }
     } else {
         process_spawn_module("init", mod_addr, mod_size);
     }

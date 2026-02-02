@@ -1,0 +1,76 @@
+#!/bin/bash
+# 发布版本构建脚本
+# 生成优化的发布版本 ISO
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BUILD_DIR="${SCRIPT_DIR}/build-release"
+STRIP="strip"
+
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+
+# 帮助
+if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+    cat << 'EOF'
+发布版本构建脚本
+
+用法:
+  ./release.sh          构建发布版本
+  ./release.sh clean    清理发布构建目录
+
+产物:
+  build-release/xnix.iso    可启动 ISO 镜像
+  build-release/*.debug     调试符号文件
+EOF
+    exit 0
+fi
+
+# 清理
+if [[ "$1" == "clean" ]]; then
+    info "清理发布构建目录..."
+    rm -rf "$BUILD_DIR"
+    info "完成"
+    exit 0
+fi
+
+# 检查工具
+command -v cmake >/dev/null 2>&1 || { echo "需要 cmake"; exit 1; }
+command -v grub-mkrescue >/dev/null 2>&1 || echo "警告: grub-mkrescue 未找到"
+
+info "创建发布构建目录: $BUILD_DIR"
+rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
+
+info "配置 CMake (Release)..."
+cmake "$SCRIPT_DIR" -DCMAKE_BUILD_TYPE=Release -DCFG_DEBUG=OFF
+
+info "编译..."
+make -j"$(nproc)" iso
+
+info "剥离符号表..."
+
+# 保留调试符号，剥离 ELF
+for elf in *.elf; do
+    [[ -f "$elf" ]] || continue
+    [[ "$elf" == *".debug" ]] && continue
+    cp "$elf" "${elf}.debug"
+    $STRIP --strip-all "$elf" 2>/dev/null || true
+    info "  $elf: $(stat -c%s "$elf") bytes"
+done
+
+# 重新生成 ISO（使用剥离后的 ELF）
+info "重新生成 ISO..."
+make iso
+
+echo ""
+info "发布版本构建完成"
+echo ""
+echo "产物:"
+[[ -f xnix.iso ]] && echo "  ISO: $BUILD_DIR/xnix.iso ($(stat -c%s xnix.iso) bytes)"
+echo ""
+echo "运行: qemu-system-i386 -cdrom $BUILD_DIR/xnix.iso -serial stdio"

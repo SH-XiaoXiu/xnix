@@ -62,6 +62,13 @@ uint32_t boot_get_module_count(void);
 int boot_get_module(uint32_t index, void **out_addr, uint32_t *out_size);
 
 /**
+ * 获取启动模块的命令行参数
+ * @param index 模块索引
+ * @return 命令行字符串指针,无则返回 NULL
+ */
+const char *boot_get_module_cmdline(uint32_t index);
+
+/**
  * 获取 framebuffer 信息
  * @param info 输出参数
  * @return 0 成功(有 framebuffer),-1 无 framebuffer

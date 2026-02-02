@@ -58,6 +58,7 @@ extern void sys_input_init(void);
 extern void sys_vfs_init(void);
 extern void sys_mm_init(void);
 extern void sys_fb_init(void);
+extern void sys_module_init(void);
 
 /**
  * 初始化系统调用子系统
@@ -75,6 +76,7 @@ void syscall_init(void) {
     sys_vfs_init();
     sys_mm_init();
     sys_fb_init();
+    sys_module_init();
     sys_misc_init();
 
     pr_info("syscall: initialized %d syscalls", NR_SYSCALLS);

@@ -287,6 +287,13 @@ static inline void *sys_fb_map(void) {
 }
 
 /*
+ * Boot Module
+ */
+static inline void *sys_module_map(uint32_t index, uint32_t *size_out) {
+    return (void *)syscall2(SYS_MODULE_MAP, index, (uint32_t)(uintptr_t)size_out);
+}
+
+/*
  * 进程列表
  */
 #define PROC_NAME_MAX 16

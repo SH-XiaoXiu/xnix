@@ -54,7 +54,6 @@ struct svc_cap_desc {
 struct svc_config {
     char name[SVC_NAME_MAX];
 
-    bool       builtin;            /* 是否为内置服务(init 硬编码启动) */
     svc_type_t type;               /* 启动类型 */
     uint32_t   module_index;       /* 模块索引(type=MODULE 时) */
     char       path[SVC_PATH_MAX]; /* ELF 路径(type=PATH 时) */
@@ -70,6 +69,10 @@ struct svc_config {
     /* CAP 传递 */
     struct svc_cap_desc caps[SVC_CAPS_MAX];
     int                 cap_count;
+
+    /* 挂载点 */
+    char     mount[SVC_PATH_MAX]; /* 挂载路径(可选) */
+    uint32_t mount_ep;            /* 挂载使用的 endpoint handle */
 
     /* 行为 */
     bool respawn; /* 退出后自动重启 */
@@ -111,6 +114,15 @@ void svc_manager_init(struct svc_manager *mgr);
 int svc_load_config(struct svc_manager *mgr, const char *path);
 
 /**
+ * 从字符串加载服务配置
+ *
+ * @param mgr     管理器实例
+ * @param content 配置内容字符串
+ * @return 0 成功,负数失败
+ */
+int svc_load_config_string(struct svc_manager *mgr, const char *content);
+
+/**
  * 按名称查找服务索引
  *
  * @param mgr  管理器实例
@@ -120,13 +132,15 @@ int svc_load_config(struct svc_manager *mgr, const char *path);
 int svc_find_by_name(struct svc_manager *mgr, const char *name);
 
 /**
- * 标记内置服务已启动
+ * 解析 caps 字符串
+ * 格式: "cap_name:dst_hint cap_name:dst_hint ..."
  *
- * @param mgr  管理器实例
- * @param name 服务名称
- * @param pid  进程 ID
+ * @param caps_str 输入字符串
+ * @param caps     输出数组
+ * @param max_caps 最大 cap 数量
+ * @return 解析出的 cap 数量
  */
-void svc_mark_builtin(struct svc_manager *mgr, const char *name, int pid);
+int svc_parse_caps(const char *caps_str, struct svc_cap_desc *caps, int max_caps);
 
 /**
  * 检查服务是否可以启动

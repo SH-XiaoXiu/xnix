@@ -112,6 +112,17 @@ int boot_get_module(uint32_t index, void **out_addr, uint32_t *out_size) {
     return 0;
 }
 
+const char *boot_get_module_cmdline(uint32_t index) {
+    if (index >= g_boot_module_count || !g_boot_modules) {
+        return NULL;
+    }
+    uint32_t cmdline_phys = g_boot_modules[index].cmdline;
+    if (cmdline_phys == 0) {
+        return NULL;
+    }
+    return (const char *)PHYS_TO_VIRT(cmdline_phys);
+}
+
 int boot_get_framebuffer(struct boot_framebuffer_info *info) {
     if (!g_boot_fb_valid || !info) {
         return -1;
