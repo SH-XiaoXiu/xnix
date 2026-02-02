@@ -1,12 +1,12 @@
 #!/bin/bash
-# Xnix 运行脚本
+# Xnix 构建运行脚本
 #
 # 用法:
-#   ./run          增量编译运行（快速迭代）
-#   ./run -b       清理重建运行
-#   ./run -i       ISO 模式运行
-#   ./run -d       调试模式（GDB :1234）
-#   ./run -c PATH  指定用户服务配置路径
+#   ./run              运行（增量编译）
+#   ./run -b           清理重建后运行
+#   ./run -n -b -i     只编译 ISO（不运行）
+#   ./run -i           ISO 模式运行
+#   ./run -d           调试模式
 #
 
 set -e
@@ -16,6 +16,7 @@ BUILD_DIR="$PROJECT_ROOT/build"
 
 # 默认配置
 CLEAN_BUILD=false
+NO_RUN=false
 USE_ISO=false
 DEBUG=false
 CONFIG_PATH=""
@@ -26,29 +27,28 @@ HDA_INSTALL=""
 # 帮助信息
 show_help() {
     cat << 'EOF'
-Xnix 运行脚本
+Xnix 构建运行脚本
 
 用法: ./run [选项]
 
 选项:
   -h, --help          显示帮助
-  -b, --build         清理重建（删除 build 目录后编译）
-  -i, --iso           ISO 模式运行
+  -b, --build         清理重建（删除 build 目录）
+  -n, --no-run        只编译不运行
+  -i, --iso           ISO 模式
   -d, --debug         调试模式（GDB 端口 1234）
-  -c, --config PATH   用户服务配置路径（部署到 rootfs.img）
+  -c, --config PATH   用户服务配置路径
   --hda FILE          挂载硬盘镜像
-  --install SRC       从源镜像复制到 --hda（每次干净启动）
+  --install SRC       从源镜像复制到 --hda
   --qemu "ARGS"       额外 QEMU 参数
 
 示例:
-  ./run               # 增量编译运行
-  ./run -b            # 清理重建运行
-  ./run -i            # ISO 模式
-  ./run -d            # 调试模式
-  ./run -b -i         # 清理重建 + ISO
-  ./run -c ./my.conf  # 使用自定义服务配置
-  ./run --qemu "-m 256M -smp 4"  # 自定义 QEMU 参数
-  ./run -i --install dev.vhd --hda disk.img  # 复制开发盘后运行
+  ./run               # 增量编译 + 运行
+  ./run -b            # 清理重建 + 运行
+  ./run -n -b -i      # 清理重建 ISO（只编译）
+  ./run -i            # ISO 模式运行
+  ./run -d -i         # ISO 调试模式
+  ./run --qemu "-m 256M -smp 4"
 EOF
 }
 
@@ -61,6 +61,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -b|--build)
             CLEAN_BUILD=true
+            shift
+            ;;
+        -n|--no-run)
+            NO_RUN=true
             shift
             ;;
         -i|--iso)
@@ -120,10 +124,17 @@ fi
 echo "编译（$JOBS 核心）..."
 if $USE_ISO; then
     cmake --build . -j$JOBS --target iso
+    cmake --build . -j$JOBS --target optional
 else
     cmake --build . -j$JOBS --target xnix.elf --target init.elf
     # 编译核心服务
     cmake --build . -j$JOBS --target seriald.elf --target kbd.elf --target shell.elf 2>/dev/null || true
+fi
+
+# 只编译不运行
+if $NO_RUN; then
+    echo "编译完成"
+    exit 0
 fi
 
 # 处理自定义配置
