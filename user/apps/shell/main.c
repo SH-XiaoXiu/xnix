@@ -105,8 +105,9 @@ static const struct builtin_cmd *find_builtin(const char *name) {
 
 /**
  * 执行外部命令
+ * @param background 是否后台运行
  */
-static void run_external(const char *path, int argc, char **argv) {
+static void run_external(const char *path, int argc, char **argv, int background) {
     struct abi_exec_args exec_args;
     memset(&exec_args, 0, sizeof(exec_args));
 
@@ -155,6 +156,12 @@ static void run_external(const char *path, int argc, char **argv) {
         return;
     }
 
+    if (background) {
+        /* 后台运行,不等待 */
+        printf("[%d] %s\n", pid, argv[0]);
+        return;
+    }
+
     /* 设置为前台进程 */
     sys_set_foreground(pid);
 
@@ -178,6 +185,18 @@ static void execute_command(char *line) {
         return;
     }
 
+    /* 检查是否后台运行(最后一个参数是 &) */
+    int background = 0;
+    if (argc > 0 && strcmp(argv[argc - 1], "&") == 0) {
+        background = 1;
+        argc--;
+        argv[argc] = NULL;
+    }
+
+    if (argc == 0) {
+        return;
+    }
+
     /* 检查内置命令 */
     const struct builtin_cmd *cmd = find_builtin(argv[0]);
     if (cmd) {
@@ -192,7 +211,7 @@ static void execute_command(char *line) {
     /* 外部命令:PATH 搜索 */
     char path[256];
     if (path_find(argv[0], path, sizeof(path))) {
-        run_external(path, argc, argv);
+        run_external(path, argc, argv, background);
     } else {
         printf("Command not found: %s\n", argv[0]);
         printf("Type 'help' for available commands.\n");
