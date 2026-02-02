@@ -25,4 +25,44 @@ struct abi_exec_args {
     uint32_t flags;                                         /* 执行标志(保留) */
 };
 
+/*
+ * proclist 系统调用相关定义
+ */
+#define ABI_PROC_NAME_MAX 16
+#define ABI_PROCLIST_MAX  64 /* 单次返回最多 64 条 */
+
+/**
+ * 进程信息结构(用于用户态获取进程列表)
+ */
+struct abi_proc_info {
+    int32_t  pid;
+    int32_t  ppid;
+    uint8_t  state; /* 0=RUNNING, 1=ZOMBIE */
+    uint8_t  reserved[3];
+    uint32_t thread_count;
+    uint64_t cpu_ticks; /* 累计 CPU ticks(所有线程总和) */
+    uint32_t heap_kb;   /* 堆内存(KB) */
+    uint32_t stack_kb;  /* 栈内存(KB) */
+    char     name[ABI_PROC_NAME_MAX];
+};
+
+/**
+ * 系统信息结构
+ */
+struct abi_sys_info {
+    uint32_t cpu_count;   /* CPU 数量 */
+    uint64_t total_ticks; /* 全局 tick 计数 */
+    uint64_t idle_ticks;  /* idle tick 计数 */
+};
+
+/**
+ * proclist 系统调用参数
+ */
+struct abi_proclist_args {
+    struct abi_proc_info *buf;         /* 用户缓冲区 */
+    uint32_t              buf_count;   /* 缓冲区可容纳条目数 */
+    uint32_t              start_index; /* 起始索引(用于分页) */
+    struct abi_sys_info  *sys_info;    /* 系统信息输出(可为 NULL) */
+};
+
 #endif /* XNIX_ABI_PROCESS_H */

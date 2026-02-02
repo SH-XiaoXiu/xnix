@@ -273,4 +273,39 @@ static inline void *sys_sbrk(int32_t increment) {
     return (void *)syscall1(SYS_SBRK, (uint32_t)increment);
 }
 
+/*
+ * 进程列表
+ */
+#define PROC_NAME_MAX 16
+#define PROCLIST_MAX  64
+
+struct proc_info {
+    int32_t  pid;
+    int32_t  ppid;
+    uint8_t  state; /* 0=RUNNING, 1=ZOMBIE */
+    uint8_t  reserved[3];
+    uint32_t thread_count;
+    uint64_t cpu_ticks; /* 累计 CPU ticks */
+    uint32_t heap_kb;   /* 堆内存(KB) */
+    uint32_t stack_kb;  /* 栈内存(KB) */
+    char     name[PROC_NAME_MAX];
+};
+
+struct sys_info {
+    uint32_t cpu_count;   /* CPU 数量 */
+    uint64_t total_ticks; /* 全局 tick 计数 */
+    uint64_t idle_ticks;  /* idle tick 计数 */
+};
+
+struct proclist_args {
+    struct proc_info *buf;
+    uint32_t          buf_count;
+    uint32_t          start_index;
+    struct sys_info  *sys_info; /* 可为 NULL */
+};
+
+static inline int sys_proclist(struct proclist_args *args) {
+    return syscall1(SYS_PROCLIST, (uint32_t)(uintptr_t)args);
+}
+
 #endif /* _XNIX_SYSCALL_H */

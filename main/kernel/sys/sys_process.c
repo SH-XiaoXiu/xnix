@@ -3,15 +3,20 @@
  * @brief 进程相关系统调用
  */
 
+#include <arch/cpu.h>
+
 #include <kernel/process/process.h>
+#include <kernel/sched/sched.h>
 #include <kernel/sys/syscall.h>
 #include <kernel/vfs/vfs.h>
 #include <xnix/abi/process.h>
 #include <xnix/boot.h>
 #include <xnix/errno.h>
 #include <xnix/mm.h>
+#include <xnix/percpu.h>
 #include <xnix/process.h>
 #include <xnix/string.h>
+#include <xnix/sync.h>
 #include <xnix/syscall.h>
 #include <xnix/usraccess.h>
 
@@ -196,6 +201,121 @@ static int32_t sys_exec(const uint32_t *args) {
     return (int32_t)pid;
 }
 
+/* SYS_PROCLIST: ebx=proclist_args* */
+static int32_t sys_proclist(const uint32_t *args) {
+    struct abi_proclist_args *user_args = (struct abi_proclist_args *)(uintptr_t)args[0];
+    struct abi_proclist_args  kargs;
+
+    /* 从用户空间拷贝参数 */
+    int ret = copy_from_user(&kargs, user_args, sizeof(kargs));
+    if (ret < 0) {
+        return ret;
+    }
+
+    /* 验证参数 */
+    if (!kargs.buf || kargs.buf_count == 0) {
+        return -EINVAL;
+    }
+
+    /* 限制单次返回数量 */
+    uint32_t count = kargs.buf_count;
+    if (count > ABI_PROCLIST_MAX) {
+        count = ABI_PROCLIST_MAX;
+    }
+
+    /* 填充系统信息(如果请求) */
+    if (kargs.sys_info) {
+        struct abi_sys_info sys_info;
+        sys_info.cpu_count   = percpu_cpu_count();
+        sys_info.total_ticks = sched_get_global_ticks();
+        sys_info.idle_ticks  = sched_get_idle_ticks();
+
+        ret = copy_to_user(kargs.sys_info, &sys_info, sizeof(sys_info));
+        if (ret < 0) {
+            return ret;
+        }
+    }
+
+    /* 遍历进程链表 */
+    uint32_t flags = cpu_irq_save();
+    spin_lock(&process_list_lock);
+
+    struct process *proc    = process_list;
+    uint32_t        index   = 0;
+    uint32_t        written = 0;
+
+    /* 跳过 start_index 之前的进程 */
+    while (proc && index < kargs.start_index) {
+        proc = proc->next;
+        index++;
+    }
+
+    /* 填充进程信息 */
+    while (proc && written < count) {
+        struct abi_proc_info info;
+        info.pid          = (int32_t)proc->pid;
+        info.ppid         = proc->parent ? (int32_t)proc->parent->pid : 0;
+        info.state        = (uint8_t)proc->state;
+        info.reserved[0]  = 0;
+        info.reserved[1]  = 0;
+        info.reserved[2]  = 0;
+        info.thread_count = proc->thread_count;
+
+        /* 累计所有线程的 CPU ticks */
+        info.cpu_ticks   = 0;
+        struct thread *t = proc->threads;
+        while (t) {
+            info.cpu_ticks += t->cpu_ticks;
+            t = t->proc_next;
+        }
+
+        /* 计算堆内存使用 */
+        uint32_t heap_used = 0;
+        if (proc->heap_current > proc->heap_start) {
+            heap_used = proc->heap_current - proc->heap_start;
+        }
+        info.heap_kb = heap_used / 1024;
+
+        /* 栈内存 */
+        info.stack_kb = (proc->stack_pages * 4096) / 1024;
+
+        /* 拷贝进程名 */
+        if (proc->name) {
+            size_t name_len = 0;
+            while (proc->name[name_len] && name_len < ABI_PROC_NAME_MAX - 1) {
+                info.name[name_len] = proc->name[name_len];
+                name_len++;
+            }
+            info.name[name_len] = '\0';
+        } else {
+            info.name[0] = '\0';
+        }
+
+        /* 拷贝到用户空间 */
+        spin_unlock(&process_list_lock);
+        cpu_irq_restore(flags);
+
+        ret = copy_to_user(&kargs.buf[written], &info, sizeof(info));
+
+        flags = cpu_irq_save();
+        spin_lock(&process_list_lock);
+
+        if (ret < 0) {
+            spin_unlock(&process_list_lock);
+            cpu_irq_restore(flags);
+            return ret;
+        }
+
+        proc = proc->next;
+        written++;
+    }
+
+    spin_unlock(&process_list_lock);
+    cpu_irq_restore(flags);
+
+    return (int32_t)written;
+}
+
 /**
  * 注册进程系统调用
  */
@@ -207,4 +327,5 @@ void sys_process_init(void) {
     syscall_register(SYS_GETPPID, sys_getppid, 0, "getppid");
     syscall_register(SYS_KILL, sys_kill, 2, "kill");
     syscall_register(SYS_EXEC, sys_exec, 1, "exec");
+    syscall_register(SYS_PROCLIST, sys_proclist, 1, "proclist");
 }

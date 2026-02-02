@@ -327,7 +327,8 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
 
     /* 分配并映射用户栈 */
     uint32_t stack_pages = USER_STACK_SIZE / PAGE_SIZE;
-    void    *stack_mem[USER_STACK_SIZE / PAGE_SIZE];
+    proc->stack_pages    = stack_pages;
+    void *stack_mem[USER_STACK_SIZE / PAGE_SIZE];
     memset(stack_mem, 0, sizeof(stack_mem));
     for (uint32_t i = 1; i <= stack_pages; i++) {
         void *page = alloc_page_high();

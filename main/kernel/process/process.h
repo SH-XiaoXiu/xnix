@@ -87,6 +87,10 @@ struct process {
     struct process *next; /* 全局进程链表 */
 
     uint32_t refcount; /* 引用计数 */
+
+    /* 资源统计 */
+    uint32_t page_count;  /* 已分配的页数(用户空间) */
+    uint32_t stack_pages; /* 栈页数 */
 };
 
 /**

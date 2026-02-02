@@ -112,6 +112,9 @@ static bool rr_tick(struct thread *current) {
         return false;
     }
 
+    /* 累计 CPU 时间 */
+    current->cpu_ticks++;
+
     current->time_slice--;
 
     /* 时间片用完,触发调度 */

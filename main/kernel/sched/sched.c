@@ -227,6 +227,9 @@ void sched_tick(void) {
 
     in_interrupt = true; /* 标记进入中断 */
 
+    /* 更新全局 tick 计数 */
+    sched_stat_tick();
+
     /* 检查睡眠线程(sleep.c) */
     sleep_check_wakeup();
 
@@ -266,6 +269,10 @@ void sched_tick(void) {
     cpu_id_t       cpu  = cpu_current_id();
     struct thread *idle = sched_get_idle_thread(cpu);
     if (current == idle) {
+        /* 统计 idle 时间 */
+        sched_stat_idle_tick();
+        idle->cpu_ticks++;
+
         /* 检查是否有可运行线程(只读检查,不需要锁) */
         struct runqueue *rq = sched_get_runqueue(cpu);
         if (rq->nr_running > 0) {

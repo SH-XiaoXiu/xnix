@@ -86,6 +86,9 @@ struct thread {
 
     /* 引用计数(用于 CAP) */
     uint32_t refcount;
+
+    /* CPU 时间统计 */
+    uint64_t cpu_ticks; /* 累计运行的 tick 数 */
 };
 
 /* CPU 位图操作 */
@@ -276,5 +279,29 @@ void thread_add_to_zombie_list(struct thread *t);
  * 检查并唤醒睡眠到期的线程(由 sched_tick 调用)
  */
 void sleep_check_wakeup(void);
+
+/*
+ * 系统统计 API (statistics.c)
+ */
+
+/**
+ * 获取全局 tick 计数
+ */
+uint64_t sched_get_global_ticks(void);
+
+/**
+ * 获取 idle tick 计数
+ */
+uint64_t sched_get_idle_ticks(void);
+
+/**
+ * 增加全局 tick 计数(由 sched_tick 调用)
+ */
+void sched_stat_tick(void);
+
+/**
+ * 增加 idle tick 计数(由 sched_tick 调用)
+ */
+void sched_stat_idle_tick(void);
 
 #endif
