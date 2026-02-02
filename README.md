@@ -23,6 +23,7 @@ MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](http
 | 用户态驱动 (UDM)       | 驱动隔离，崩溃可恢复，支持热更新    | seriald、kbd 均为用户进程      |
 | 进程管理              | 完整生命周期、信号机制、进程树     | fork-like spawn、SIGTERM |
 | FAT32 文件系统        | 支持读写 FAT32 格式磁盘     | 可挂载硬盘镜像进行文件操作           |
+| 声明式服务管理           | INI 配置、依赖管理、自动重启    | services.conf 定义启动顺序    |
 
 ## 项目亮点
 
@@ -237,13 +238,71 @@ graph TD
     Wake --> RunQ
 ```
 
+## 服务配置
+
+init 支持声明式服务启动，通过配置文件 `/mnt/etc/services.conf` 定义服务及其依赖关系。
+
+### 配置文件格式
+
+```ini
+# /mnt/etc/services.conf
+# 注释以 # 或 ; 开头
+
+[service.kbd]
+type = module
+module = 2
+after = seriald
+respawn = false
+
+[service.shell]
+type = module
+module = 5
+after = kbd
+ready = fatfsd
+delay = 100
+respawn = true
+```
+
+### 配置字段
+
+| 字段          | 类型     | 说明                                    |
+|-------------|--------|---------------------------------------|
+| `builtin`   | bool   | 内置服务标记，由 init 硬编码启动                   |
+| `type`      | string | `module`（模块索引）或 `path`（ELF 路径）        |
+| `module`    | int    | 模块索引，见 `build/include/module_index.h` |
+| `after`     | string | 启动顺序依赖，空格分隔多个服务                       |
+| `ready`     | string | 就绪等待依赖，空格分隔多个服务                       |
+| `wait_path` | string | 等待指定路径存在后启动                           |
+| `delay`     | int    | 条件满足后延时启动（毫秒）                         |
+| `respawn`   | bool   | 退出后自动重启                               |
+| `caps`      | string | Capability 传递，格式 `src:rights:dst`     |
+
+### 依赖类型
+
+- **after**：等待服务进程创建后启动（不等就绪）
+- **ready**：等待服务报告就绪后启动（通过 `/run/<name>.ready` 文件）
+- **wait_path**：等待路径存在后启动
+- **delay**：所有条件满足后延时指定毫秒
+
+### 内置服务
+
+以下服务由 init 硬编码启动，无需配置：
+
+| 服务      | 说明               |
+|---------|------------------|
+| seriald | 串口驱动             |
+| ramfsd  | 内存文件系统（根目录）      |
+| fatfsd  | FAT32 文件系统（/mnt） |
+
+如果配置文件不存在，init 会回退到硬编码启动 kbd 和 shell。
+
 ## 扩展开发
 
 ### 添加新驱动
 
 1. 在 `user/drivers/` 下创建目录
 2. 实现驱动主循环（接收 IPC 请求、处理、回复）
-3. 在 `user/init/main.c` 中添加启动代码
+3. 在 `.local/etc/services.conf` 添加服务配置（或修改 `user/init/main.c`）
 4. 更新 CMakeLists.txt
 
 ```c

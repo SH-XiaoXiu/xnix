@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <udm/server.h>
 #include <vfs/vfs.h>
+#include <xnix/syscall.h>
+#include <xnix/udm/vfs.h>
 
 #define BOOT_VFS_EP       0
 #define BOOT_ATA_IO_CAP   1
@@ -44,6 +46,14 @@ int main(void) {
     };
 
     udm_server_init(&srv);
+
+    /* 创建 ready 文件通知 init 服务已就绪 */
+    sys_mkdir("/run");
+    int fd = sys_open("/run/fatfsd.ready", VFS_O_CREAT | VFS_O_WRONLY);
+    if (fd >= 0) {
+        sys_close(fd);
+    }
+
     printf("[fatfsd] Ready, serving on endpoint %d\n", BOOT_VFS_EP);
     udm_server_run(&srv);
 

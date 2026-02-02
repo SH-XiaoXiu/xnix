@@ -51,6 +51,8 @@ add_subdirectory(drivers)
 add_executable(init.elf
         libs/libc/src/crt0.s
         init/main.c
+        init/ini_parser.c
+        init/svc_manager.c
 )
 
 target_compile_options(init.elf PRIVATE ${USER_C_FLAGS})
