@@ -26,11 +26,12 @@ struct ipc_endpoint;
  * 打开的文件
  */
 struct vfs_file {
-    uint32_t             fs_handle; /* fs 服务内部 handle */
-    struct ipc_endpoint *fs_ep;     /* fs 服务 endpoint */
-    uint32_t             offset;    /* 当前偏移 */
-    uint32_t             flags;     /* 打开标志 (VFS_O_*) */
-    uint32_t             refcount;  /* 引用计数 */
+    uint32_t             fs_handle;              /* fs 服务内部 handle */
+    struct ipc_endpoint *fs_ep;                  /* fs 服务 endpoint */
+    uint32_t             offset;                 /* 当前偏移 */
+    uint32_t             flags;                  /* 打开标志 (VFS_O_*) */
+    uint32_t             refcount;               /* 引用计数 */
+    char                 dir_path[VFS_PATH_MAX]; /* 目录路径(仅目录有效) */
 };
 
 /**
@@ -104,6 +105,16 @@ int vfs_umount(const char *path);
  * @return 挂载点,未找到返回 NULL
  */
 struct vfs_mount *vfs_lookup_mount(const char *path, const char **rel_path);
+
+/**
+ * 获取目录下的第 index 个子挂载点
+ * @param parent_path 父目录路径
+ * @param index       索引
+ * @param name_out    输出挂载点名称
+ * @param name_max    name_out 缓冲区大小
+ * @return 0 成功,-1 没有更多挂载点
+ */
+int vfs_get_child_mount(const char *parent_path, uint32_t index, char *name_out, size_t name_max);
 
 /**
  * 打开文件

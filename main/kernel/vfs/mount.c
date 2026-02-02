@@ -201,3 +201,71 @@ struct vfs_mount *vfs_lookup_mount(const char *path, const char **rel_path) {
 
     return best;
 }
+
+int vfs_get_child_mount(const char *parent_path, uint32_t index, char *name_out, size_t name_max) {
+    if (!parent_path || parent_path[0] != '/' || !name_out || name_max == 0) {
+        return -1;
+    }
+
+    size_t parent_len = strlen(parent_path);
+    /* 去掉尾部斜杠(除了根目录) */
+    while (parent_len > 1 && parent_path[parent_len - 1] == '/') {
+        parent_len--;
+    }
+
+    uint32_t found = 0;
+
+    spin_lock(&mounts_lock);
+
+    for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
+        if (!mounts[i].active) {
+            continue;
+        }
+
+        /* 跳过根目录本身 */
+        if (mounts[i].path_len == 1 && mounts[i].path[0] == '/') {
+            continue;
+        }
+
+        /* 检查是否是 parent_path 的直接子挂载点 */
+        bool is_child = false;
+        if (parent_len == 1 && parent_path[0] == '/') {
+            /* 父目录是根目录,检查挂载点是否形如 /xxx (没有更多斜杠) */
+            if (mounts[i].path[0] == '/') {
+                const char *rest = mounts[i].path + 1;
+                is_child         = (strchr(rest, '/') == NULL);
+            }
+        } else {
+            /* 父目录非根,检查挂载点是否以 parent_path/ 开头且没有更多斜杠 */
+            if (mounts[i].path_len > parent_len && mounts[i].path[parent_len] == '/' &&
+                strncmp(mounts[i].path, parent_path, parent_len) == 0) {
+                const char *rest = mounts[i].path + parent_len + 1;
+                is_child         = (strchr(rest, '/') == NULL);
+            }
+        }
+
+        if (is_child) {
+            if (found == index) {
+                /* 提取子目录名 */
+                const char *name_start;
+                if (parent_len == 1) {
+                    name_start = mounts[i].path + 1;
+                } else {
+                    name_start = mounts[i].path + parent_len + 1;
+                }
+                size_t name_len = strlen(name_start);
+                if (name_len >= name_max) {
+                    name_len = name_max - 1;
+                }
+                memcpy(name_out, name_start, name_len);
+                name_out[name_len] = '\0';
+                spin_unlock(&mounts_lock);
+                return 0;
+            }
+            found++;
+        }
+    }
+
+    spin_unlock(&mounts_lock);
+    return -1; /* 没有更多挂载点 */
+}

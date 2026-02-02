@@ -38,5 +38,6 @@
 #define EDEADLK      35 /* Resource deadlock avoided */
 #define ENAMETOOLONG 36 /* File name too long */
 #define ENOSYS       38 /* Function not implemented */
+#define ENOTEMPTY    39 /* Directory not empty */
 
 #endif

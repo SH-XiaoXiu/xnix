@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <xnix/errno.h>
 
 /* 分配节点 */
 static struct ramfs_node *alloc_node(struct ramfs_ctx *ctx) {
@@ -42,7 +43,7 @@ static int alloc_handle(struct ramfs_ctx *ctx, struct ramfs_node *node, uint32_t
             return i;
         }
     }
-    return -1;
+    return -ENFILE;
 }
 
 /* 获取句柄 */
@@ -150,7 +151,7 @@ static int ramfs_open(void *vctx, const char *path, uint32_t flags) {
 
     if (!node) {
         if (!(flags & VFS_O_CREAT)) {
-            return -2; /* ENOENT */
+            return -ENOENT;
         }
 
         /* 创建文件 */
@@ -158,15 +159,15 @@ static int ramfs_open(void *vctx, const char *path, uint32_t flags) {
         size_t             name_len;
         struct ramfs_node *parent = lookup_parent(ctx, path, &name, &name_len);
         if (!parent || parent->type != RAMFS_TYPE_DIR) {
-            return -2; /* ENOENT */
+            return -ENOENT;
         }
         if (name_len > RAMFS_NAME_MAX) {
-            return -36; /* ENAMETOOLONG */
+            return -ENAMETOOLONG;
         }
 
         node = alloc_node(ctx);
         if (!node) {
-            return -28; /* ENOSPC */
+            return -ENOSPC;
         }
 
         memcpy(node->name, name, name_len);
@@ -181,10 +182,10 @@ static int ramfs_open(void *vctx, const char *path, uint32_t flags) {
         parent->children     = node;
     } else {
         if (node->type == RAMFS_TYPE_DIR) {
-            return -21; /* EISDIR */
+            return -EISDIR;
         }
         if ((flags & VFS_O_CREAT) && (flags & VFS_O_EXCL)) {
-            return -17; /* EEXIST */
+            return -EEXIST;
         }
         if (flags & VFS_O_TRUNC) {
             node->size = 0;
@@ -193,7 +194,7 @@ static int ramfs_open(void *vctx, const char *path, uint32_t flags) {
 
     int h = alloc_handle(ctx, node, flags);
     if (h < 0) {
-        return -23; /* ENFILE */
+        return h;
     }
 
     return h;
@@ -202,7 +203,7 @@ static int ramfs_open(void *vctx, const char *path, uint32_t flags) {
 static int ramfs_close(void *vctx, uint32_t handle) {
     struct ramfs_ctx *ctx = vctx;
     if (!get_handle(ctx, handle)) {
-        return -9; /* EBADF */
+        return -EBADF;
     }
     free_handle(ctx, handle);
     return 0;
@@ -212,12 +213,12 @@ static int ramfs_read(void *vctx, uint32_t handle, void *buf, uint32_t offset, u
     struct ramfs_ctx    *ctx = vctx;
     struct ramfs_handle *h   = get_handle(ctx, handle);
     if (!h) {
-        return -9; /* EBADF */
+        return -EBADF;
     }
 
     struct ramfs_node *node = h->node;
     if (node->type == RAMFS_TYPE_DIR) {
-        return -21; /* EISDIR */
+        return -EISDIR;
     }
 
     if (offset >= node->size) {
@@ -241,12 +242,12 @@ static int ramfs_write(void *vctx, uint32_t handle, const void *buf, uint32_t of
     struct ramfs_ctx    *ctx = vctx;
     struct ramfs_handle *h   = get_handle(ctx, handle);
     if (!h) {
-        return -9; /* EBADF */
+        return -EBADF;
     }
 
     struct ramfs_node *node = h->node;
     if (node->type == RAMFS_TYPE_DIR) {
-        return -21; /* EISDIR */
+        return -EISDIR;
     }
 
     uint32_t end = offset + size;
@@ -255,7 +256,7 @@ static int ramfs_write(void *vctx, uint32_t handle, const void *buf, uint32_t of
         uint32_t new_cap = (end + 4095) & ~4095;
         char    *new_buf = realloc(node->data, new_cap);
         if (!new_buf) {
-            return -12; /* ENOMEM */
+            return -ENOMEM;
         }
         /* 清零新分配的空间 */
         if (new_cap > node->capacity) {
@@ -277,7 +278,7 @@ static int ramfs_info(void *vctx, const char *path, struct vfs_info *info) {
     struct ramfs_ctx  *ctx  = vctx;
     struct ramfs_node *node = lookup_path(ctx, path);
     if (!node) {
-        return -2; /* ENOENT */
+        return -ENOENT;
     }
 
     memset(info, 0, sizeof(*info));
@@ -291,7 +292,7 @@ static int ramfs_finfo(void *vctx, uint32_t handle, struct vfs_info *info) {
     struct ramfs_ctx    *ctx = vctx;
     struct ramfs_handle *h   = get_handle(ctx, handle);
     if (!h) {
-        return -9; /* EBADF */
+        return -EBADF;
     }
 
     struct ramfs_node *node = h->node;
@@ -306,15 +307,15 @@ static int ramfs_opendir(void *vctx, const char *path) {
     struct ramfs_ctx  *ctx  = vctx;
     struct ramfs_node *node = lookup_path(ctx, path);
     if (!node) {
-        return -2; /* ENOENT */
+        return -ENOENT;
     }
     if (node->type != RAMFS_TYPE_DIR) {
-        return -20; /* ENOTDIR */
+        return -ENOTDIR;
     }
 
     int h = alloc_handle(ctx, node, VFS_O_RDONLY);
     if (h < 0) {
-        return -23; /* ENFILE */
+        return h;
     }
 
     return h;
@@ -324,12 +325,12 @@ static int ramfs_readdir(void *vctx, uint32_t handle, uint32_t index, struct vfs
     struct ramfs_ctx    *ctx = vctx;
     struct ramfs_handle *h   = get_handle(ctx, handle);
     if (!h) {
-        return -9; /* EBADF */
+        return -EBADF;
     }
 
     struct ramfs_node *node = h->node;
     if (node->type != RAMFS_TYPE_DIR) {
-        return -20; /* ENOTDIR */
+        return -ENOTDIR;
     }
 
     /* 遍历到第 index 个子节点 */
@@ -339,7 +340,7 @@ static int ramfs_readdir(void *vctx, uint32_t handle, uint32_t index, struct vfs
     }
 
     if (!child) {
-        return -1; /* 没有更多条目 */
+        return -ENOENT;
     }
 
     memset(entry, 0, sizeof(*entry));
@@ -355,22 +356,22 @@ static int ramfs_mkdir(void *vctx, const char *path) {
 
     /* 检查是否已存在 */
     if (lookup_path(ctx, path)) {
-        return -17; /* EEXIST */
+        return -EEXIST;
     }
 
     const char        *name;
     size_t             name_len;
     struct ramfs_node *parent = lookup_parent(ctx, path, &name, &name_len);
     if (!parent || parent->type != RAMFS_TYPE_DIR) {
-        return -2; /* ENOENT */
+        return -ENOENT;
     }
     if (name_len > RAMFS_NAME_MAX) {
-        return -36; /* ENAMETOOLONG */
+        return -ENAMETOOLONG;
     }
 
     struct ramfs_node *node = alloc_node(ctx);
     if (!node) {
-        return -28; /* ENOSPC */
+        return -ENOSPC;
     }
 
     memcpy(node->name, name, name_len);
@@ -388,13 +389,13 @@ static int ramfs_del(void *vctx, const char *path) {
     struct ramfs_ctx  *ctx  = vctx;
     struct ramfs_node *node = lookup_path(ctx, path);
     if (!node) {
-        return -2; /* ENOENT */
+        return -ENOENT;
     }
     if (node == ctx->root) {
-        return -16; /* EBUSY */
+        return -EBUSY;
     }
     if (node->type == RAMFS_TYPE_DIR && node->children) {
-        return -39; /* ENOTEMPTY */
+        return -ENOTEMPTY;
     }
 
     /* 从父目录链表移除 */
@@ -417,19 +418,19 @@ static int ramfs_truncate(void *vctx, uint32_t handle, uint64_t new_size) {
     struct ramfs_ctx    *ctx = vctx;
     struct ramfs_handle *h   = get_handle(ctx, handle);
     if (!h) {
-        return -9; /* EBADF */
+        return -EBADF;
     }
 
     struct ramfs_node *node = h->node;
     if (node->type == RAMFS_TYPE_DIR) {
-        return -21; /* EISDIR */
+        return -EISDIR;
     }
 
     if (new_size > node->capacity) {
         uint32_t new_cap = ((uint32_t)new_size + 4095) & ~4095;
         char    *new_buf = realloc(node->data, new_cap);
         if (!new_buf) {
-            return -12; /* ENOMEM */
+            return -ENOMEM;
         }
         if (new_cap > node->capacity) {
             memset(new_buf + node->capacity, 0, new_cap - node->capacity);
@@ -445,7 +446,7 @@ static int ramfs_truncate(void *vctx, uint32_t handle, uint64_t new_size) {
 static int ramfs_sync(void *vctx, uint32_t handle) {
     struct ramfs_ctx *ctx = vctx;
     if (!get_handle(ctx, handle)) {
-        return -9; /* EBADF */
+        return -EBADF;
     }
     /* 内存文件系统不需要同步 */
     return 0;
@@ -455,25 +456,25 @@ static int ramfs_rename(void *vctx, const char *old_path, const char *new_path) 
     struct ramfs_ctx  *ctx  = vctx;
     struct ramfs_node *node = lookup_path(ctx, old_path);
     if (!node) {
-        return -2; /* ENOENT */
+        return -ENOENT;
     }
     if (node == ctx->root) {
-        return -16; /* EBUSY */
+        return -EBUSY;
     }
 
     /* 检查目标是否已存在 */
     if (lookup_path(ctx, new_path)) {
-        return -17; /* EEXIST */
+        return -EEXIST;
     }
 
     const char        *new_name;
     size_t             new_name_len;
     struct ramfs_node *new_parent = lookup_parent(ctx, new_path, &new_name, &new_name_len);
     if (!new_parent || new_parent->type != RAMFS_TYPE_DIR) {
-        return -2; /* ENOENT */
+        return -ENOENT;
     }
     if (new_name_len > RAMFS_NAME_MAX) {
-        return -36; /* ENAMETOOLONG */
+        return -ENAMETOOLONG;
     }
 
     /* 从旧父目录移除 */

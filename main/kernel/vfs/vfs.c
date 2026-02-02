@@ -13,6 +13,7 @@
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
+#include <xnix/string.h>
 #include <xnix/udm/vfs.h>
 
 /* mount.c 中的初始化函数 */
@@ -388,6 +389,18 @@ int vfs_opendir(const char *path) {
     file->offset    = 0;
     file->flags     = VFS_O_RDONLY | VFS_O_DIRECTORY;
 
+    /* 保存目录路径(用于列出挂载点) */
+    size_t path_len = strlen(path);
+    if (path_len >= VFS_PATH_MAX) {
+        path_len = VFS_PATH_MAX - 1;
+    }
+    memcpy(file->dir_path, path, path_len);
+    file->dir_path[path_len] = '\0';
+    /* 去掉尾部斜杠(除了根目录) */
+    while (path_len > 1 && file->dir_path[path_len - 1] == '/') {
+        file->dir_path[--path_len] = '\0';
+    }
+
     return fd;
 }
 
@@ -410,6 +423,7 @@ int vfs_readdir(int fd, uint32_t index, struct vfs_dirent *entry) {
         return -ENOTDIR;
     }
 
+    /* 先尝试从底层文件系统获取 */
     struct ipc_message req   = {0};
     struct ipc_message reply = {0};
 
@@ -419,7 +433,40 @@ int vfs_readdir(int fd, uint32_t index, struct vfs_dirent *entry) {
     reply.buffer.data = entry;
     reply.buffer.size = sizeof(*entry);
 
-    return vfs_ipc_call(file->fs_ep, &req, &reply);
+    int ret = vfs_ipc_call(file->fs_ep, &req, &reply);
+    if (ret == 0) {
+        return 0; /* 底层文件系统返回了有效条目 */
+    }
+
+    /* 底层没有更多条目,尝试列出挂载点 */
+    if (ret == -ENOENT) {
+        /* 计算已经返回了多少个底层条目 */
+        /* 通过递增 index 直到底层返回 -ENOENT 来确定 */
+        uint32_t fs_count = 0;
+        for (uint32_t i = 0; i < index; i++) {
+            req.regs.data[2]  = i;
+            reply.buffer.data = entry;
+            reply.buffer.size = sizeof(*entry);
+            if (vfs_ipc_call(file->fs_ep, &req, &reply) != 0) {
+                fs_count = i;
+                break;
+            }
+            fs_count = i + 1;
+        }
+
+        /* 挂载点索引 = 请求索引 - 文件系统条目数 */
+        uint32_t mount_index = index - fs_count;
+
+        char mount_name[VFS_NAME_MAX];
+        if (vfs_get_child_mount(file->dir_path, mount_index, mount_name, sizeof(mount_name)) == 0) {
+            strncpy(entry->name, mount_name, VFS_NAME_MAX - 1);
+            entry->name[VFS_NAME_MAX - 1] = '\0';
+            entry->type                   = VFS_TYPE_DIR;
+            return 0;
+        }
+    }
+
+    return ret;
 }
 
 int vfs_mkdir(const char *path) {
