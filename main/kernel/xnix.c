@@ -61,12 +61,18 @@ static void boot_phase_early(uint32_t magic, struct multiboot_info *mb_info) {
 /**
  * Core - CPU 基础结构,内存,中断
  */
+/* Framebuffer 延迟初始化(VMM 就绪后) */
+extern void fb_late_init(void);
+
 static void boot_phase_core(void) {
     arch_init();
     pr_ok("GDT/IDT");
 
     mm_init();
     pr_ok("Memory manager.");
+
+    /* VMM 已就绪,现在可以映射 framebuffer */
+    fb_late_init();
 
     hal_probe_smp_late();
     boot_print_banner();

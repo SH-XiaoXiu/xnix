@@ -1,11 +1,12 @@
 # Multiboot header 让QEMU/GRUB直接加载内核
 # 使用GAS语法，可以直接用gcc编译
 
-.set ALIGN,    1<<0             # 对齐加载的模块
-.set MEMINFO,  1<<1             # 提供内存映射
-.set FLAGS,    ALIGN | MEMINFO  # Multiboot标志
-.set MAGIC,    0x1BADB002       # Multiboot魔数
-.set CHECKSUM, -(MAGIC + FLAGS) # 校验和
+.set ALIGN,      1<<0             # 对齐加载的模块
+.set MEMINFO,    1<<1             # 提供内存映射
+.set VIDEO_MODE, 1<<2             # 请求视频模式
+.set FLAGS,      ALIGN | MEMINFO | VIDEO_MODE  # Multiboot标志
+.set MAGIC,      0x1BADB002       # Multiboot魔数
+.set CHECKSUM,   -(MAGIC + FLAGS) # 校验和
 .set KERNEL_VIRT_BASE, 0xC0000000  # 内核虚拟基址
 
 # Multiboot头必须在文件开头的8KB内
@@ -15,6 +16,13 @@ multiboot_header:
 .long MAGIC
 .long FLAGS
 .long CHECKSUM
+# a.out kludge (不使用 ELF 时需要，这里留空)
+.long 0, 0, 0, 0, 0
+# 视频模式请求
+.long 0                          # mode_type: 0 = 线性图形模式
+.long 1024                       # width: 1024 像素
+.long 768                        # height: 768 像素
+.long 32                         # bpp: 32 位色深
 
 # 启动阶段临时页表（.boot.data 段，链接到低物理地址）
 # 映射 64MB: 16个页表 + 1个页目录 + 1个低地址页表 = 72KB

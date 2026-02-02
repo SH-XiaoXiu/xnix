@@ -10,6 +10,9 @@
 #include <xnix/console.h>
 #include <xnix/types.h>
 
+/* 检查 framebuffer 信息是否存在(由 fb.c 提供) */
+extern bool fb_info_available(void);
+
 #define VGA_BUFFER 0xB8000
 #define VGA_WIDTH  80
 #define VGA_HEIGHT 25
@@ -223,6 +226,11 @@ static void vga_putc_raw(char c) {
 }
 
 static void vga_putc(char c) {
+    /* 如果 framebuffer 可用,VGA 不输出(避免双重输出) */
+    if (fb_info_available()) {
+        return;
+    }
+
     switch (ansi_state) {
     case ANSI_NORMAL:
         if (c == '\x1b') {
@@ -264,12 +272,18 @@ static void vga_putc(char c) {
 }
 
 static void vga_puts(const char *s) {
+    if (fb_info_available()) {
+        return;
+    }
     while (*s) {
         vga_putc(*s++);
     }
 }
 
 static void vga_clear(void) {
+    if (fb_info_available()) {
+        return;
+    }
     for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
         vga_buffer[i] = make_entry(' ', vga_attr);
     }

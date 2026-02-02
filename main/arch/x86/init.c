@@ -11,11 +11,15 @@
 
 /* 驱动注册函数声明 */
 extern void vga_console_register(void);
+extern void fb_console_register(void);
 extern void serial_console_register(void);
 extern void pic_register(void);
 extern void pit_register(void);
 extern void apic_register(void);
 extern void ps2_register(void);
+
+/* Framebuffer 可用性检查 */
+extern bool fb_available(void);
 
 /* GDT/IDT 初始化 */
 extern void gdt_init(void);
@@ -25,7 +29,12 @@ extern void idt_init(void);
 extern struct smp_info g_smp_info;
 
 void arch_early_init(void) {
-    /* 注册控制台驱动 */
+    /*
+     * 注册控制台驱动
+     * fb_console 和 vga_console 都注册,fb_console_init 会检测 framebuffer 是否可用
+     * 如果有 framebuffer,fb_console 用于显示;否则回退到 VGA 文本模式
+     */
+    fb_console_register();
     vga_console_register();
     serial_console_register();
 
