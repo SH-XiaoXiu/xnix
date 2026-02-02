@@ -23,6 +23,7 @@ CONFIG_PATH=""
 QEMU_EXTRA=""
 HDA_FILE=""
 HDA_INSTALL=""
+PACK_BIN=""  # 空表示使用 CMake 默认值
 
 # 帮助信息
 show_help() {
@@ -38,6 +39,8 @@ Xnix 构建运行脚本
   -i, --iso           ISO 模式
   -d, --debug         调试模式（GDB 端口 1234）
   -c, --config PATH   用户服务配置路径
+  --pack-bin          强制打包 bin 工具到 rootfs.img
+  --no-pack-bin       强制不打包 bin 工具（放到 optional）
   --hda FILE          挂载硬盘镜像
   --install SRC       从源镜像复制到 --hda
   --qemu "ARGS"       额外 QEMU 参数
@@ -87,6 +90,14 @@ while [[ $# -gt 0 ]]; do
             HDA_INSTALL="$2"
             shift 2
             ;;
+        --pack-bin)
+            PACK_BIN="ON"
+            shift
+            ;;
+        --no-pack-bin)
+            PACK_BIN="OFF"
+            shift
+            ;;
         --qemu)
             QEMU_EXTRA="$2"
             shift 2
@@ -117,7 +128,16 @@ cd "$BUILD_DIR"
 # 配置（如果需要）
 if [ ! -f "CMakeCache.txt" ]; then
     echo "配置 CMake..."
-    cmake ..
+    CMAKE_OPTS=""
+    if [ -n "$PACK_BIN" ]; then
+        CMAKE_OPTS="$CMAKE_OPTS -DPACK_BIN_TO_ROOTFS=$PACK_BIN"
+        echo "设置 PACK_BIN_TO_ROOTFS=$PACK_BIN"
+    fi
+    cmake $CMAKE_OPTS ..
+elif [ -n "$PACK_BIN" ]; then
+    # 已有 CMakeCache，但用户指定了 PACK_BIN，需要重新配置
+    echo "重新配置 CMake（PACK_BIN_TO_ROOTFS=$PACK_BIN）..."
+    cmake -DPACK_BIN_TO_ROOTFS=$PACK_BIN ..
 fi
 
 # 编译

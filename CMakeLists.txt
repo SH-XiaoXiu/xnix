@@ -101,6 +101,11 @@ set(CFG_IRQ_USER_BUF_SIZE 64 CACHE STRING "IRQ user-mode buffer size")
 # ============================================
 option(CFG_DEBUG "Enable kernel debug logging" OFF)
 
+# ============================================
+# 打包配置
+# ============================================
+option(PACK_BIN_TO_ROOTFS "Pack all bin tools to rootfs.img by default" OFF)
+
 configure_file(
         ${CMAKE_SOURCE_DIR}/main/include/xnix/config.h.in
         ${CMAKE_BINARY_DIR}/include/xnix/config.h
