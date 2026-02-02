@@ -21,7 +21,9 @@
  */
 
 /* 内存管理(200-209) */
-#define SYS_SBRK 200 /* 调整堆大小: ebx=increment, 返回旧堆顶或 -1 */
+#define SYS_SBRK    200 /* 调整堆大小: ebx=increment, 返回旧堆顶或 -1 */
+#define SYS_FB_INFO 201 /* 获取 framebuffer 信息: ebx=info*, 返回 0 成功 -1 失败 */
+#define SYS_FB_MAP  202 /* 映射 framebuffer: 返回用户空间地址或 -1 */
 
 /* 基础系统调用 */
 #define SYS_PUTC         1  /* 输出字符: ebx=char */

@@ -274,6 +274,19 @@ static inline void *sys_sbrk(int32_t increment) {
 }
 
 /*
+ * Framebuffer
+ */
+struct abi_fb_info;
+
+static inline int sys_fb_info(struct abi_fb_info *info) {
+    return syscall1(SYS_FB_INFO, (uint32_t)(uintptr_t)info);
+}
+
+static inline void *sys_fb_map(void) {
+    return (void *)syscall0(SYS_FB_MAP);
+}
+
+/*
  * 进程列表
  */
 #define PROC_NAME_MAX 16

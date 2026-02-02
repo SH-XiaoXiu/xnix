@@ -4,7 +4,7 @@
  *
  * init 是第一个用户进程,负责启动系统服务.
  * 采用两阶段启动模式:
- *   1. 硬编码阶段:启动核心服务(seriald, ramfsd, fatfsd)
+ *   1. 硬编码阶段:启动核心服务(seriald, fbd, ramfsd, fatfsd)
  *   2. 配置阶段:从 /mnt/etc/services.conf 加载服务配置
  *
  * 内核传递的 cap:
@@ -14,6 +14,7 @@
  *   handle 3: ata_io_cap (ATA 数据端口, 传给 fatfsd)
  *   handle 4: ata_ctrl_cap (ATA 控制端口, 传给 fatfsd)
  *   handle 5: fat_vfs_ep (FAT VFS endpoint, 传给 fatfsd)
+ *   handle 6: fb_ep (Framebuffer endpoint, 传给 fbd)
  */
 
 #include "svc_manager.h"
@@ -33,6 +34,7 @@
 #define CAP_ATA_IO     3
 #define CAP_ATA_CTRL   4
 #define CAP_FAT_VFS_EP 5
+#define CAP_FB_EP      6
 
 /* 服务配置文件路径 */
 #define SVC_CONFIG_PATH "/mnt/etc/services.conf"
@@ -44,6 +46,7 @@ static struct svc_manager g_mgr;
 static int seriald_pid = -1;
 static int ramfsd_pid  = -1;
 static int fatfsd_pid  = -1;
+static int fbd_pid     = -1;
 
 /* 回退模式下的 shell PID */
 static int  shell_pid     = -1;
@@ -88,6 +91,29 @@ static int start_kbd(void) {
         printf("[init] Failed to start kbd: %d\n", pid);
     } else {
         printf("[init] kbd started (pid=%d)\n", pid);
+    }
+    return pid;
+}
+
+static int start_fbd(void) {
+    printf("[init] Starting fbd...\n");
+
+    struct spawn_args args = {
+        .name         = "fbd",
+        .module_index = MODULE_FBD,
+        .cap_count    = 1,
+        .caps =
+            {
+                /* 传递 fb_ep 给 fbd (handle 0) */
+                {.src = CAP_FB_EP, .rights = CAP_READ | CAP_WRITE, .dst_hint = 0},
+            },
+    };
+
+    int pid = sys_spawn(&args);
+    if (pid < 0) {
+        printf("[init] Failed to start fbd: %d\n", pid);
+    } else {
+        printf("[init] fbd started (pid=%d)\n", pid);
     }
     return pid;
 }
@@ -217,7 +243,7 @@ static void reap_children(void) {
 
 /**
  * 硬编码启动阶段
- * 启动核心服务:seriald → ramfsd → fatfsd → 挂载 /mnt
+ * 启动核心服务:seriald → fbd → ramfsd → fatfsd → 挂载 /mnt
  */
 static void boot_phase_hardcoded(void) {
     /* 启动 seriald 服务 */
@@ -225,6 +251,9 @@ static void boot_phase_hardcoded(void) {
 
     /* 等待 seriald 初始化 */
     sleep(1);
+
+    /* 启动 fbd 服务 */
+    fbd_pid = start_fbd();
 
     /* 启动 ramfsd 并挂载根文件系统 */
     ramfsd_pid = start_ramfsd();
@@ -251,6 +280,9 @@ static bool boot_phase_config(void) {
     /* 标记内置服务已启动 */
     if (seriald_pid > 0) {
         svc_mark_builtin(&g_mgr, "seriald", seriald_pid);
+    }
+    if (fbd_pid > 0) {
+        svc_mark_builtin(&g_mgr, "fbd", fbd_pid);
     }
     if (ramfsd_pid > 0) {
         svc_mark_builtin(&g_mgr, "ramfsd", ramfsd_pid);

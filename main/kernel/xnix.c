@@ -169,6 +169,9 @@ static void boot_start_services(void) {
     /* 创建 FAT VFS endpoint (用于 fatfsd) */
     cap_handle_t fat_vfs_ep = endpoint_create();
 
+    /* 创建 FB endpoint (用于 fbd) */
+    cap_handle_t fb_ep = endpoint_create();
+
     /* 获取 init 模块 */
     uint32_t init_mod_index = boot_get_initmod_index();
     if (init_mod_index >= mods_count) {
@@ -193,19 +196,22 @@ static void boot_start_services(void) {
      *   handle 3: ata_io_cap (传递给 fatfsd)
      *   handle 4: ata_ctrl_cap (传递给 fatfsd)
      *   handle 5: fat_vfs_ep (传递给 fatfsd)
+     *   handle 6: fb_ep (传递给 fbd)
      */
     if (serial_ep != CAP_HANDLE_INVALID && io_cap != CAP_HANDLE_INVALID &&
         vfs_ep != CAP_HANDLE_INVALID && ata_io_cap != CAP_HANDLE_INVALID &&
-        ata_ctrl_cap != CAP_HANDLE_INVALID && fat_vfs_ep != CAP_HANDLE_INVALID) {
-        struct spawn_inherit_cap init_inherit[6] = {
+        ata_ctrl_cap != CAP_HANDLE_INVALID && fat_vfs_ep != CAP_HANDLE_INVALID &&
+        fb_ep != CAP_HANDLE_INVALID) {
+        struct spawn_inherit_cap init_inherit[7] = {
             {.src = serial_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 0},
             {.src = io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 1},
             {.src = vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 2},
             {.src = ata_io_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 3},
             {.src = ata_ctrl_cap, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 4},
             {.src = fat_vfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 5},
+            {.src = fb_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 6},
         };
-        process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 6);
+        process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 7);
     } else {
         process_spawn_module("init", mod_addr, mod_size);
     }
