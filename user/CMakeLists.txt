@@ -61,7 +61,7 @@ target_include_directories(init.elf PRIVATE
 )
 target_link_libraries(init.elf PRIVATE c)
 target_link_options(init.elf PRIVATE
-        -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/user.ld -nostdlib
+        -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/libs/user.ld -nostdlib
 )
 
 add_custom_command(TARGET init.elf POST_BUILD

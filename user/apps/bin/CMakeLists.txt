@@ -79,7 +79,7 @@ foreach (BIN_DIR ${BIN_DIRS})
         target_link_libraries(bin_${BIN_ELF} PRIVATE pthread)
     endif ()
     target_link_options(bin_${BIN_ELF} PRIVATE
-            -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/user.ld -nostdlib
+            -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/libs/user.ld -nostdlib
     )
 
     # 输出到 build/bin/ 目录

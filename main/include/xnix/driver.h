@@ -115,6 +115,12 @@ struct timer_driver_ext *timer_drv_get_current(void);
  */
 
 /**
+ * 保存命令行指针供后续查询
+ * 由 boot_init() 调用
+ */
+void boot_save_cmdline(const char *cmdline);
+
+/**
  * 从启动命令行获取字符串值
  *
  * @param key 参数名(如 "xnix.irqchip")

@@ -80,7 +80,7 @@ foreach (APP_DIR ${APP_DIRS})
         target_link_libraries(${APP_ELF} PRIVATE pthread)
     endif ()
     target_link_options(${APP_ELF} PRIVATE
-            -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/user.ld -nostdlib
+            -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/libs/user.ld -nostdlib
     )
 
     # 复制到 build 目录

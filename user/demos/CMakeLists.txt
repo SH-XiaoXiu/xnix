@@ -78,7 +78,7 @@ foreach (DEMO_DIR ${DEMO_DIRS})
         target_link_libraries(${DEMO_ELF} PRIVATE pthread)
     endif ()
     target_link_options(${DEMO_ELF} PRIVATE
-            -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/user.ld -nostdlib
+            -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/libs/user.ld -nostdlib
     )
 
     # 复制到 build 目录

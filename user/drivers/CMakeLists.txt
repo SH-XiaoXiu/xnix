@@ -82,7 +82,7 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
     target_link_libraries(${DRIVER_ELF} PRIVATE c udm vfs pthread ${DRIVER_EXTRA_LIBS})
 
     target_link_options(${DRIVER_ELF} PRIVATE
-            -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/user.ld -nostdlib
+            -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/libs/user.ld -nostdlib
     )
 
     # 复制到 build 目录
