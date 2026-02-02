@@ -20,6 +20,9 @@ typedef struct process *process_t;
 
 /* pid_t 和 PID_INVALID 来自 <xnix/abi/types.h> */
 
+#define XNIX_PID_KERNEL ((pid_t)0)
+#define XNIX_PID_INIT   ((pid_t)1)
+
 /**
  * 进程状态
  */

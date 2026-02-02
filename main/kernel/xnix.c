@@ -23,9 +23,10 @@
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
-#include <xnix/string.h>
 #include <xnix/udm/console.h>
 #include <xnix/vfs.h>
+
+#include "xnix/debug.h"
 
 static void boot_print_banner(void) {
     kprintf("\n");
@@ -232,6 +233,7 @@ static void boot_start_services(void) {
      *   handle 6: fb_ep (传递给 fbd)
      *   handle 7: rootfs_ep (传递给 rootfsd)
      */
+    pid_t init_pid = PID_INVALID;
     if (serial_ep != CAP_HANDLE_INVALID && io_cap != CAP_HANDLE_INVALID &&
         vfs_ep != CAP_HANDLE_INVALID && ata_io_cap != CAP_HANDLE_INVALID &&
         ata_ctrl_cap != CAP_HANDLE_INVALID && fat_vfs_ep != CAP_HANDLE_INVALID &&
@@ -247,13 +249,21 @@ static void boot_start_services(void) {
             {.src = rootfs_ep, .rights = CAP_READ | CAP_WRITE | CAP_GRANT, .expected_dst = 7},
         };
         if (init_argc > 0) {
-            process_spawn_module_ex_with_args("init", mod_addr, mod_size, init_inherit, 8,
-                                              init_argc, init_argv);
+            init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, init_inherit,
+                                                         8, init_argc, init_argv);
         } else {
-            process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 8);
+            init_pid = process_spawn_module_ex("init", mod_addr, mod_size, init_inherit, 8);
         }
     } else {
-        process_spawn_module("init", mod_addr, mod_size);
+        init_pid = process_spawn_module("init", mod_addr, mod_size);
+    }
+
+    if (init_pid == PID_INVALID) {
+        pr_err("Failed to spawn init");
+        return;
+    }
+    if (init_pid != XNIX_PID_INIT) {
+        panic("Init PID mismatch: expected %d, got %d", XNIX_PID_INIT, init_pid);
     }
 }
 

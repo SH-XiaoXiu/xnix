@@ -40,7 +40,7 @@ static void process_reparent_children(struct process *proc) {
     }
 
     /* 找到 init 进程(PID 1) */
-    struct process *init = process_find_by_pid(1);
+    struct process *init = process_find_by_pid(XNIX_PID_INIT);
     if (!init) {
         /* 没有 init 进程,直接断开 */
         proc->children = NULL;
@@ -82,7 +82,7 @@ void process_terminate_current(int signal) {
     }
 
     /* init 进程终止是致命的 */
-    if (!proc || proc->pid == 1) {
+    if (!proc || proc->pid == XNIX_PID_INIT) {
         panic("Init process terminated by signal %d!", signal);
     }
 
