@@ -53,7 +53,7 @@ sudo apt install gcc gcc-multilib grub-pc-bin xorriso qemu-system-x86 make cmake
 ```bash
 git clone https://github.com/user/xnix.git
 cd xnix
-./run -f    # 清理 + 编译 + 运行
+./run -b -i    # 清理重建 + ISO 模式运行
 ```
 
 ![QEMU 运行界面](docs/assets/screenshot_22939a4c.png)
@@ -82,18 +82,18 @@ cd xnix
 
 ## 配置选项
 
-通过 CMake 变量控制编译选项：
+通过 CMake 变量控制编译选项（在 build 目录中）：
 
 ```bash
-./run -DENABLE_SMP=ON -DCFG_MAX_CPUS=4    # 启用多核支持
-./run -DCFG_DEBUG_SCHED=ON                 # 调度器调试输出
-./run -DENABLE_VMM_DEBUG=ON                # 内存管理调试
+cd build
+cmake .. -DENABLE_SMP=ON -DCFG_MAX_CPUS=4    # 启用多核支持
+cmake .. -DCFG_DEBUG=ON                       # 启用调试输出
 ```
 
 QEMU 硬件配置：
 
 ```bash
-./run -f --mem 256M --smp 2    # 指定内存和 CPU 核心数
+./run -i --qemu "-m 256M -smp 4"    # 指定内存和 CPU 核心数
 ```
 
 ## 使用方式
@@ -101,19 +101,20 @@ QEMU 硬件配置：
 ### 常用命令
 
 ```bash
-./run -f                 # 完整构建并运行
-./run                    # 增量编译运行
-./run -d                 # 调试模式（GDB :1234）
-./run -c                 # 只编译不运行
-./run --clean            # 清理构建产物
-./run --rebuild          # 完全重建
+./run                    # 增量编译 + 运行
+./run -b                 # 清理重建 + 运行
+./run -i                 # ISO 模式运行
+./run -b -i              # 清理重建 + ISO 模式
+./run -n -b -i           # 只编译 ISO（不运行）
+./run -d -i              # ISO 调试模式（GDB :1234）
+./run --install src.img --hda dst.img  # 复制磁盘镜像后运行
 ```
 
 ### 调试
 
 ```bash
 # 终端 1: 启动调试模式
-./run -d
+./run -d -i
 
 # 终端 2: 连接 GDB
 gdb build/xnix.elf -ex "target remote :1234"
@@ -139,13 +140,20 @@ xnix/
 │   └── include/            # 公共头文件
 │
 ├── user/                   # 用户态代码
-│   ├── init/               # init 进程
-│   ├── apps/shell/         # 交互式 shell
-│   ├── drivers/            # UDM 驱动（seriald, kbd）
+│   ├── init/               # init 进程（服务管理）
+│   ├── apps/               # 应用程序
+│   │   ├── shell/          # 交互式 shell
+│   │   └── bin/            # 独立工具程序
+│   ├── drivers/            # UDM 驱动（seriald, kbd, fatfsd...）
 │   ├── demos/              # 示例程序
 │   └── libs/               # 用户态库
 │
+├── iso/                    # ISO 打包模块
+│   ├── CMakeLists.txt      # ISO 构建配置
+│   └── generate_rootfs.cmake
+│
 ├── run                     # 构建运行脚本
+├── release.sh              # 发布版本构建脚本
 └── CMakeLists.txt
 ```
 
@@ -240,73 +248,107 @@ graph TD
 
 ## 服务配置
 
-init 支持声明式服务启动，通过配置文件 `/mnt/etc/services.conf` 定义服务及其依赖关系。
+Xnix 采用声明式服务配置，分为核心服务和用户服务两类。
 
-### 配置文件格式
+### 核心服务 vs 用户服务
+
+| 类型   | 配置              | 加载方式            | 存放位置              |
+|------|-----------------|-----------------|-------------------|
+| 核心服务 | `core=true`     | Multiboot 模块启动  | ISO 根目录           |
+| 用户服务 | `core=false`/默认 | 从 rootfs.img 加载 | `build/optional/` |
+
+### 驱动/应用的 service.conf
+
+每个驱动或应用目录下可包含 `service.conf` 文件：
 
 ```ini
-# /mnt/etc/services.conf
-# 注释以 # 或 ; 开头
-
-[service.kbd]
-type = module
-module = 2
-after = seriald
-respawn = false
-
-[service.shell]
-type = module
-module = 5
-after = kbd
-ready = fatfsd
-delay = 100
-respawn = true
+# user/drivers/mydrv/service.conf
+core = true          # 核心服务（Multiboot 模块）
+after = seriald      # 启动顺序依赖
+caps = my_ep:0       # Capability 传递（名称:目标槽位）
+mount = /dev         # 挂载点（可选）
+respawn = true       # 退出后自动重启
 ```
 
 ### 配置字段
 
-| 字段          | 类型     | 说明                                    |
-|-------------|--------|---------------------------------------|
-| `builtin`   | bool   | 内置服务标记，由 init 硬编码启动                   |
-| `type`      | string | `module`（模块索引）或 `path`（ELF 路径）        |
-| `module`    | int    | 模块索引，见 `build/include/module_index.h` |
-| `after`     | string | 启动顺序依赖，空格分隔多个服务                       |
-| `ready`     | string | 就绪等待依赖，空格分隔多个服务                       |
-| `wait_path` | string | 等待指定路径存在后启动                           |
-| `delay`     | int    | 条件满足后延时启动（毫秒）                         |
-| `respawn`   | bool   | 退出后自动重启                               |
-| `caps`      | string | Capability 传递，格式 `src:rights:dst`     |
+| 字段        | 类型     | 说明                       |
+|-----------|--------|--------------------------|
+| `core`    | bool   | `true`=核心服务，`false`=用户服务 |
+| `after`   | string | 启动顺序依赖，空格分隔多个服务          |
+| `caps`    | string | Capability 传递（见下方格式说明）   |
+| `mount`   | string | 服务提供的挂载点                 |
+| `respawn` | bool   | 退出后自动重启                  |
+| `path`    | string | 自定义 ELF 路径（可选）           |
 
-### 依赖类型
+### Capability 传递格式
 
-- **after**：等待服务进程创建后启动（不等就绪）
-- **ready**：等待服务报告就绪后启动（通过 `/run/<name>.ready` 文件）
-- **wait_path**：等待路径存在后启动
-- **delay**：所有条件满足后延时指定毫秒
+`caps` 字段格式：`名称:目标槽位 名称:目标槽位 ...`
 
-### 内置服务
+```ini
+# 示例：传递 ata_io 到槽位 1，ata_ctrl 到槽位 2
+caps = ata_io:1 ata_ctrl:2
+```
 
-以下服务由 init 硬编码启动，无需配置：
+- **名称**：init 持有的 capability 名称（见下表）
+- **目标槽位**：传递给子进程后的 handle 编号
 
-| 服务      | 说明               |
-|---------|------------------|
-| seriald | 串口驱动             |
-| ramfsd  | 内存文件系统（根目录）      |
-| fatfsd  | FAT32 文件系统（/mnt） |
+子进程通过槽位编号访问 capability：
 
-如果配置文件不存在，init 会回退到硬编码启动 kbd 和 shell。
+```c
+#define MY_EP_CAP 0   // 对应 caps = my_ep:0
+sys_ipc_send(MY_EP_CAP, &msg);
+```
+
+### 生成的配置文件
+
+CMake 构建时会自动生成：
+
+- `build/include/module_index.h` - 模块索引定义
+- `build/include/core_services.h` - 核心服务嵌入配置
+- `build/generated/services.conf` - 用户服务配置
+
+### 内置 Capability 名称
+
+| 名称           | 槽位 | 说明                   |
+|--------------|----|----------------------|
+| `serial_ep`  | 0  | 串口 endpoint          |
+| `vfs_ep`     | 2  | VFS endpoint         |
+| `ata_io`     | 3  | ATA I/O 端口           |
+| `ata_ctrl`   | 4  | ATA 控制端口             |
+| `fat_vfs_ep` | 5  | FAT VFS endpoint     |
+| `fb_ep`      | 6  | Framebuffer endpoint |
+| `rootfs_ep`  | 7  | Rootfs endpoint      |
 
 ## 扩展开发
 
 ### 添加新驱动
 
-1. 在 `user/drivers/` 下创建目录
-2. 实现驱动主循环（接收 IPC 请求、处理、回复）
-3. 在 `.local/etc/services.conf` 添加服务配置（或修改 `user/init/main.c`）
-4. 更新 CMakeLists.txt
+1. 在 `user/drivers/` 下创建目录（如 `user/drivers/mydrv/`）
+2. 创建 `main.c` 实现驱动主循环
+3. 创建 `service.conf` 配置服务属性
+4. 重新 cmake 即可自动发现
 
+**目录结构：**
+
+```
+user/drivers/mydrv/
+├── main.c           # 驱动实现
+└── service.conf     # 服务配置
+```
+
+**service.conf 示例：**
+
+```ini
+# core=true 表示核心服务（作为 Multiboot 模块启动）
+# core=false/默认 表示用户服务（从 rootfs 加载）
+core = false
+after = rootfsd
+caps = my_ep:0
+```
+
+**驱动基本结构：**
 ```c
-// 驱动基本结构
 int main(void) {
     // 初始化
     while (1) {
@@ -324,6 +366,18 @@ int main(void) {
 2. 在 `main/kernel/sys/syscall.c` 添加处理函数
 3. 在 `user/libs/` 添加用户态封装
 
+### 添加独立工具程序
+
+在 `user/apps/bin/` 下创建子目录，包含 `main.c` 即可自动编译：
+
+```
+user/apps/bin/mytool/
+├── main.c           # 工具实现
+└── service.conf     # 可选，core=true 则打包到 rootfs
+```
+
+工具默认编译到 `build/optional/bin/`，shell 会搜索 `/sys/bin` 和 `/mnt/bin`。
+
 ### 添加 Shell 命令
 
 修改 `user/apps/shell/main.c`，在命令表中添加新命令。
@@ -333,11 +387,10 @@ int main(void) {
 Xnix 是一个教学项目，主要在 QEMU 中运行。如需在真实硬件上测试：
 
 ```bash
-./run -f -i              # 生成 ISO
+./run -n -b -i           # 生成 ISO
 # 将 build/xnix.iso 写入 U 盘或用于虚拟机启动
 ```
 
-<!-- 截图：PVE 虚拟机运行演示 -->
 ![PVE 运行演示](docs/assets/screenshot_eb99d3d0.png)
 
 > 注意：真实硬件运行未经充分测试，QEMU可能与真实硬件行为不一致。
