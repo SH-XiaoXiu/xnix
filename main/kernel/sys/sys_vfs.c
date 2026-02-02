@@ -379,38 +379,11 @@ static void normalize_path(char *path) {
 static int32_t sys_chdir(const uint32_t *args) {
     const char *user_path = (const char *)(uintptr_t)args[0];
 
-    char path[VFS_PATH_MAX];
-    int  ret = copy_string_from_user(path, user_path, VFS_PATH_MAX);
+    char abs_path[VFS_PATH_MAX];
+    int  ret = resolve_path(user_path, abs_path, VFS_PATH_MAX);
     if (ret < 0) {
         return ret;
     }
-
-    struct process *proc = process_get_current();
-    if (!proc) {
-        return -ESRCH;
-    }
-
-    /* 构建绝对路径 */
-    char abs_path[VFS_PATH_MAX];
-    if (path[0] == '/') {
-        /* 已经是绝对路径 */
-        strcpy(abs_path, path);
-    } else {
-        /* 相对路径 */
-        size_t cwd_len  = strlen(proc->cwd);
-        size_t path_len = strlen(path);
-        if (cwd_len + 1 + path_len >= VFS_PATH_MAX) {
-            return -ENAMETOOLONG;
-        }
-        strcpy(abs_path, proc->cwd);
-        if (cwd_len > 1) { /* 不是根目录 */
-            abs_path[cwd_len++] = '/';
-        }
-        strcpy(abs_path + cwd_len, path);
-    }
-
-    /* 规范化路径 */
-    normalize_path(abs_path);
 
     /* 验证目录存在 */
     struct vfs_info info;
@@ -423,6 +396,11 @@ static int32_t sys_chdir(const uint32_t *args) {
     }
 
     /* 更新 cwd */
+    struct process *proc = process_get_current();
+    if (!proc) {
+        return -ESRCH;
+    }
+
     size_t len = strlen(abs_path);
     if (len >= PROCESS_CWD_MAX) {
         return -ENAMETOOLONG;

@@ -140,41 +140,30 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
 /*
  * IPC 原语实现
  */
-static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
-                             struct ipc_message *reply_buf, uint32_t timeout_ms) {
-    struct process      *proc = process_current();
-    struct thread       *current;
-    struct ipc_endpoint *ep;
-    struct thread       *receiver;
 
-    if (!proc) {
+/**
+ * IPC 发送核心实现
+ * 直接使用 endpoint 指针,所有 send/call 操作都通过此函数
+ */
+static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
+                          struct ipc_message *reply_buf, uint32_t timeout_ms) {
+    struct thread *current = sched_current();
+    if (!current) {
         return IPC_ERR_INVALID;
     }
-
-    /* 查找 Endpoint */
-    ep = cap_lookup(proc, ep_handle, CAP_TYPE_ENDPOINT, CAP_WRITE);
-    if (!ep) {
-        return IPC_ERR_INVALID;
-    }
-
-    current = sched_current();
 
     spin_lock(&ep->lock);
 
     /* 检查是否有等待接收的线程 */
     if (ep->recv_queue) {
-        receiver            = ep->recv_queue;
-        ep->recv_queue      = receiver->wait_next;
-        receiver->wait_next = NULL;
+        struct thread *receiver = ep->recv_queue;
+        ep->recv_queue          = receiver->wait_next;
+        receiver->wait_next     = NULL;
         spin_unlock(&ep->lock);
 
         /* 拷贝消息到接收者 */
         ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
-
-        /* 记录发送者 TID,以便接收者回复 */
         receiver->ipc_peer = current->tid;
-
-        /* 唤醒接收者 */
         sched_wakeup_thread(receiver);
 
         /* 保存发送和回复缓冲区 */
@@ -185,17 +174,13 @@ static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
         if (!sched_block_timeout(current, timeout_ms)) {
             return IPC_ERR_TIMEOUT;
         }
-
         return IPC_OK;
     }
 
     /* 没有接收者,加入发送队列 */
     current->wait_next = ep->send_queue;
     ep->send_queue     = current;
-
-    /* 唤醒 poll 等待者 */
     endpoint_poll_wakeup(ep);
-
     spin_unlock(&ep->lock);
 
     /* 保存状态 */
@@ -223,82 +208,32 @@ static int ipc_send_internal(cap_handle_t ep_handle, struct ipc_message *msg,
 }
 
 int ipc_send(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
-    /* Send 不关心 Reply 内容, 传入 NULL */
-    return ipc_send_internal(ep_handle, msg, NULL, timeout_ms);
+    struct process      *proc = process_current();
+    struct ipc_endpoint *ep =
+        proc ? cap_lookup(proc, ep_handle, CAP_TYPE_ENDPOINT, CAP_WRITE) : NULL;
+    if (!ep) {
+        return IPC_ERR_INVALID;
+    }
+    return ipc_send_to_ep(ep, msg, NULL, timeout_ms);
 }
 
 int ipc_call(cap_handle_t ep_handle, struct ipc_message *request, struct ipc_message *reply,
              uint32_t timeout_ms) {
-    return ipc_send_internal(ep_handle, request, reply, timeout_ms);
-}
-
-/**
- * 直接使用 endpoint 指针进行 IPC call
- */
-int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc_message *reply_buf,
-                    uint32_t timeout_ms) {
-    struct thread *current;
-    struct thread *receiver;
-
+    struct process      *proc = process_current();
+    struct ipc_endpoint *ep =
+        proc ? cap_lookup(proc, ep_handle, CAP_TYPE_ENDPOINT, CAP_WRITE) : NULL;
     if (!ep) {
         return IPC_ERR_INVALID;
     }
+    return ipc_send_to_ep(ep, request, reply, timeout_ms);
+}
 
-    current = sched_current();
-    if (!current) {
+int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc_message *reply_buf,
+                    uint32_t timeout_ms) {
+    if (!ep) {
         return IPC_ERR_INVALID;
     }
-
-    spin_lock(&ep->lock);
-
-    if (ep->recv_queue) {
-        receiver            = ep->recv_queue;
-        ep->recv_queue      = receiver->wait_next;
-        receiver->wait_next = NULL;
-        spin_unlock(&ep->lock);
-
-        ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
-        receiver->ipc_peer = current->tid;
-        sched_wakeup_thread(receiver);
-
-        current->ipc_req_msg   = msg;
-        current->ipc_reply_msg = reply_buf;
-
-        if (!sched_block_timeout(current, timeout_ms)) {
-            return IPC_ERR_TIMEOUT;
-        }
-
-        return IPC_OK;
-    }
-
-    current->wait_next = ep->send_queue;
-    ep->send_queue     = current;
-
-    /* 唤醒 poll 等待者 */
-    endpoint_poll_wakeup(ep);
-
-    spin_unlock(&ep->lock);
-
-    current->ipc_req_msg   = msg;
-    current->ipc_reply_msg = reply_buf;
-
-    if (!sched_block_timeout(current, timeout_ms)) {
-        /* 超时,从发送队列中移除自己 */
-        spin_lock(&ep->lock);
-        struct thread **pp = &ep->send_queue;
-        while (*pp) {
-            if (*pp == current) {
-                *pp = current->wait_next;
-                break;
-            }
-            pp = &(*pp)->wait_next;
-        }
-        current->wait_next = NULL;
-        spin_unlock(&ep->lock);
-        return IPC_ERR_TIMEOUT;
-    }
-
-    return IPC_OK;
+    return ipc_send_to_ep(ep, msg, reply_buf, timeout_ms);
 }
 
 int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
@@ -575,8 +510,8 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
 
     /* 在栈上分配 poll entries */
     struct poll_entry entries[IPC_WAIT_MAX];
-    void             *objects[IPC_WAIT_MAX];   /* 对象指针 */
-    cap_type_t        types[IPC_WAIT_MAX];     /* 对象类型 */
+    void             *objects[IPC_WAIT_MAX]; /* 对象指针 */
+    cap_type_t        types[IPC_WAIT_MAX];   /* 对象类型 */
     uint32_t          valid_count = 0;
 
     /* 第一遍:查找所有对象,检查是否有已就绪的 */
@@ -593,8 +528,8 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
             }
             spin_unlock(&ep->lock);
 
-            objects[valid_count] = ep;
-            types[valid_count]   = CAP_TYPE_ENDPOINT;
+            objects[valid_count]           = ep;
+            types[valid_count]             = CAP_TYPE_ENDPOINT;
             entries[valid_count].handle    = handle;
             entries[valid_count].waiter    = current;
             entries[valid_count].triggered = false;
@@ -604,8 +539,7 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
         }
 
         /* 尝试作为 notification */
-        struct ipc_notification *notif =
-            cap_lookup(proc, handle, CAP_TYPE_NOTIFICATION, CAP_READ);
+        struct ipc_notification *notif = cap_lookup(proc, handle, CAP_TYPE_NOTIFICATION, CAP_READ);
         if (notif) {
             spin_lock(&notif->lock);
             if (notification_has_signal_locked(notif)) {
@@ -614,8 +548,8 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
             }
             spin_unlock(&notif->lock);
 
-            objects[valid_count] = notif;
-            types[valid_count]   = CAP_TYPE_NOTIFICATION;
+            objects[valid_count]           = notif;
+            types[valid_count]             = CAP_TYPE_NOTIFICATION;
             entries[valid_count].handle    = handle;
             entries[valid_count].waiter    = current;
             entries[valid_count].triggered = false;
@@ -639,7 +573,7 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
         } else {
             struct ipc_notification *notif = objects[i];
             spin_lock(&notif->lock);
-            entries[i].next  = notif->poll_queue;
+            entries[i].next   = notif->poll_queue;
             notif->poll_queue = &entries[i];
             spin_unlock(&notif->lock);
         }

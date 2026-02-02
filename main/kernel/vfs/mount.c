@@ -8,6 +8,7 @@
 #include <kernel/vfs/vfs.h>
 #include <xnix/errno.h>
 #include <xnix/process.h>
+#include <xnix/string.h>
 #include <xnix/sync.h>
 
 /* 全局挂载表 */
@@ -19,22 +20,6 @@ void vfs_mount_init(void) {
     for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
         mounts[i].active = false;
     }
-}
-
-static size_t kstrlen(const char *s) {
-    size_t len = 0;
-    while (s[len]) {
-        len++;
-    }
-    return len;
-}
-
-static void kstrcpy(char *dst, const char *src, size_t max) {
-    size_t i;
-    for (i = 0; i < max - 1 && src[i]; i++) {
-        dst[i] = src[i];
-    }
-    dst[i] = '\0';
 }
 
 int vfs_mount(const char *path, cap_handle_t fs_ep_handle) {
@@ -49,7 +34,7 @@ int vfs_mount(const char *path, cap_handle_t fs_ep_handle) {
         return -EINVAL;
     }
 
-    size_t path_len = kstrlen(path);
+    size_t path_len = strlen(path);
     if (path_len >= VFS_PATH_MAX) {
         return -ENAMETOOLONG;
     }
@@ -96,10 +81,11 @@ int vfs_mount(const char *path, cap_handle_t fs_ep_handle) {
     endpoint_ref(ep);
 
     /* 注册挂载点 */
-    kstrcpy(mounts[slot].path, path, path_len + 1);
-    mounts[slot].path_len = path_len;
-    mounts[slot].fs_ep    = ep;
-    mounts[slot].active   = true;
+    memcpy(mounts[slot].path, path, path_len);
+    mounts[slot].path[path_len] = '\0';
+    mounts[slot].path_len       = path_len;
+    mounts[slot].fs_ep          = ep;
+    mounts[slot].active         = true;
 
     spin_unlock(&mounts_lock);
     return 0;
@@ -110,7 +96,7 @@ int vfs_umount(const char *path) {
         return -EINVAL;
     }
 
-    size_t path_len = kstrlen(path);
+    size_t path_len = strlen(path);
 
     /* 去掉尾部斜杠(除了根目录) */
     while (path_len > 1 && path[path_len - 1] == '/') {
@@ -149,7 +135,7 @@ struct vfs_mount *vfs_lookup_mount(const char *path, const char **rel_path) {
         return NULL;
     }
 
-    size_t            path_len = kstrlen(path);
+    size_t            path_len = strlen(path);
     struct vfs_mount *best     = NULL;
     size_t            best_len = 0;
 
