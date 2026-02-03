@@ -9,6 +9,7 @@
 #include <kernel/ipc/endpoint.h>
 #include <kernel/ipc/msg_pool.h>
 #include <kernel/ipc/notification.h>
+#include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/ipc.h>
@@ -115,8 +116,6 @@ cap_handle_t endpoint_create(void) {
  */
 static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_message *src_msg,
                          struct ipc_message *dst_msg) {
-    (void)src;
-    (void)dst;
     if (!src_msg || !dst_msg) {
         return;
     }
@@ -133,8 +132,28 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
         dst_msg->buffer.size = 0;
     }
 
-    /* 拷贝能力句柄 */
+    /* 拷贝能力句柄(capability transfer)*/
     dst_msg->caps.count = 0;
+    if (src_msg->caps.count > 0 && src_msg->caps.count <= IPC_MSG_CAPS_MAX) {
+        struct process *src_proc = src->owner;
+        struct process *dst_proc = dst->owner;
+
+        if (src_proc && dst_proc) {
+            struct cap_table *src_table = src_proc->cap_table;
+            for (uint32_t i = 0; i < src_msg->caps.count; i++) {
+                cap_handle_t src_handle = src_msg->caps.handles[i];
+
+                /* 复制 capability 到接收者进程 (保持原有的权限,包括 GRANT) */
+                cap_rights_t rights = src_table->caps[src_handle].rights;
+                cap_handle_t dst_handle =
+                    cap_duplicate_to(src_proc, src_handle, dst_proc, rights, CAP_HANDLE_INVALID);
+
+                if (dst_handle != CAP_HANDLE_INVALID) {
+                    dst_msg->caps.handles[dst_msg->caps.count++] = dst_handle;
+                }
+            }
+        }
+    }
 }
 
 /*
@@ -163,7 +182,8 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
 
         /* 拷贝消息到接收者 */
         ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
-        receiver->ipc_peer = current->tid;
+        receiver->ipc_peer                  = current->tid;
+        receiver->ipc_reply_msg->sender_tid = current->tid; /* 填充 sender_tid */
         sched_wakeup_thread(receiver);
 
         /* 保存发送和回复缓冲区 */
@@ -271,6 +291,7 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
         memcpy(&msg->regs, &km->regs, sizeof(struct ipc_msg_regs));
         ipc_kmsg_put(km);
         current->ipc_peer = TID_INVALID;
+        msg->sender_tid   = TID_INVALID; /* 异步消息无发送者 */
         return IPC_OK;
     }
 #else
@@ -281,6 +302,7 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
         spin_unlock(&ep->lock);
 
         current->ipc_peer = TID_INVALID; /* 异步消息无需回复 */
+        msg->sender_tid   = TID_INVALID; /* 异步消息无发送者 */
         return IPC_OK;
     }
 #endif
@@ -297,6 +319,7 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
 
         /* 记录发送者 */
         current->ipc_peer = sender->tid;
+        msg->sender_tid   = sender->tid; /* 填充 sender_tid 用于延迟回复 */
 
         /* 注意 不要唤醒 Sender!!!!!!!!!!!!!!!!!!!!!! Sender 继续阻塞等待 Reply */
         /* 只从 send_queue 移除了 Sender, 但它依然在 blocked_list 中 (wait_chan=Sender) */
@@ -633,6 +656,40 @@ int ipc_reply(struct ipc_message *reply) {
     }
 
     /* 拷贝 Reply: Current(Receiver) -> Sender */
+    if (reply && sender->ipc_reply_msg) {
+        ipc_copy_msg(current, sender, reply, sender->ipc_reply_msg);
+    }
+
+    /* 唤醒发送者 */
+    sched_wakeup_thread(sender);
+
+    return IPC_OK;
+}
+
+/**
+ * 延迟回复: 回复指定的发送者
+ * 用于服务器需要延迟回复客户端的场景
+ *
+ * @param sender_tid 发送者的 TID (从 msg->sender_tid 获取)
+ * @param reply      回复消息
+ * @return IPC_OK 成功, 其他值表示错误
+ */
+int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply) {
+    struct thread *current = sched_current();
+    struct thread *sender;
+
+    if (!current || sender_tid == TID_INVALID) {
+        return IPC_ERR_INVALID;
+    }
+
+    /* 查找等待 Reply 的发送者 */
+    sender = sched_lookup_blocked(sender_tid);
+    if (!sender) {
+        /* 发送者可能已经超时/被杀/不在阻塞状态 */
+        return IPC_ERR_INVALID;
+    }
+
+    /* 拷贝 Reply: Current -> Sender */
     if (reply && sender->ipc_reply_msg) {
         ipc_copy_msg(current, sender, reply, sender->ipc_reply_msg);
     }

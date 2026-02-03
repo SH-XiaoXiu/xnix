@@ -34,6 +34,7 @@ struct ipc_message {
     struct ipc_msg_buffer buffer;
     struct ipc_msg_caps   caps;
     uint32_t              flags;
+    uint32_t              sender_tid; /* 发送者 TID (receive 时填充, 用于延迟回复) */
 };
 
 /* 错误码 */

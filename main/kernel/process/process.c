@@ -8,7 +8,6 @@
 #include <kernel/capability/capability.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
-#include <kernel/vfs/vfs.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
@@ -55,8 +54,6 @@ void process_subsystem_init(void) {
     kernel_process.next_sibling  = NULL;
     kernel_process.next          = NULL;
     kernel_process.refcount      = 1;
-    kernel_process.cwd[0]        = '/';
-    kernel_process.cwd[1]        = '\0';
 
     if (kernel_process.sync_table) {
         spin_init(&kernel_process.sync_table->lock);
@@ -194,10 +191,6 @@ void process_unref(struct process *proc) {
             kfree(proc->sync_table);
             proc->sync_table = NULL;
         }
-        if (proc->fd_table) {
-            fd_table_destroy(proc->fd_table);
-            proc->fd_table = NULL;
-        }
 
         /* 从进程链表移除 */
         flags = cpu_irq_save();
@@ -270,18 +263,13 @@ process_t process_create(const char *name) {
     proc->children     = NULL;
     proc->next_sibling = NULL;
     proc->refcount     = 1;
-    proc->cwd[0]       = '/';
-    proc->cwd[1]       = '\0';
 
     if (proc->sync_table) {
         spin_init(&proc->sync_table->lock);
         proc->sync_table->mutex_bitmap = 0;
     }
 
-    /* 创建 fd 表 */
-    proc->fd_table = fd_table_create();
-
-    if (!proc->cap_table || !proc->thread_lock || !proc->sync_table || !proc->fd_table) {
+    if (!proc->cap_table || !proc->thread_lock || !proc->sync_table) {
         if (proc->page_dir_phys) {
             if (mm->destroy_as) {
                 mm->destroy_as(proc->page_dir_phys);
@@ -295,9 +283,6 @@ process_t process_create(const char *name) {
         }
         if (proc->sync_table) {
             kfree(proc->sync_table);
-        }
-        if (proc->fd_table) {
-            fd_table_destroy(proc->fd_table);
         }
         kfree(proc);
         return NULL;

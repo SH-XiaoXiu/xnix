@@ -3,16 +3,17 @@
  * @brief 列出目录内容
  */
 
+#include <d/protocol/vfs.h>
 #include <stdio.h>
 #include <string.h>
+#include <vfs_client.h>
 #include <xnix/syscall.h>
-#include <xnix/udm/vfs.h>
 
 /* ANSI 颜色代码 */
-#define COLOR_RESET  "\x1b[0m"
-#define COLOR_DIR    "\x1b[33m"   /* 黄色 */
-#define COLOR_EXEC   "\x1b[32m"   /* 绿色 */
-#define COLOR_FILE   "\x1b[0m"    /* 默认色 */
+#define COLOR_RESET "\x1b[0m"
+#define COLOR_DIR   "\x1b[33m" /* 黄色 */
+#define COLOR_EXEC  "\x1b[32m" /* 绿色 */
+#define COLOR_FILE  "\x1b[0m"  /* 默认色 */
 
 #define MAX_ENTRIES 256
 
@@ -37,16 +38,6 @@ static char to_lower(char c) {
 
 /**
  * 将字符串转换为小写
- */
-static void str_to_lower(char *s) {
-    while (*s) {
-        *s = to_lower(*s);
-        s++;
-    }
-}
-
-/**
- * 不区分大小写比较扩展名
  */
 static int ends_with_elf(const char *name) {
     size_t len = strlen(name);
@@ -129,7 +120,7 @@ int main(int argc, char **argv) {
         path = argv[1];
     }
 
-    int fd = sys_opendir(path);
+    int fd = vfs_opendir(path);
     if (fd < 0) {
         printf("ls: cannot open '%s': error %d\n", path, fd);
         return 1;
@@ -140,16 +131,15 @@ int main(int argc, char **argv) {
     uint32_t          index = 0;
     entry_count             = 0;
 
-    while (sys_readdir(fd, index, &dirent) == 0 && entry_count < MAX_ENTRIES) {
+    while (vfs_readdir_index(fd, index, &dirent) == 0 && entry_count < MAX_ENTRIES) {
         strcpy(entries[entry_count].name, dirent.name);
-        str_to_lower(entries[entry_count].name); /* 转换为小写 */
         entries[entry_count].type    = dirent.type;
         entries[entry_count].is_exec = (dirent.type == VFS_TYPE_FILE && is_executable(dirent.name));
         entry_count++;
         index++;
     }
 
-    sys_close(fd);
+    vfs_close(fd);
 
     if (entry_count == 0) {
         printf("(empty)\n");

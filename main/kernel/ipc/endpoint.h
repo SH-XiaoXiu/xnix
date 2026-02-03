@@ -24,10 +24,10 @@ struct ipc_async_msg {
  * 一个线程可以创建多个 poll_entry 加入不同对象的 poll_queue.
  */
 struct poll_entry {
-    struct thread     *waiter;     /* 等待的线程 */
-    cap_handle_t       handle;     /* 对应的句柄(用于返回) */
-    struct poll_entry *next;       /* 对象内的 poll 链表 */
-    volatile bool      triggered;  /* 是否已触发 */
+    struct thread     *waiter;    /* 等待的线程 */
+    cap_handle_t       handle;    /* 对应的句柄(用于返回) */
+    struct poll_entry *next;      /* 对象内的 poll 链表 */
+    volatile bool      triggered; /* 是否已触发 */
 };
 
 /**

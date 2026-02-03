@@ -14,12 +14,6 @@ extern void sleep_ms(uint32_t ms);
 /* 使用与 kprintf 相同的锁,避免内核输出和用户输出交错 */
 extern spinlock_t kprintf_lock;
 
-/* SYS_PUTC: ebx=char (保留兼容性) */
-static int32_t sys_putc(const uint32_t *args) {
-    kputc((char)(args[0] & 0xFF));
-    return 0;
-}
-
 /* SYS_WRITE: ebx=fd, ecx=buf, edx=len */
 static int32_t sys_write(const uint32_t *args) {
     int         fd  = (int)args[0];
@@ -60,7 +54,6 @@ static int32_t sys_module_count(const uint32_t *args) {
  * 注册杂项系统调用
  */
 void sys_misc_init(void) {
-    syscall_register(SYS_PUTC, sys_putc, 1, "putc");
     syscall_register(SYS_WRITE, sys_write, 3, "write");
     syscall_register(SYS_SLEEP, sys_sleep, 1, "sleep");
     syscall_register(SYS_MODULE_COUNT, sys_module_count, 0, "module_count");

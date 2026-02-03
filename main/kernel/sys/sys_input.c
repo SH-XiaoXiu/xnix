@@ -1,33 +1,23 @@
 /**
  * @file kernel/sys/sys_input.c
- * @brief 输入队列系统调用
+ * @brief 输入相关系统调用
+ *
+ * DEPRECATED: 输入队列处理和前台进程管理已移至用户空间 kbd 驱动.
+ * 此文件保留为空桩,未来可能完全移除.
  */
 
-#include <kernel/io/input.h>
 #include <kernel/sys/syscall.h>
+#include <xnix/errno.h>
 #include <xnix/syscall.h>
+#include <xnix/types.h>
 
-/* SYS_INPUT_WRITE: ebx=char */
-static int32_t sys_input_write(const uint32_t *args) {
-    char c = (char)args[0];
-    return input_write(c);
-}
-
-/* SYS_INPUT_READ */
-static int32_t sys_input_read(const uint32_t *args) {
-    (void)args;
-    return input_read();
-}
-
-/* SYS_SET_FOREGROUND: ebx=pid */
-static int32_t sys_set_foreground(const uint32_t *args) {
-    pid_t pid = (pid_t)args[0];
-    input_set_foreground(pid);
-    return 0;
+/**
+ * 输入子系统初始化 (空操作)
+ */
+void input_init(void) {
+    /* 输入处理已移至用户态 kbd 驱动 */
 }
 
 void sys_input_init(void) {
-    syscall_register(SYS_INPUT_WRITE, sys_input_write, 1, "input_write");
-    syscall_register(SYS_INPUT_READ, sys_input_read, 0, "input_read");
-    syscall_register(SYS_SET_FOREGROUND, sys_set_foreground, 1, "set_foreground");
+    /* 不再注册任何输入相关的系统调用 */
 }

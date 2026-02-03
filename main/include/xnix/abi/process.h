@@ -16,6 +16,7 @@
 #define ABI_EXEC_MAX_ARG_LEN 256 /* 单个参数最大长度 */
 #define ABI_EXEC_PATH_MAX    256 /* 路径最大长度 */
 #define ABI_EXEC_MAX_CAPS    8   /* 最大传递 cap 数量 */
+#define ABI_PROC_NAME_MAX    16
 
 /**
  * exec 系统调用参数结构
@@ -29,11 +30,21 @@ struct abi_exec_args {
     struct abi_spawn_cap caps[ABI_EXEC_MAX_CAPS];                       /* 传递的 caps */
 };
 
+struct abi_exec_image_args {
+    char                 name[ABI_PROC_NAME_MAX];
+    uint32_t             elf_ptr;
+    uint32_t             elf_size;
+    int32_t              argc;
+    char                 argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN];
+    uint32_t             flags;
+    uint32_t             cap_count;
+    struct abi_spawn_cap caps[ABI_EXEC_MAX_CAPS];
+};
+
 /*
  * proclist 系统调用相关定义
  */
-#define ABI_PROC_NAME_MAX 16
-#define ABI_PROCLIST_MAX  64 /* 单次返回最多 64 条 */
+#define ABI_PROCLIST_MAX 64 /* 单次返回最多 64 条 */
 
 /**
  * 进程信息结构(用于用户态获取进程列表)

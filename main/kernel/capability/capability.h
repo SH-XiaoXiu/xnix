@@ -67,6 +67,19 @@ void cap_table_destroy(struct cap_table *table);
 cap_handle_t cap_alloc(struct process *proc, cap_type_t type, void *object, cap_rights_t rights);
 
 /**
+ * 在指定位置分配句柄(优先使用 hint_slot,如果已占用则使用任意空闲槽)
+ *
+ * @param proc      目标进程
+ * @param type      对象类型
+ * @param object    对象指针
+ * @param rights    权限
+ * @param hint_slot 优先使用的槽位(CAP_HANDLE_INVALID 表示无偏好)
+ * @return 新句柄,失败返回 CAP_HANDLE_INVALID
+ */
+cap_handle_t cap_alloc_at(struct process *proc, cap_type_t type, void *object, cap_rights_t rights,
+                          cap_handle_t hint_slot);
+
+/**
  * 释放句柄
  *
  * @param proc   目标进程
@@ -93,10 +106,11 @@ void *cap_lookup(struct process *proc, cap_handle_t handle, cap_type_t expected_
  * @param src_handle 源句柄
  * @param dst        目标进程
  * @param new_rights 新权限(必须 <= 原权限)
+ * @param hint_dst   目标进程优先使用的槽位(CAP_HANDLE_INVALID 表示无偏好)
  * @return 目标进程中的新句柄,失败返回 CAP_HANDLE_INVALID
  */
 cap_handle_t cap_duplicate_to(struct process *src, cap_handle_t src_handle, struct process *dst,
-                              cap_rights_t new_rights);
+                              cap_rights_t new_rights, cap_handle_t hint_dst);
 
 /**
  * 对象引用计数(由各对象类型实现)

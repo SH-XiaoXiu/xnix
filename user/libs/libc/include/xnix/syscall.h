@@ -69,10 +69,6 @@ static inline void sys_exit(int code) {
     __builtin_unreachable();
 }
 
-static inline void sys_putc(char c) {
-    syscall1(SYS_PUTC, (uint32_t)(uint8_t)c);
-}
-
 static inline int sys_write(int fd, const void *buf, size_t len) {
     return syscall3(SYS_WRITE, (uint32_t)fd, (uint32_t)(uintptr_t)buf, (uint32_t)len);
 }
@@ -109,6 +105,14 @@ static inline int sys_endpoint_create(void) {
     return syscall0(SYS_ENDPOINT_CREATE);
 }
 
+static inline int sys_notification_create(void) {
+    return syscall0(SYS_NOTIFICATION_CREATE);
+}
+
+static inline uint32_t sys_notification_wait(uint32_t handle) {
+    return (uint32_t)syscall1(SYS_NOTIFICATION_WAIT, handle);
+}
+
 /*
  * IPC 相关系统调用
  */
@@ -130,6 +134,10 @@ static inline int sys_ipc_call(uint32_t ep, struct ipc_message *req, struct ipc_
 
 static inline int sys_ipc_reply(struct ipc_message *reply) {
     return syscall1(SYS_IPC_REPLY, (uint32_t)(uintptr_t)reply);
+}
+
+static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *reply) {
+    return syscall2(SYS_IPC_REPLY_TO, sender_tid, (uint32_t)(uintptr_t)reply);
 }
 
 /*
@@ -168,10 +176,6 @@ static inline int sys_kill(int pid, int sig) {
     return syscall2(SYS_KILL, (uint32_t)pid, (uint32_t)sig);
 }
 
-static inline int sys_exec(struct abi_exec_args *args) {
-    return syscall1(SYS_EXEC, (uint32_t)(uintptr_t)args);
-}
-
 /*
  * IRQ 绑定
  */
@@ -187,87 +191,6 @@ static inline int sys_irq_unbind(uint8_t irq) {
 
 static inline int sys_irq_read(uint8_t irq, void *buf, size_t size, uint32_t flags) {
     return syscall4(SYS_IRQ_READ, (uint32_t)irq, (uint32_t)(uintptr_t)buf, (uint32_t)size, flags);
-}
-
-/*
- * 输入队列
- */
-static inline int sys_input_write(char c) {
-    return syscall1(SYS_INPUT_WRITE, (uint32_t)(unsigned char)c);
-}
-
-static inline int sys_input_read(void) {
-    return syscall0(SYS_INPUT_READ);
-}
-
-static inline int sys_set_foreground(int pid) {
-    return syscall1(SYS_SET_FOREGROUND, (uint32_t)pid);
-}
-
-/*
- * VFS 系统调用
- */
-struct vfs_info;
-struct vfs_dirent;
-
-static inline int sys_open(const char *path, uint32_t flags) {
-    return syscall2(SYS_OPEN, (uint32_t)(uintptr_t)path, flags);
-}
-
-static inline int sys_close(int fd) {
-    return syscall1(SYS_CLOSE, (uint32_t)fd);
-}
-
-static inline int sys_read(int fd, void *buf, size_t size) {
-    return syscall3(SYS_READ, (uint32_t)fd, (uint32_t)(uintptr_t)buf, (uint32_t)size);
-}
-
-static inline int sys_write2(int fd, const void *buf, size_t size) {
-    return syscall3(SYS_WRITE2, (uint32_t)fd, (uint32_t)(uintptr_t)buf, (uint32_t)size);
-}
-
-static inline int sys_lseek(int fd, int32_t offset, int whence) {
-    return syscall3(SYS_LSEEK, (uint32_t)fd, (uint32_t)offset, (uint32_t)whence);
-}
-
-static inline int sys_info(const char *path, struct vfs_info *info) {
-    return syscall2(SYS_INFO, (uint32_t)(uintptr_t)path, (uint32_t)(uintptr_t)info);
-}
-
-static inline int sys_finfo(int fd, struct vfs_info *info) {
-    return syscall2(SYS_FINFO, (uint32_t)fd, (uint32_t)(uintptr_t)info);
-}
-
-static inline int sys_opendir(const char *path) {
-    return syscall1(SYS_OPENDIR, (uint32_t)(uintptr_t)path);
-}
-
-static inline int sys_readdir(int fd, uint32_t index, struct vfs_dirent *entry) {
-    return syscall3(SYS_READDIR, (uint32_t)fd, index, (uint32_t)(uintptr_t)entry);
-}
-
-static inline int sys_mkdir(const char *path) {
-    return syscall1(SYS_MKDIR, (uint32_t)(uintptr_t)path);
-}
-
-static inline int sys_del(const char *path) {
-    return syscall1(SYS_DEL, (uint32_t)(uintptr_t)path);
-}
-
-static inline int sys_mount(const char *path, uint32_t fs_ep) {
-    return syscall2(SYS_MOUNT, (uint32_t)(uintptr_t)path, fs_ep);
-}
-
-static inline int sys_umount(const char *path) {
-    return syscall1(SYS_UMOUNT, (uint32_t)(uintptr_t)path);
-}
-
-static inline int sys_chdir(const char *path) {
-    return syscall1(SYS_CHDIR, (uint32_t)(uintptr_t)path);
-}
-
-static inline int sys_getcwd(char *buf, size_t size) {
-    return syscall2(SYS_GETCWD, (uint32_t)(uintptr_t)buf, (uint32_t)size);
 }
 
 /*
@@ -331,5 +254,7 @@ struct proclist_args {
 static inline int sys_proclist(struct proclist_args *args) {
     return syscall1(SYS_PROCLIST, (uint32_t)(uintptr_t)args);
 }
+
+int sys_exec(struct abi_exec_args *args);
 
 #endif /* _XNIX_SYSCALL_H */

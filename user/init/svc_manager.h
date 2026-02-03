@@ -58,13 +58,13 @@ typedef enum {
 } svc_cap_type_t;
 
 struct svc_cap_def {
-    char          name[SVC_CAP_NAME_MAX];
+    char           name[SVC_CAP_NAME_MAX];
     svc_cap_type_t type;
-    uint16_t      ioport_start;
-    uint16_t      ioport_end;
-    uint32_t      rights;
-    bool          created;
-    uint32_t      handle;
+    uint16_t       ioport_start;
+    uint16_t       ioport_end;
+    uint32_t       rights;
+    bool           created;
+    uint32_t       handle;
 };
 
 /**
@@ -73,6 +73,7 @@ struct svc_cap_def {
 struct svc_config {
     char name[SVC_NAME_MAX];
 
+    bool       builtin;            /* 是否为内置服务(已启动) */
     svc_type_t type;               /* 启动类型 */
     uint32_t   module_index;       /* 模块索引(type=MODULE 时) */
     char       path[SVC_PATH_MAX]; /* ELF 路径(type=PATH 时) */
@@ -94,7 +95,8 @@ struct svc_config {
     uint32_t mount_ep;            /* 挂载使用的 endpoint handle */
 
     /* 行为 */
-    bool respawn; /* 退出后自动重启 */
+    bool respawn;       /* 退出后自动重启 */
+    bool no_ready_file; /* 不使用文件通知就绪状态 */
 };
 
 /**

@@ -5,9 +5,11 @@
 
 #include "path.h"
 
+#include "stdio.h"
+
+#include <d/protocol/vfs.h>
 #include <string.h>
-#include <xnix/syscall.h>
-#include <xnix/udm/vfs.h>
+#include <vfs_client.h>
 
 static char g_paths[SHELL_MAX_PATHS][SHELL_PATH_LEN];
 static int  g_path_count = 0;
@@ -65,11 +67,12 @@ const char *path_get(int index) {
  * 检查文件是否存在且为普通文件
  */
 static bool file_exists(const char *path) {
-    struct vfs_info info;
-    if (sys_info(path, &info) < 0) {
+    struct vfs_stat st;
+    int             ret = vfs_stat(path, &st);
+    if (ret < 0) {
         return false;
     }
-    return info.type == VFS_TYPE_FILE;
+    return st.type == VFS_TYPE_FILE;
 }
 
 bool path_find(const char *name, char *out, size_t max_len) {
@@ -107,7 +110,7 @@ bool path_find(const char *name, char *out, size_t max_len) {
         if (dir_len + 1 + name_len + 4 < max_len) {
             memcpy(out, g_paths[i], dir_len);
             out[dir_len] = '/';
-            memcpy(out + dir_len + 1, name, name_len);
+            strcpy(out + dir_len + 1, name);
             memcpy(out + dir_len + 1 + name_len, ".elf", 5);
 
             if (file_exists(out)) {

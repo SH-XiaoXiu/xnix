@@ -8,13 +8,13 @@
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <kernel/sys/syscall.h>
-#include <kernel/vfs/vfs.h>
 #include <xnix/abi/process.h>
 #include <xnix/boot.h>
 #include <xnix/errno.h>
 #include <xnix/mm.h>
 #include <xnix/percpu.h>
 #include <xnix/process.h>
+#include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
 #include <xnix/syscall.h>
@@ -86,6 +86,87 @@ static int32_t sys_kill(const uint32_t *args) {
     return process_kill(pid, sig);
 }
 
+/* SYS_EXEC: ebx=abi_exec_image_args* */
+static int32_t sys_exec(const uint32_t *args) {
+    struct abi_exec_image_args *user_args = (struct abi_exec_image_args *)(uintptr_t)args[0];
+
+    struct abi_exec_image_args *kargs = kmalloc(sizeof(*kargs));
+    if (!kargs) {
+        return -ENOMEM;
+    }
+
+    int ret = copy_from_user(kargs, user_args, sizeof(*kargs));
+    if (ret < 0) {
+        kfree(kargs);
+        return ret;
+    }
+
+    kargs->name[ABI_PROC_NAME_MAX - 1] = '\0';
+
+    if (kargs->elf_ptr == 0 || kargs->elf_size == 0) {
+        kfree(kargs);
+        return -EINVAL;
+    }
+
+    if (kargs->elf_size > (16u * 1024u * 1024u)) {
+        kfree(kargs);
+        return -EINVAL;
+    }
+
+    uint32_t page_count = (kargs->elf_size + PAGE_SIZE - 1) / PAGE_SIZE;
+    void    *elf_paddr  = alloc_pages(page_count);
+    if (!elf_paddr) {
+        kfree(kargs);
+        return -ENOMEM;
+    }
+
+    void *elf_kvirt = PHYS_TO_VIRT((paddr_t)(uintptr_t)elf_paddr);
+
+    ret = copy_from_user(elf_kvirt, (const void *)(uintptr_t)kargs->elf_ptr, kargs->elf_size);
+    if (ret < 0) {
+        free_pages(elf_paddr, page_count);
+        kfree(kargs);
+        return ret;
+    }
+
+    uint8_t *elf_bytes = (uint8_t *)elf_kvirt;
+    if (!(elf_bytes[0] == 0x7F && elf_bytes[1] == 'E' && elf_bytes[2] == 'L' &&
+          elf_bytes[3] == 'F')) {
+        pr_err("exec: bad magic %02x %02x %02x %02x", elf_bytes[0], elf_bytes[1], elf_bytes[2],
+               elf_bytes[3]);
+    }
+
+    uint32_t cap_count = kargs->cap_count;
+    if (cap_count > ABI_EXEC_MAX_CAPS) {
+        cap_count = ABI_EXEC_MAX_CAPS;
+    }
+
+    struct spawn_inherit_cap inherit_caps[ABI_EXEC_MAX_CAPS];
+    for (uint32_t i = 0; i < cap_count; i++) {
+        inherit_caps[i].src          = (cap_handle_t)kargs->caps[i].src;
+        inherit_caps[i].rights       = kargs->caps[i].rights;
+        inherit_caps[i].expected_dst = (cap_handle_t)kargs->caps[i].dst_hint;
+    }
+
+    int argc = (int)kargs->argc;
+    if (argc < 0) {
+        argc = 0;
+    }
+    if (argc > ABI_EXEC_MAX_ARGS) {
+        argc = ABI_EXEC_MAX_ARGS;
+    }
+
+    pid_t pid = process_spawn_elf_ex_with_args(kargs->name, elf_paddr, kargs->elf_size,
+                                               inherit_caps, cap_count, argc, kargs->argv);
+    free_pages(elf_paddr, page_count);
+    kfree(kargs);
+
+    if (pid == PID_INVALID) {
+        return -EINVAL;
+    }
+    return (int32_t)pid;
+}
+
 /* SYS_SPAWN: ebx=args */
 static int32_t sys_spawn(const uint32_t *args) {
     struct user_spawn_args *user_args = (struct user_spawn_args *)(uintptr_t)args[0];
@@ -120,93 +201,6 @@ static int32_t sys_spawn(const uint32_t *args) {
     }
 
     pid_t pid = process_spawn_module_ex(kargs.name, mod_addr, mod_size, inherit_caps, cap_count);
-
-    if (pid == PID_INVALID) {
-        return -ENOMEM;
-    }
-    return (int32_t)pid;
-}
-
-/* SYS_EXEC: ebx=exec_args* */
-static int32_t sys_exec(const uint32_t *args) {
-    struct abi_exec_args *user_args = (struct abi_exec_args *)(uintptr_t)args[0];
-
-    /* 在堆上分配,避免栈溢出(struct abi_exec_args 约 4KB) */
-    struct abi_exec_args *kargs = kmalloc(sizeof(struct abi_exec_args));
-    if (!kargs) {
-        return -ENOMEM;
-    }
-
-    /* 从用户空间拷贝参数 */
-    int ret = copy_from_user(kargs, user_args, sizeof(*kargs));
-    if (ret < 0) {
-        kfree(kargs);
-        return ret;
-    }
-
-    /* 确保路径和参数以 null 结尾 */
-    kargs->path[ABI_EXEC_PATH_MAX - 1] = '\0';
-    if (kargs->argc < 0 || kargs->argc > ABI_EXEC_MAX_ARGS) {
-        kfree(kargs);
-        return -EINVAL;
-    }
-    for (int i = 0; i < kargs->argc; i++) {
-        kargs->argv[i][ABI_EXEC_MAX_ARG_LEN - 1] = '\0';
-    }
-
-    /* 从文件系统加载 ELF */
-    void    *elf_data = NULL;
-    uint32_t elf_size = 0;
-    ret               = vfs_load_file(kargs->path, &elf_data, &elf_size);
-    if (ret < 0) {
-        kfree(kargs);
-        return ret;
-    }
-
-    /*
-     * vfs_load_file 返回内核虚拟地址(kmalloc)
-     * process_load_elf 期望物理地址
-     * 内核直接映射: vaddr 0xC0000000+ -> paddr 0x0+
-     */
-    void *elf_paddr = (void *)((uintptr_t)elf_data - 0xC0000000);
-
-    /* 从路径提取程序名(最后一个 / 之后的部分) */
-    const char *name = kargs->path;
-    for (const char *p = kargs->path; *p; p++) {
-        if (*p == '/') {
-            name = p + 1;
-        }
-    }
-
-    /* 如果有 .elf 后缀则去掉 */
-    char name_buf[32];
-    int  name_len = 0;
-    while (name[name_len] && name[name_len] != '.' && name_len < 31) {
-        name_buf[name_len] = name[name_len];
-        name_len++;
-    }
-    name_buf[name_len] = '\0';
-
-    /* 构建 capability 继承列表 */
-    uint32_t cap_count = kargs->cap_count;
-    if (cap_count > ABI_EXEC_MAX_CAPS) {
-        cap_count = ABI_EXEC_MAX_CAPS;
-    }
-
-    struct spawn_inherit_cap inherit_caps[ABI_EXEC_MAX_CAPS];
-    for (uint32_t i = 0; i < cap_count; i++) {
-        inherit_caps[i].src          = (cap_handle_t)kargs->caps[i].src;
-        inherit_caps[i].rights       = kargs->caps[i].rights;
-        inherit_caps[i].expected_dst = (cap_handle_t)kargs->caps[i].dst_hint;
-    }
-
-    /* 创建进程(带 argv 和 caps),使用物理地址 */
-    pid_t pid = process_spawn_elf_ex_with_args(name_buf, elf_paddr, elf_size, inherit_caps,
-                                               cap_count, kargs->argc, kargs->argv);
-
-    /* 释放资源 */
-    kfree(elf_data);
-    kfree(kargs);
 
     if (pid == PID_INVALID) {
         return -ENOMEM;
@@ -329,9 +323,6 @@ static int32_t sys_proclist(const uint32_t *args) {
     return (int32_t)written;
 }
 
-/**
- * 注册进程系统调用
- */
 void sys_process_init(void) {
     syscall_register(SYS_EXIT, sys_exit, 1, "exit");
     syscall_register(SYS_SPAWN, sys_spawn, 1, "spawn");

@@ -3,9 +3,10 @@
  * @brief 显示文件内容
  */
 
+#include <d/protocol/vfs.h>
 #include <stdio.h>
+#include <vfs_client.h>
 #include <xnix/syscall.h>
-#include <xnix/udm/vfs.h>
 
 #define READ_BUF_SIZE 256
 
@@ -17,7 +18,7 @@ int main(int argc, char **argv) {
 
     const char *path = argv[1];
 
-    int fd = sys_open(path, VFS_O_RDONLY);
+    int fd = vfs_open(path, VFS_O_RDONLY);
     if (fd < 0) {
         printf("cat: cannot open '%s': error %d\n", path, fd);
         return 1;
@@ -25,16 +26,16 @@ int main(int argc, char **argv) {
 
     char buf[READ_BUF_SIZE];
     int  n;
-    while ((n = sys_read(fd, buf, sizeof(buf))) > 0) {
+    while ((n = vfs_read(fd, buf, sizeof(buf))) > 0) {
         sys_write(1, buf, n); /* 直接输出原始字节 */
     }
 
     if (n < 0) {
         printf("cat: read error: %d\n", n);
-        sys_close(fd);
+        vfs_close(fd);
         return 1;
     }
 
-    sys_close(fd);
+    vfs_close(fd);
     return 0;
 }

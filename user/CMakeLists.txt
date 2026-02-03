@@ -15,7 +15,7 @@
 # 通用编译选项
 set(USER_C_FLAGS
         -m32 -march=i386
-        -ffreestanding -nostdlib -fno-builtin -fno-stack-protector
+        -ffreestanding -nostdlib -nostdinc -fno-builtin -fno-stack-protector
         -Wall -Wextra
         -g
 )
@@ -35,9 +35,9 @@ add_subdirectory(tplibs)
 add_subdirectory(libs)
 
 # ============================================
-# UDM 驱动
+# Server 模块 (原 UDM 驱动)
 # ============================================
-add_subdirectory(drivers)
+add_subdirectory(servers)
 
 # ============================================
 # 应用程序
@@ -66,6 +66,7 @@ function(parse_service_conf FILE_PATH OUT_PREFIX)
     set(${OUT_PREFIX}_MOUNT "" PARENT_SCOPE)
     set(${OUT_PREFIX}_RESPAWN FALSE PARENT_SCOPE)
     set(${OUT_PREFIX}_PATH "" PARENT_SCOPE)
+    set(${OUT_PREFIX}_NO_READY_FILE FALSE PARENT_SCOPE)
 
     foreach (LINE ${LINES})
         string(REGEX MATCH "^[ \t]*#" IS_COMMENT "${LINE}")
@@ -93,6 +94,8 @@ function(parse_service_conf FILE_PATH OUT_PREFIX)
                 set(${OUT_PREFIX}_MOUNT "${VALUE}" PARENT_SCOPE)
             elseif (KEY STREQUAL "respawn" AND VALUE STREQUAL "true")
                 set(${OUT_PREFIX}_RESPAWN TRUE PARENT_SCOPE)
+            elseif (KEY STREQUAL "no_ready_file" AND VALUE STREQUAL "true")
+                set(${OUT_PREFIX}_NO_READY_FILE TRUE PARENT_SCOPE)
             elseif (KEY STREQUAL "path")
                 set(${OUT_PREFIX}_PATH "${VALUE}" PARENT_SCOPE)
             endif ()
@@ -104,29 +107,30 @@ endfunction()
 set(CORE_SERVICES "")
 set(USER_SERVICES "")
 
-# 扫描驱动
-foreach (DRIVER ${DRIVER_NAMES})
-    set(SVC_CONF "${CMAKE_CURRENT_SOURCE_DIR}/drivers/${DRIVER}/service.conf")
+# 扫描 Server
+foreach (SERVER ${SERVER_NAMES})
+    set(SVC_CONF "${CMAKE_CURRENT_SOURCE_DIR}/servers/${SERVER}/service.conf")
     parse_service_conf("${SVC_CONF}" "SVC")
 
     if (SVC_CORE)
-        list(APPEND CORE_SERVICES "${DRIVER}")
-        set(SVC_${DRIVER}_CORE TRUE CACHE INTERNAL "")
+        list(APPEND CORE_SERVICES "${SERVER}")
+        set(SVC_${SERVER}_CORE TRUE CACHE INTERNAL "")
     else ()
-        list(APPEND USER_SERVICES "${DRIVER}")
-        set(SVC_${DRIVER}_CORE FALSE CACHE INTERNAL "")
+        list(APPEND USER_SERVICES "${SERVER}")
+        set(SVC_${SERVER}_CORE FALSE CACHE INTERNAL "")
     endif ()
 
-    set(SVC_${DRIVER}_TYPE "driver" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_AFTER "${SVC_AFTER}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_CAPS "${SVC_CAPS}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_MOUNT "${SVC_MOUNT}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_RESPAWN "${SVC_RESPAWN}" CACHE INTERNAL "")
+    set(SVC_${SERVER}_TYPE "server" CACHE INTERNAL "")
+    set(SVC_${SERVER}_AFTER "${SVC_AFTER}" CACHE INTERNAL "")
+    set(SVC_${SERVER}_CAPS "${SVC_CAPS}" CACHE INTERNAL "")
+    set(SVC_${SERVER}_MOUNT "${SVC_MOUNT}" CACHE INTERNAL "")
+    set(SVC_${SERVER}_RESPAWN "${SVC_RESPAWN}" CACHE INTERNAL "")
+    set(SVC_${SERVER}_NO_READY_FILE "${SVC_NO_READY_FILE}" CACHE INTERNAL "")
     # 路径：优先用 service.conf 指定的，否则默认
     if (SVC_PATH)
-        set(SVC_${DRIVER}_PATH "${SVC_PATH}" CACHE INTERNAL "")
+        set(SVC_${SERVER}_PATH "${SVC_PATH}" CACHE INTERNAL "")
     else ()
-        set(SVC_${DRIVER}_PATH "/sys/drivers/${DRIVER}.elf" CACHE INTERNAL "")
+        set(SVC_${SERVER}_PATH "/sys/drivers/${SERVER}.elf" CACHE INTERNAL "")
     endif ()
 endforeach ()
 
@@ -150,6 +154,7 @@ foreach (APP ${APP_NAMES})
         set(SVC_${APP}_CAPS "${SVC_CAPS}" CACHE INTERNAL "")
         set(SVC_${APP}_MOUNT "${SVC_MOUNT}" CACHE INTERNAL "")
         set(SVC_${APP}_RESPAWN "${SVC_RESPAWN}" CACHE INTERNAL "")
+        set(SVC_${APP}_NO_READY_FILE "${SVC_NO_READY_FILE}" CACHE INTERNAL "")
         # 路径：优先用 service.conf 指定的，否则默认
         if (SVC_PATH)
             set(SVC_${APP}_PATH "${SVC_PATH}" CACHE INTERNAL "")
@@ -272,6 +277,9 @@ foreach (SVC ${CORE_SERVICES})
     if (SVC_${SVC}_MOUNT)
         string(APPEND CORE_CONF "mount = ${SVC_${SVC}_MOUNT}\n")
     endif ()
+    if (SVC_${SVC}_NO_READY_FILE)
+        string(APPEND CORE_CONF "no_ready_file = true\n")
+    endif ()
     string(APPEND CORE_CONF "\n")
 endforeach ()
 
@@ -314,6 +322,9 @@ foreach (SVC ${USER_SERVICES})
     endif ()
     if (SVC_${SVC}_RESPAWN)
         string(APPEND USER_CONF "respawn = true\n")
+    endif ()
+    if (SVC_${SVC}_NO_READY_FILE)
+        string(APPEND USER_CONF "no_ready_file = true\n")
     endif ()
     string(APPEND USER_CONF "\n")
 endforeach ()

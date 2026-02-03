@@ -55,7 +55,6 @@ extern void sys_thread_init(void);
 extern void sys_sync_init(void);
 extern void sys_irq_init(void);
 extern void sys_input_init(void);
-extern void sys_vfs_init(void);
 extern void sys_mm_init(void);
 extern void sys_fb_init(void);
 extern void sys_module_init(void);
@@ -73,7 +72,6 @@ void syscall_init(void) {
     sys_io_init();
     sys_irq_init();
     sys_input_init();
-    sys_vfs_init();
     sys_mm_init();
     sys_fb_init();
     sys_module_init();

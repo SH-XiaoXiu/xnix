@@ -44,6 +44,7 @@ foreach (LIB_DIR ${LIB_DIRS})
     set(LIB_NAME "")
     set(LIB_DEPS "")
     set(LIB_KERNEL OFF)
+    set(LIB_EXTRA_INCLUDES "")
     include(${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/lib.cmake)
 
     if (NOT LIB_NAME)
@@ -66,6 +67,7 @@ foreach (LIB_DIR ${LIB_DIRS})
     set(_LIB_${LIB_NAME}_DIR ${LIB_DIR})
     set(_LIB_${LIB_NAME}_DEPS ${LIB_DEPS})
     set(_LIB_${LIB_NAME}_KERNEL ${LIB_KERNEL})
+    set(_LIB_${LIB_NAME}_EXTRA_INCLUDES ${LIB_EXTRA_INCLUDES})
     list(APPEND _ALL_LIBS ${LIB_NAME})
 endforeach ()
 
@@ -102,6 +104,7 @@ foreach (LIB_NAME ${_SORTED_LIBS})
     set(LIB_DIR ${_LIB_${LIB_NAME}_DIR})
     set(LIB_DEPS ${_LIB_${LIB_NAME}_DEPS})
     set(LIB_KERNEL ${_LIB_${LIB_NAME}_KERNEL})
+    set(LIB_EXTRA_INCLUDES ${_LIB_${LIB_NAME}_EXTRA_INCLUDES})
 
     message(STATUS "Found lib: ${LIB_NAME} (deps: ${LIB_DEPS})")
 
@@ -127,6 +130,16 @@ foreach (LIB_NAME ${_SORTED_LIBS})
         if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${DEP_DIR}/include)
             target_include_directories(${LIB_NAME} PUBLIC
                     ${CMAKE_CURRENT_SOURCE_DIR}/${DEP_DIR}/include
+            )
+        endif ()
+    endforeach ()
+
+    # 添加额外的 include 目录（仅头文件依赖，不建立链接依赖）
+    foreach (EXTRA_INC ${LIB_EXTRA_INCLUDES})
+        set(EXTRA_DIR ${_LIB_${EXTRA_INC}_DIR})
+        if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${EXTRA_DIR}/include)
+            target_include_directories(${LIB_NAME} PUBLIC
+                    ${CMAKE_CURRENT_SOURCE_DIR}/${EXTRA_DIR}/include
             )
         endif ()
     endforeach ()

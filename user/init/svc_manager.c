@@ -7,12 +7,15 @@
 
 #include "ini_parser.h"
 
+#include <d/protocol/vfs.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <vfs_client.h>
 #include <xnix/abi/capability.h>
 #include <xnix/abi/process.h>
-#include <xnix/udm/vfs.h>
+#include <xnix/ipc.h>
+#include <xnix/syscall.h>
 
 /* 全局 tick 计数器 */
 static uint32_t g_ticks = 0;
@@ -71,14 +74,14 @@ static int cap_def_create(struct svc_cap_def *def) {
 
     int h = -1;
     switch (def->type) {
-        case SVC_CAP_TYPE_ENDPOINT:
-            h = sys_endpoint_create();
-            break;
-        case SVC_CAP_TYPE_IOPORT:
-            h = sys_ioport_create_range(def->ioport_start, def->ioport_end, def->rights);
-            break;
-        default:
-            return -1;
+    case SVC_CAP_TYPE_ENDPOINT:
+        h = sys_endpoint_create();
+        break;
+    case SVC_CAP_TYPE_IOPORT:
+        h = sys_ioport_create_range(def->ioport_start, def->ioport_end, def->rights);
+        break;
+    default:
+        return -1;
     }
 
     if (h < 0) {
@@ -112,7 +115,7 @@ void svc_manager_init(struct svc_manager *mgr) {
     memset(mgr, 0, sizeof(*mgr));
 
     /* 确保 /run 目录存在 */
-    sys_mkdir(SVC_READY_DIR);
+    vfs_mkdir(SVC_READY_DIR);
 
     struct svc_cap_def *cap = NULL;
 
@@ -423,8 +426,12 @@ static bool ini_handler(const char *section, const char *key, const char *value,
                     cfg->delay_ms = cfg->delay_ms * 10 + (*s - '0');
                 }
             }
+        } else if (strcmp(key, "builtin") == 0) {
+            cfg->builtin = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
         } else if (strcmp(key, "respawn") == 0) {
             cfg->respawn = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+        } else if (strcmp(key, "no_ready_file") == 0) {
+            cfg->no_ready_file = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
         } else if (strcmp(key, "caps") == 0) {
             cfg->cap_count = svc_parse_caps(mgr, value, cfg->caps, SVC_CAPS_MAX);
         } else if (strcmp(key, "mount") == 0) {
@@ -477,8 +484,8 @@ static bool ini_handler(const char *section, const char *key, const char *value,
 
 int svc_load_config(struct svc_manager *mgr, const char *path) {
     struct ini_ctx ctx = {
-        .mgr     = mgr,
-        .current = NULL,
+        .mgr         = mgr,
+        .current     = NULL,
         .current_cap = NULL,
     };
 
@@ -488,14 +495,23 @@ int svc_load_config(struct svc_manager *mgr, const char *path) {
     }
 
     svc_resolve_caps(mgr);
+
+    /* 初始化 builtin 服务的状态为 RUNNING */
+    for (int i = 0; i < mgr->count; i++) {
+        if (mgr->configs[i].builtin) {
+            mgr->runtime[i].state = SVC_STATE_RUNNING;
+            mgr->runtime[i].ready = true;
+        }
+    }
+
     printf("Loaded %d services from %s\n", mgr->count, path);
     return 0;
 }
 
 int svc_load_config_string(struct svc_manager *mgr, const char *content) {
     struct ini_ctx ctx = {
-        .mgr     = mgr,
-        .current = NULL,
+        .mgr         = mgr,
+        .current     = NULL,
         .current_cap = NULL,
     };
 
@@ -505,6 +521,15 @@ int svc_load_config_string(struct svc_manager *mgr, const char *content) {
     }
 
     svc_resolve_caps(mgr);
+
+    /* 初始化 builtin 服务的状态为 RUNNING */
+    for (int i = 0; i < mgr->count; i++) {
+        if (mgr->configs[i].builtin) {
+            mgr->runtime[i].state = SVC_STATE_RUNNING;
+            mgr->runtime[i].ready = true;
+        }
+    }
+
     printf("Loaded %d services from embedded config\n", mgr->count);
     return 0;
 }
@@ -522,8 +547,8 @@ bool svc_check_ready_file(const char *name) {
     char path[64];
     snprintf(path, sizeof(path), "%s/%s.ready", SVC_READY_DIR, name);
 
-    struct vfs_info info;
-    return sys_info(path, &info) == 0;
+    struct vfs_stat st;
+    return vfs_stat(path, &st) == 0;
 }
 
 bool svc_can_start(struct svc_manager *mgr, int idx) {
@@ -554,8 +579,8 @@ bool svc_can_start(struct svc_manager *mgr, int idx) {
 
     /* 检查 wait_path */
     if (cfg->wait_path[0]) {
-        struct vfs_info info;
-        if (sys_info(cfg->wait_path, &info) < 0) {
+        struct vfs_stat st;
+        if (vfs_stat(cfg->wait_path, &st) < 0) {
             return false;
         }
     }
@@ -564,17 +589,32 @@ bool svc_can_start(struct svc_manager *mgr, int idx) {
 }
 
 /**
- * 等待服务就绪(用于核心服务的同步启动)
+ * 探测文件系统驱动是否就绪(通过发送 IPC 探测消息)
  */
-static bool wait_for_ready(const char *name, int timeout_ms) {
-    int waited = 0;
-    while (waited < timeout_ms) {
-        if (svc_check_ready_file(name)) {
+static bool probe_fs_ready(uint32_t ep, uint32_t timeout_ms) {
+    uint32_t       elapsed        = 0;
+    const uint32_t probe_interval = 10;
+
+    while (elapsed < timeout_ms) {
+        struct ipc_message msg   = {0};
+        struct ipc_message reply = {0};
+
+        /* 发送 STAT 探测消息(对根目录) */
+        msg.regs.data[0]      = UDM_VFS_INFO;
+        const char *test_path = ".";
+        msg.buffer.data       = (void *)test_path;
+        msg.buffer.size       = 2;
+
+        int ret = sys_ipc_call(ep, &msg, &reply, 100);
+        if (ret == 0) {
+            /* 驱动响应了(即使是错误),说明已就绪 */
             return true;
         }
-        msleep(10);
-        waited += 10;
+
+        msleep(probe_interval);
+        elapsed += probe_interval;
     }
+
     return false;
 }
 
@@ -587,7 +627,7 @@ static int do_mount(struct svc_config *cfg) {
     }
 
     printf("Mounting %s on %s (ep=%u)\n", cfg->name, cfg->mount, cfg->mount_ep);
-    int ret = sys_mount(cfg->mount, cfg->mount_ep);
+    int ret = vfs_mount(cfg->mount, cfg->mount_ep);
     if (ret < 0) {
         printf("Failed to mount %s: %d\n", cfg->mount, ret);
     }
@@ -661,25 +701,26 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     printf("%s started (pid=%d)\n", cfg->name, pid);
     rt->state = SVC_STATE_RUNNING;
     rt->pid   = pid;
-    rt->ready = false;
+
+    if (cfg->no_ready_file) {
+        rt->ready = true;
+    } else {
+        rt->ready = false;
+    }
 
     /* 核心服务(有 mount 的)需要同步等待就绪并挂载 */
     if (cfg->mount[0]) {
-        /* 根挂载点特殊处理:直接挂载(因为还没有文件系统放 ready 文件) */
-        if (strcmp(cfg->mount, "/") == 0) {
-            /* 等待一小段时间让服务初始化 */
-            msleep(50);
+        /* 文件系统驱动不能使用 VFS 客户端(因为它们自己就是文件系统),
+         * 所以通过 IPC 探测其就绪状态 */
+        printf("Probing %s readiness (ep=%u)...\n", cfg->name, cfg->mount_ep);
+        if (probe_fs_ready(cfg->mount_ep, 5000)) {
             do_mount(cfg);
             rt->ready = true;
+            printf("%s mounted on %s\n", cfg->name, cfg->mount);
         } else {
-            /* 非根挂载:等待 ready 文件 */
-            printf("Waiting for %s to be ready...\n", cfg->name);
-            if (wait_for_ready(cfg->name, 5000)) {
-                rt->ready = true;
-                do_mount(cfg);
-            } else {
-                printf("Timeout waiting for %s\n", cfg->name);
-            }
+            printf("Timeout: %s did not respond to probes\n", cfg->name);
+            rt->state = SVC_STATE_FAILED;
+            return pid;
         }
     }
 
@@ -709,6 +750,11 @@ void svc_tick(struct svc_manager *mgr) {
         struct svc_runtime *rt  = &mgr->runtime[i];
 
         if (rt->state != SVC_STATE_PENDING) {
+            continue;
+        }
+
+        /* 跳过内置服务(已由 init 启动) */
+        if (cfg->builtin) {
             continue;
         }
 
@@ -748,7 +794,7 @@ void svc_handle_exit(struct svc_manager *mgr, int pid, int status) {
             /* 删除 ready 文件 */
             char ready_path[64];
             snprintf(ready_path, sizeof(ready_path), "%s/%s.ready", SVC_READY_DIR, cfg->name);
-            sys_del(ready_path);
+            vfs_delete(ready_path);
 
             /* 检查是否需要重启 */
             if (cfg->respawn) {

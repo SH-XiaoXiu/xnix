@@ -5,10 +5,11 @@
 
 #include "ini_parser.h"
 
+#include <d/protocol/vfs.h>
 #include <stdio.h>
 #include <string.h>
+#include <vfs_client.h>
 #include <xnix/syscall.h>
-#include <xnix/udm/vfs.h>
 
 /**
  * 跳过行首空白字符
@@ -133,39 +134,22 @@ int ini_parse_file(const char *path, ini_handler_t handler, void *ctx) {
     }
 
     /* 打开文件 */
-    int fd = sys_open(path, VFS_O_RDONLY);
+    int fd = vfs_open(path, 0); /* VFS_O_RDONLY */
     if (fd < 0) {
         return fd;
     }
 
-    /* 获取文件大小 */
-    struct vfs_info info;
-    int             ret = sys_finfo(fd, &info);
-    if (ret < 0) {
-        sys_close(fd);
-        return ret;
-    }
-
-    if (info.size == 0) {
-        sys_close(fd);
-        return 0;
-    }
-
-    /* 限制最大文件大小为 4KB */
-    size_t file_size = (size_t)info.size;
-    if (file_size > 4 * 1024) {
-        sys_close(fd);
-        return -1;
-    }
-
-    /* 读取文件内容 */
+    /* 读取文件内容 (最大 4KB) */
     static char file_buf[4 * 1024];
-    int         bytes_read = sys_read(fd, file_buf, file_size);
-    sys_close(fd);
+    int         bytes_read = vfs_read(fd, file_buf, sizeof(file_buf));
+    vfs_close(fd);
 
     if (bytes_read < 0) {
-        return (int)bytes_read;
+        return bytes_read;
     }
 
+    if (bytes_read == 0) {
+        return 0;
+    }
     return ini_parse_buffer(file_buf, (size_t)bytes_read, handler, ctx);
 }

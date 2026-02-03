@@ -3,6 +3,7 @@
  * @brief IPC 相关系统调用
  */
 
+#include <kernel/ipc/notification.h>
 #include <kernel/sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/ipc.h>
@@ -32,8 +33,7 @@ static int ipc_msg_copy_in(struct ipc_message **out_kmsg, struct ipc_message *us
     }
     memcpy(kmsg, &umsg, sizeof(*kmsg));
 
-    /* caps 传递暂未实现 */
-    kmsg->caps.count = 0;
+    /* caps 已从用户态拷贝,将在 ipc_copy_msg 中处理 */
 
     if (copy_buffer && umsg.buffer.data && umsg.buffer.size) {
         void *kbuf = kmalloc(umsg.buffer.size);
@@ -85,8 +85,9 @@ static int ipc_msg_copy_out(struct ipc_message *user_msg, const struct ipc_messa
     memcpy(&out.regs, &kmsg->regs, sizeof(out.regs));
     out.buffer.data = user_buf_ptr;
     out.buffer.size = kmsg->buffer.size;
-    out.caps.count  = 0;
-    out.flags       = kmsg->flags;
+    memcpy(&out.caps, &kmsg->caps, sizeof(out.caps)); /* 拷贝传递的 capabilities */
+    out.flags      = kmsg->flags;
+    out.sender_tid = kmsg->sender_tid; /* 拷贝发送者 TID */
 
     return copy_to_user(user_msg, &out, sizeof(out));
 }
@@ -243,6 +244,38 @@ static int32_t sys_ipc_reply(const uint32_t *args) {
     return ret;
 }
 
+/* SYS_IPC_REPLY_TO: ebx=sender_tid, ecx=reply */
+static int32_t sys_ipc_reply_to(const uint32_t *args) {
+    tid_t               sender_tid = (tid_t)args[0];
+    struct ipc_message *user_reply = (struct ipc_message *)(uintptr_t)args[1];
+
+    struct ipc_message *kreply = NULL;
+    int                 ret    = ipc_msg_copy_in(&kreply, user_reply, true);
+    if (ret < 0) {
+        return ret;
+    }
+
+    ret = ipc_reply_to(sender_tid, kreply);
+    ipc_msg_free(kreply);
+    return ret;
+}
+
+/* SYS_NOTIFICATION_CREATE */
+static int32_t sys_notification_create(const uint32_t *args) {
+    (void)args;
+    cap_handle_t h = notification_create();
+    if (h == CAP_HANDLE_INVALID) {
+        return -ENOMEM;
+    }
+    return (int32_t)h;
+}
+
+/* SYS_NOTIFICATION_WAIT: ebx=handle */
+static int32_t sys_notification_wait(const uint32_t *args) {
+    cap_handle_t h = (cap_handle_t)args[0];
+    return (int32_t)notification_wait(h);
+}
+
 /**
  * 注册 IPC 系统调用
  */
@@ -252,4 +285,7 @@ void sys_ipc_init(void) {
     syscall_register(SYS_IPC_RECV, sys_ipc_recv, 3, "ipc_recv");
     syscall_register(SYS_IPC_CALL, sys_ipc_call, 4, "ipc_call");
     syscall_register(SYS_IPC_REPLY, sys_ipc_reply, 1, "ipc_reply");
+    syscall_register(SYS_IPC_REPLY_TO, sys_ipc_reply_to, 2, "ipc_reply_to");
+    syscall_register(SYS_NOTIFICATION_CREATE, sys_notification_create, 0, "notification_create");
+    syscall_register(SYS_NOTIFICATION_WAIT, sys_notification_wait, 1, "notification_wait");
 }

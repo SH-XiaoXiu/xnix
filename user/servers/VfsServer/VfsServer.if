@@ -1,0 +1,15 @@
+interface VfsServer {
+    endpoint vfs_ep = 2;
+
+    /* 挂载文件系统 */
+    op mount(string path, capability fs_ep) -> int;
+
+    /* 打开文件 */
+    op open(string path, int flags) -> int, capability fs_ep;
+
+    /* 读取文件 */
+    op read(int fd, buffer data) -> int;
+
+    /* 写入文件 */
+    op write(int fd, buffer data) -> int;
+}

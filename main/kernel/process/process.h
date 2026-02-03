@@ -18,7 +18,6 @@
 struct cap_table;  /* 前向声明 */
 struct thread;     /* 前向声明 */
 struct page_table; /* 前向声明 */
-struct fd_table;   /* 前向声明 */
 
 /**
  * 同步对象表
@@ -60,12 +59,6 @@ struct process {
 
     /* 同步对象表 */
     struct sync_table *sync_table; /* 用户态线程的互斥锁等同步原语 */
-
-    /* 文件描述符表 */
-    struct fd_table *fd_table;
-
-    /* 当前工作目录 */
-    char cwd[PROCESS_CWD_MAX];
 
     /* 用户堆 */
     uint32_t heap_start;   /* 堆起始地址(ELF 数据段之后,页对齐) */

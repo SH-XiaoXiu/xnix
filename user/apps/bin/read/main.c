@@ -8,10 +8,11 @@
  *   read <file> -c <bytes>   读取前 N 字节
  */
 
+#include <d/protocol/vfs.h>
 #include <stdio.h>
 #include <string.h>
+#include <vfs_client.h>
 #include <xnix/syscall.h>
-#include <xnix/udm/vfs.h>
 
 #define READ_BUF_SIZE 256
 
@@ -53,7 +54,7 @@ int main(int argc, char **argv) {
     }
 
     /* 打开文件 */
-    int fd = sys_open(path, VFS_O_RDONLY);
+    int fd = vfs_open(path, VFS_O_RDONLY);
     if (fd < 0) {
         printf("read: cannot open '%s': error %d\n", path, fd);
         return 1;
@@ -76,7 +77,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        int n = sys_read(fd, buf, to_read);
+        int n = vfs_read(fd, buf, to_read);
         if (n <= 0) {
             break;
         }
@@ -108,6 +109,6 @@ int main(int argc, char **argv) {
         fflush(NULL);
     }
 
-    sys_close(fd);
+    vfs_close(fd);
     return 0;
 }

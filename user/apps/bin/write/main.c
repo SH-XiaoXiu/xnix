@@ -9,10 +9,11 @@
  *   write <file> -a               从标准输入追加
  */
 
+#include <d/protocol/vfs.h>
 #include <stdio.h>
 #include <string.h>
+#include <vfs_client.h>
 #include <xnix/syscall.h>
-#include <xnix/udm/vfs.h>
 
 static void print_usage(void) {
     printf("Usage: write <file> [-a] [content]\n");
@@ -26,14 +27,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    const char *path = argv[1];
-    int append_mode = 0;
-    const char *content = NULL;
-    int content_start = 2;
+    const char *path          = argv[1];
+    int         append_mode   = 0;
+    const char *content       = NULL;
+    int         content_start = 2;
 
     /* 解析参数 */
     if (argc > 2 && strcmp(argv[2], "-a") == 0) {
-        append_mode = 1;
+        append_mode   = 1;
         content_start = 3;
     }
 
@@ -51,7 +52,7 @@ int main(int argc, char **argv) {
     }
 
     /* 打开文件 */
-    int fd = sys_open(path, flags);
+    int fd = vfs_open(path, flags);
     if (fd < 0) {
         printf("write: cannot open '%s': error %d\n", path, fd);
         return 1;
@@ -65,27 +66,27 @@ int main(int argc, char **argv) {
         for (int i = content_start; i < argc; i++) {
             if (i > content_start) {
                 /* 参数之间加空格 */
-                int ret = sys_write2(fd, " ", 1);
+                int ret = vfs_write(fd, " ", 1);
                 if (ret < 0) {
                     printf("write: error writing: %d\n", ret);
-                    sys_close(fd);
+                    vfs_close(fd);
                     return 1;
                 }
                 total_written += ret;
             }
 
             size_t len = strlen(argv[i]);
-            int ret = sys_write2(fd, argv[i], len);
+            int    ret = vfs_write(fd, argv[i], len);
             if (ret < 0) {
                 printf("write: error writing: %d\n", ret);
-                sys_close(fd);
+                vfs_close(fd);
                 return 1;
             }
             total_written += ret;
         }
 
         /* 添加换行符 */
-        int ret = sys_write2(fd, "\n", 1);
+        int ret = vfs_write(fd, "\n", 1);
         if (ret > 0) {
             total_written += ret;
         }
@@ -94,14 +95,14 @@ int main(int argc, char **argv) {
         printf("Enter text (Ctrl+D to finish):\n");
 
         char buf[256];
-        int pos = 0;
+        int  pos = 0;
 
         while (1) {
             int c = getchar();
-            if (c < 0 || c == 4) {  /* EOF 或 Ctrl+D */
+            if (c < 0 || c == 4) { /* EOF 或 Ctrl+D */
                 /* 写入剩余缓冲区 */
                 if (pos > 0) {
-                    int ret = sys_write2(fd, buf, pos);
+                    int ret = vfs_write(fd, buf, pos);
                     if (ret > 0) {
                         total_written += ret;
                     }
@@ -113,10 +114,10 @@ int main(int argc, char **argv) {
 
             /* 缓冲区满或遇到换行,写入 */
             if (pos >= (int)sizeof(buf) - 1 || c == '\n') {
-                int ret = sys_write2(fd, buf, pos);
+                int ret = vfs_write(fd, buf, pos);
                 if (ret < 0) {
                     printf("\nwrite: error writing: %d\n", ret);
-                    sys_close(fd);
+                    vfs_close(fd);
                     return 1;
                 }
                 total_written += ret;
@@ -126,7 +127,7 @@ int main(int argc, char **argv) {
         printf("\n");
     }
 
-    sys_close(fd);
+    vfs_close(fd);
     printf("Wrote %d bytes to %s\n", total_written, path);
     return 0;
 }

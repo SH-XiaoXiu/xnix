@@ -3,17 +3,20 @@
  * @brief VFS 消息分发实现
  */
 
+#include <d/protocol/vfs.h>
+#include <stdio.h>
 #include <string.h>
 #include <vfs/vfs.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
-#include <xnix/udm/protocol.h>
 
 /* 临时缓冲区 */
 #define VFS_BUF_SIZE 4096
 
-static char g_path_buf[VFS_PATH_MAX];
-static char g_data_buf[VFS_BUF_SIZE];
+static char              g_path_buf[VFS_PATH_MAX];
+static char              g_data_buf[VFS_BUF_SIZE];
+static struct vfs_info   g_info_buf;
+static struct vfs_dirent g_dirent_buf;
 
 int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg) {
     if (!ops || !msg) {
@@ -23,8 +26,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
     uint32_t op     = UDM_MSG_OPCODE(msg);
     int      result = -38; /* ENOSYS */
 
-    struct ipc_message reply;
-    memset(&reply, 0, sizeof(reply));
+    struct ipc_message reply = {0};
 
     switch (op) {
     case UDM_VFS_OPEN: {
@@ -98,11 +100,10 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
             memcpy(g_path_buf, msg->buffer.data, msg->buffer.size);
             g_path_buf[msg->buffer.size] = '\0';
-            struct vfs_info info;
-            result = ops->info(ctx, g_path_buf, &info);
+            result                       = ops->info(ctx, g_path_buf, &g_info_buf);
             if (result == 0) {
-                reply.buffer.data = &info;
-                reply.buffer.size = sizeof(info);
+                msg->regs.data[2] = g_info_buf.size;
+                msg->regs.data[3] = g_info_buf.type;
             }
         } else {
             result = -22;
@@ -114,12 +115,11 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         if (!ops->finfo) {
             break;
         }
-        uint32_t        handle = UDM_MSG_ARG(msg, 0);
-        struct vfs_info info;
-        result = ops->finfo(ctx, handle, &info);
+        uint32_t handle = UDM_MSG_ARG(msg, 0);
+        result          = ops->finfo(ctx, handle, &g_info_buf);
         if (result == 0) {
-            reply.buffer.data = &info;
-            reply.buffer.size = sizeof(info);
+            msg->regs.data[2] = g_info_buf.size;
+            msg->regs.data[3] = g_info_buf.type;
         }
         break;
     }
@@ -142,13 +142,12 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         if (!ops->readdir) {
             break;
         }
-        uint32_t          handle = UDM_MSG_ARG(msg, 0);
-        uint32_t          index  = UDM_MSG_ARG(msg, 1);
-        struct vfs_dirent entry;
-        result = ops->readdir(ctx, handle, index, &entry);
+        uint32_t handle = UDM_MSG_ARG(msg, 0);
+        uint32_t index  = UDM_MSG_ARG(msg, 1);
+        result          = ops->readdir(ctx, handle, index, &g_dirent_buf);
         if (result == 0) {
-            reply.buffer.data = &entry;
-            reply.buffer.size = sizeof(entry);
+            reply.buffer.data = &g_dirent_buf;
+            reply.buffer.size = sizeof(g_dirent_buf);
         }
         break;
     }
@@ -219,10 +218,15 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         break;
     }
 
-    /* 发送回复 */
-    reply.regs.data[0] = op;
-    reply.regs.data[1] = (uint32_t)result;
-    sys_ipc_reply(&reply);
+    /* 将回复数据写回 msg,由调用者(框架)发送 */
+    msg->regs.data[0] = op;
+    msg->regs.data[1] = (uint32_t)result;
+
+    /* buffer 指针(如果有的话) */
+    if (reply.buffer.data && reply.buffer.size > 0) {
+        msg->buffer.data = reply.buffer.data;
+        msg->buffer.size = reply.buffer.size;
+    }
 
     return 0;
 }

@@ -33,6 +33,7 @@ struct ipc_message {
     struct ipc_msg_buffer buffer;
     struct ipc_msg_caps   caps;
     uint32_t              flags;
+    tid_t                 sender_tid; /* 发送者 TID (receive 时填充, 用于延迟回复) */
 };
 
 /* 消息标志 */
@@ -96,6 +97,15 @@ int ipc_call(cap_handle_t ep_handle, struct ipc_message *request, struct ipc_mes
  * @return 0 成功, 负数失败
  */
 int ipc_reply(struct ipc_message *reply);
+
+/**
+ * 延迟回复: 回复指定的发送者
+ *
+ * @param sender_tid 发送者的 TID (从 msg->sender_tid 获取)
+ * @param reply      回复消息
+ * @return 0 成功, 负数失败
+ */
+int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply);
 
 /*
  * 异步 IPC

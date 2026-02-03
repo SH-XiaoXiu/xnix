@@ -50,6 +50,11 @@ __attribute__((weak)) uint32_t cap_table_capacity(struct cap_table *table) {
 
 __attribute__((weak)) cap_handle_t cap_alloc(struct process *proc, cap_type_t type, void *object,
                                              cap_rights_t rights) {
+    return cap_alloc_at(proc, type, object, rights, CAP_HANDLE_INVALID);
+}
+
+__attribute__((weak)) cap_handle_t cap_alloc_at(struct process *proc, cap_type_t type, void *object,
+                                                cap_rights_t rights, cap_handle_t hint_slot) {
     if (!proc || !proc->cap_table || !object) {
         return CAP_HANDLE_INVALID;
     }
@@ -61,10 +66,21 @@ __attribute__((weak)) cap_handle_t cap_alloc(struct process *proc, cap_type_t ty
     spin_lock(&table->lock);
 
     cap_handle_t handle = CAP_HANDLE_INVALID;
-    for (uint32_t i = 0; i < CFG_CAP_TABLE_SIZE; i++) {
-        if (table->caps[i].type == CAP_TYPE_NONE) {
-            handle = i;
-            break;
+
+    /* 优先尝试使用 hint_slot */
+    if (hint_slot != CAP_HANDLE_INVALID && hint_slot < CFG_CAP_TABLE_SIZE) {
+        if (table->caps[hint_slot].type == CAP_TYPE_NONE) {
+            handle = hint_slot;
+        }
+    }
+
+    /* 如果 hint 不可用,查找第一个空闲槽 */
+    if (handle == CAP_HANDLE_INVALID) {
+        for (uint32_t i = 0; i < CFG_CAP_TABLE_SIZE; i++) {
+            if (table->caps[i].type == CAP_TYPE_NONE) {
+                handle = i;
+                break;
+            }
         }
     }
 

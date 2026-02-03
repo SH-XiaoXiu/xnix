@@ -32,7 +32,7 @@ set(ROOTFS_FILES "")
 
 # 非核心驱动/应用 -> rootfs
 foreach (SVC ${USER_SERVICES})
-    if (SVC_${SVC}_TYPE STREQUAL "driver")
+    if (SVC_${SVC}_TYPE STREQUAL "driver" OR SVC_${SVC}_TYPE STREQUAL "server")
         list(APPEND ROOTFS_FILES "${CMAKE_BINARY_DIR}/${SVC}.elf:drivers/${SVC}.elf")
     elseif (SVC_${SVC}_TYPE STREQUAL "app")
         list(APPEND ROOTFS_FILES "${CMAKE_BINARY_DIR}/${SVC}.elf:bin/${SVC}.elf")
@@ -141,7 +141,7 @@ set(OPT_COMMANDS
 )
 
 foreach (SVC ${USER_SERVICES})
-    if (SVC_${SVC}_TYPE STREQUAL "driver")
+    if (SVC_${SVC}_TYPE STREQUAL "driver" OR SVC_${SVC}_TYPE STREQUAL "server")
         list(APPEND OPT_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_BINARY_DIR}/${SVC}.elf ${OPTIONAL_DIR}/drivers/${SVC}.elf

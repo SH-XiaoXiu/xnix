@@ -46,9 +46,6 @@ static void spawn_setup_parent(struct process *proc, struct process *creator) {
         creator->children  = proc;
         spin_unlock(&process_list_lock);
         cpu_irq_restore(flags);
-
-        strncpy(proc->cwd, creator->cwd, PROCESS_CWD_MAX - 1);
-        proc->cwd[PROCESS_CWD_MAX - 1] = '\0';
     }
 }
 
@@ -60,16 +57,17 @@ static int spawn_inherit_caps(struct process *proc, struct process *creator, con
                               const struct spawn_inherit_cap *inherit_caps,
                               uint32_t                        inherit_count) {
     for (uint32_t i = 0; i < inherit_count; i++) {
-        cap_handle_t dup =
-            cap_duplicate_to(creator, inherit_caps[i].src, proc, inherit_caps[i].rights);
+        cap_handle_t dup = cap_duplicate_to(creator, inherit_caps[i].src, proc,
+                                            inherit_caps[i].rights, inherit_caps[i].expected_dst);
         if (dup == CAP_HANDLE_INVALID) {
-            pr_err("Failed to inherit capability for %s", name ? name : "?");
-            return -1;
+            kprintf("[spawn] Failed to inherit cap %d (src=%u, hint=%u)\n", i, inherit_caps[i].src,
+                    inherit_caps[i].expected_dst);
+            continue;
         }
         if (inherit_caps[i].expected_dst != CAP_HANDLE_INVALID &&
             dup != inherit_caps[i].expected_dst) {
-            pr_warn("Spawn: inherited handle mismatch (%u -> %u)", inherit_caps[i].expected_dst,
-                    dup);
+            pr_warn("Spawn: inherited handle mismatch (expected %u, got %u)",
+                    inherit_caps[i].expected_dst, dup);
         }
     }
     return 0;
@@ -207,8 +205,8 @@ static void user_thread_entry_with_args(void *arg) {
  * 内部核心 spawn 函数
  */
 static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
-                            const struct spawn_inherit_cap *inherit_caps, uint32_t inherit_count,
-                            int argc, char argv[][ABI_EXEC_MAX_ARG_LEN]) {
+                        const struct spawn_inherit_cap *inherit_caps, uint32_t inherit_count,
+                        int argc, char argv[][ABI_EXEC_MAX_ARG_LEN]) {
     struct process *proc = (struct process *)process_create(name);
     if (!proc) {
         pr_err("Failed to create process");

@@ -71,7 +71,7 @@ foreach (BIN_DIR ${BIN_DIRS})
     target_include_directories(bin_${BIN_ELF} PRIVATE
             ${CMAKE_SOURCE_DIR}/user/libs/libc/include
             ${CMAKE_SOURCE_DIR}/user/libs/libpthread/include
-            ${CMAKE_SOURCE_DIR}/user/libs/libudm/include
+            ${CMAKE_SOURCE_DIR}/user/libs/libd/include
             ${CMAKE_SOURCE_DIR}/main/include
             ${CMAKE_BINARY_DIR}/include
     )

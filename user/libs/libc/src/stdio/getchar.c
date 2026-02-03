@@ -4,10 +4,12 @@
  */
 
 #include <stdio.h>
-#include <xnix/syscall.h>
+
+/* 从 console.c 提供的 IPC 封装 */
+extern int console_getc(void);
 
 int getchar(void) {
-    return sys_input_read();
+    return console_getc();
 }
 
 char *gets_s(char *buf, size_t size) {

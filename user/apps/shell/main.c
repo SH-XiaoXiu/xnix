@@ -6,15 +6,32 @@
 #include "acolor.h"
 #include "path.h"
 
+#include <d/protocol/vfs.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <vfs_client.h>
 #include <xnix/abi/process.h>
+#include <xnix/ipc.h>
+#include <xnix/ipc/console.h>
 #include <xnix/syscall.h>
-#include <xnix/udm/vfs.h>
 
-#define MAX_LINE 256
-#define MAX_ARGS 16
+#define MAX_LINE     256
+#define MAX_ARGS     16
+#define KBD_ENDPOINT 3 /* kbd 驱动的 IPC endpoint */
+
+/**
+ * 通过 IPC 通知 kbd 驱动设置前台进程
+ */
+static void shell_set_foreground(pid_t pid) {
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.regs.data[0] = CONSOLE_OP_SET_FOREGROUND;
+    msg.regs.data[1] = (uint32_t)pid;
+
+    /* 发送给 kbd 驱动 */
+    sys_ipc_send(KBD_ENDPOINT, &msg, 100);
+}
 
 /* 内置命令 */
 static void cmd_help(int argc, char **argv);
@@ -135,8 +152,18 @@ static void run_external(const char *path, int argc, char **argv, int background
         exec_args.argv[i][len] = '\0';
     }
 
+    /* 传递 vfsd capability */
+    exec_args.cap_count        = 1;
+    exec_args.caps[0].src      = 2; /* shell 的 handle 2 是 vfsd */
+    exec_args.caps[0].rights   = 0x7;
+    exec_args.caps[0].dst_hint = 2; /* 子进程也用 handle 2 */
+
     /* 执行 */
     int pid = sys_exec(&exec_args);
+    if (pid > 0) {
+        /* 复制CWD到子进程 */
+        vfs_copy_cwd_to_child(pid);
+    }
     if (pid < 0) {
         const char *err_msg;
         switch (pid) {
@@ -164,14 +191,14 @@ static void run_external(const char *path, int argc, char **argv, int background
     }
 
     /* 设置为前台进程 */
-    sys_set_foreground(pid);
+    shell_set_foreground(pid);
 
     /* 等待进程退出 */
     int status;
     int ret = sys_waitpid(pid, &status, 0);
 
     /* 清除前台进程 */
-    sys_set_foreground(0);
+    shell_set_foreground(0);
 
     if (ret > 0 && status != 0) {
         printf("Process %d exited with status %d\n", pid, status);
@@ -276,14 +303,17 @@ static void cmd_run(int argc, char **argv) {
         return;
     }
 
+    /* 复制CWD到子进程 */
+    vfs_copy_cwd_to_child(pid);
+
     printf("Started module %d (pid=%d)\n", index, pid);
 
-    sys_set_foreground(pid);
+    shell_set_foreground(pid);
 
     int status;
     int ret = sys_waitpid(pid, &status, 0);
 
-    sys_set_foreground(0);
+    shell_set_foreground(0);
 
     if (ret > 0) {
         printf("Process %d exited (status=%d)\n", pid, status);
@@ -352,7 +382,7 @@ static void cmd_cd(int argc, char **argv) {
         path = argv[1];
     }
 
-    int ret = sys_chdir(path);
+    int ret = vfs_chdir(path);
     if (ret < 0) {
         const char *err_msg;
         switch (ret) {
@@ -384,7 +414,7 @@ static void cmd_pwd(int argc, char **argv) {
     (void)argv;
 
     char cwd[256];
-    int  ret = sys_getcwd(cwd, sizeof(cwd));
+    int  ret = vfs_getcwd(cwd, sizeof(cwd));
     if (ret < 0) {
         printf("pwd: error %d\n", ret);
     } else {
@@ -398,6 +428,9 @@ int main(int argc, char **argv) {
 
     char line[MAX_LINE];
 
+    /* 初始化 VFS 客户端(使用默认 endpoint)*/
+    vfs_client_init(0);
+
     /* 初始化 PATH */
     path_init();
 
@@ -408,7 +441,7 @@ int main(int argc, char **argv) {
 
     while (1) {
         char cwd[256];
-        if (sys_getcwd(cwd, sizeof(cwd)) >= 0) {
+        if (vfs_getcwd(cwd, sizeof(cwd)) >= 0) {
             printf(ACOLOR_BWHITE "%s> ", cwd);
         } else {
             printf(ACOLOR_BWHITE "> ");

@@ -27,28 +27,28 @@
 #define SYS_MODULE_MAP 203 /* 映射 boot module: ebx=index, ecx=size_out*, 返回用户空间地址或 -1 */
 
 /* 基础系统调用 */
-#define SYS_PUTC         1  /* 输出字符: ebx=char */
 #define SYS_EXIT         2  /* 退出进程: ebx=exit_code */
 #define SYS_SLEEP        10 /* 睡眠: ebx=ms */
 #define SYS_MODULE_COUNT 12 /* 获取模块数量 */
-#define SYS_WRITE        13 /* 写文件描述符: ebx=fd, ecx=buf, edx=len */
+#define SYS_WRITE        13 /* 写stdout/stderr: ebx=fd, ecx=buf, edx=len */
 
 /* IPC 系统调用 */
-#define SYS_ENDPOINT_CREATE 3 /* 创建 endpoint */
-#define SYS_IPC_SEND        4 /* 发送消息 */
-#define SYS_IPC_RECV        5 /* 接收消息 */
-#define SYS_IPC_CALL        6 /* RPC 调用 */
-#define SYS_IPC_REPLY       7 /* RPC 回复 */
+#define SYS_ENDPOINT_CREATE 3  /* 创建 endpoint */
+#define SYS_IPC_SEND        4  /* 发送消息 */
+#define SYS_IPC_RECV        5  /* 接收消息 */
+#define SYS_IPC_CALL        6  /* RPC 调用 */
+#define SYS_IPC_REPLY       7  /* RPC 回复 */
+#define SYS_IPC_REPLY_TO    17 /* 延迟回复: ebx=sender_tid, ecx=reply_msg */
 
 /* I/O 端口访问(需要 IOPORT capability) */
-#define SYS_IOPORT_OUTB 8  /* 写端口(8位): ebx=cap, ecx=port, edx=val */
-#define SYS_IOPORT_INB  9  /* 读端口(8位): ebx=cap, ecx=port */
-#define SYS_IOPORT_OUTW 14 /* 写端口(16位): ebx=cap, ecx=port, edx=val */
-#define SYS_IOPORT_INW  15 /* 读端口(16位): ebx=cap, ecx=port */
+#define SYS_IOPORT_OUTB         8  /* 写端口(8位): ebx=cap, ecx=port, edx=val */
+#define SYS_IOPORT_INB          9  /* 读端口(8位): ebx=cap, ecx=port */
+#define SYS_IOPORT_OUTW         14 /* 写端口(16位): ebx=cap, ecx=port, edx=val */
+#define SYS_IOPORT_INW          15 /* 读端口(16位): ebx=cap, ecx=port */
 #define SYS_IOPORT_CREATE_RANGE 16 /* 创建 IOPORT capability: ebx=start, ecx=end, edx=rights */
 
 /* 进程管理 */
-#define SYS_SPAWN 11 /* 创建进程: ebx=spawn_args* */
+#define SYS_SPAWN 11 /* 创建进程: ebx=spawn_args* (from module) */
 
 /* 线程管理(300-309) */
 #define SYS_THREAD_CREATE 300 /* 创建用户线程: ebx=entry, ecx=arg, edx=stack_top */
@@ -63,7 +63,7 @@
 #define SYS_GETPID   321 /* 获取当前进程 PID */
 #define SYS_GETPPID  322 /* 获取父进程 PID */
 #define SYS_KILL     323 /* 发送信号: ebx=pid, ecx=sig */
-#define SYS_EXEC     324 /* 执行程序: ebx=exec_args* */
+#define SYS_EXEC     324
 #define SYS_PROCLIST 325 /* 获取进程列表: ebx=proclist_args* */
 
 /* 同步原语(310-319) */
@@ -73,31 +73,11 @@
 #define SYS_MUTEX_UNLOCK  313 /* 释放互斥锁: ebx=handle */
 
 /* IRQ 绑定(50-59) */
-#define SYS_IRQ_BIND   50 /* 绑定 IRQ: ebx=irq, ecx=notif_handle, edx=bits */
-#define SYS_IRQ_UNBIND 51 /* 解除绑定: ebx=irq */
-#define SYS_IRQ_READ   52 /* 读取数据: ebx=irq, ecx=buf, edx=size, esi=flags */
-
-/* 输入队列(60-69) */
-#define SYS_INPUT_WRITE    60 /* 写入字符: ebx=char */
-#define SYS_INPUT_READ     61 /* 读取字符(阻塞) */
-#define SYS_SET_FOREGROUND 62 /* 设置前台进程: ebx=pid */
-
-/* VFS 系统调用(400-419) */
-#define SYS_OPEN    400 /* 打开文件: ebx=path, ecx=flags */
-#define SYS_CLOSE   401 /* 关闭文件: ebx=fd */
-#define SYS_READ    402 /* 读取文件: ebx=fd, ecx=buf, edx=size */
-#define SYS_WRITE2  403 /* VFS 写文件: ebx=fd, ecx=buf, edx=size */
-#define SYS_LSEEK   404 /* 调整偏移: ebx=fd, ecx=offset, edx=whence */
-#define SYS_INFO    405 /* 文件信息(路径): ebx=path, ecx=info */
-#define SYS_FINFO   406 /* 文件信息(fd): ebx=fd, ecx=info */
-#define SYS_OPENDIR 407 /* 打开目录: ebx=path */
-#define SYS_READDIR 408 /* 读取目录项: ebx=fd, ecx=index, edx=entry */
-#define SYS_CHDIR   409 /* 切换目录: ebx=path */
-#define SYS_MKDIR   410 /* 创建目录: ebx=path */
-#define SYS_DEL     411 /* 删除文件: ebx=path */
-#define SYS_MOUNT   412 /* 挂载: ebx=path, ecx=fs_ep */
-#define SYS_UMOUNT  413 /* 卸载: ebx=path */
-#define SYS_GETCWD  414 /* 获取当前目录: ebx=buf, ecx=size */
+#define SYS_IRQ_BIND            50 /* 绑定 IRQ: ebx=irq, ecx=notif_handle, edx=bits */
+#define SYS_IRQ_UNBIND          51 /* 解除绑定: ebx=irq */
+#define SYS_IRQ_READ            52 /* 读取数据: ebx=irq, ecx=buf, edx=size, esi=flags */
+#define SYS_NOTIFICATION_CREATE 53
+#define SYS_NOTIFICATION_WAIT   54
 
 /*
  * 系统调用调用约定 (x86)

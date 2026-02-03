@@ -9,9 +9,9 @@
 #ifndef VFS_VFS_H
 #define VFS_VFS_H
 
+#include <d/protocol/vfs.h>
 #include <stdint.h>
 #include <xnix/ipc.h>
-#include <xnix/udm/vfs.h>
 
 /**
  * 文件系统操作接口

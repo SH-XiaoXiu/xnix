@@ -9,7 +9,6 @@
 #include <drivers/timer.h>
 
 #include <asm/multiboot.h>
-#include <kernel/io/input.h>
 #include <kernel/io/ioport.h>
 #include <kernel/irq/irq.h>
 #include <kernel/process/process.h>
@@ -23,9 +22,11 @@
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>
-#include <xnix/vfs.h>
 
 #include "xnix/debug.h"
+
+/* input_init stub (now in sys_input.c) */
+extern void input_init(void);
 
 static void boot_print_banner(void) {
     kprintf("\n");
@@ -96,8 +97,6 @@ static void boot_phase_subsys(void) {
 
     ipc_init();
     pr_ok("IPC subsystem.");
-
-    vfs_init();
 
     ioport_init();
     input_init();

@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include <vfs_client.h>
 #include <xnix/syscall.h>
 
 int main(int argc, char **argv) {
@@ -14,7 +15,7 @@ int main(int argc, char **argv) {
 
     const char *path = argv[1];
 
-    int ret = sys_mkdir(path);
+    int ret = vfs_mkdir(path);
     if (ret < 0) {
         printf("mkdir: cannot create '%s': error %d\n", path, ret);
         return 1;

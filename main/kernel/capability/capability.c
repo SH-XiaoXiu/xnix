@@ -103,7 +103,7 @@ void *cap_lookup(struct process *proc, cap_handle_t handle, cap_type_t expected_
 }
 
 cap_handle_t cap_duplicate_to(struct process *src, cap_handle_t src_handle, struct process *dst,
-                              cap_rights_t new_rights) {
+                              cap_rights_t new_rights, cap_handle_t hint_dst) {
     if (!src || !src->cap_table || !dst || !dst->cap_table ||
         src_handle >= cap_table_capacity(src->cap_table)) {
         return CAP_HANDLE_INVALID;
@@ -140,8 +140,8 @@ cap_handle_t cap_duplicate_to(struct process *src, cap_handle_t src_handle, stru
     spin_unlock(&src_table->lock);
     cpu_irq_restore(flags);
 
-    /* 在目标进程分配新句柄 */
-    return cap_alloc(dst, type, object, new_rights);
+    /* 在目标进程分配新句柄(优先使用 hint_dst) */
+    return cap_alloc_at(dst, type, object, new_rights, hint_dst);
 }
 
 /* 公共 API 实现(基于当前进程) */
@@ -162,5 +162,5 @@ cap_handle_t cap_duplicate(cap_handle_t handle, cap_rights_t new_rights) {
         return CAP_HANDLE_INVALID;
     }
 
-    return cap_duplicate_to(proc, handle, proc, new_rights);
+    return cap_duplicate_to(proc, handle, proc, new_rights, CAP_HANDLE_INVALID);
 }
