@@ -8,12 +8,12 @@
 #include <d/server.h>
 #include <stdio.h>
 #include <string.h>
-#include <xnix/abi/cap_types.h>
+#include <xnix/abi/handle.h>
 #include <xnix/abi/ipc.h>
 #include <xnix/syscall.h>
 
 #define VFS_MAX_MOUNTS 16
-#define VFS_EP         CAP_SLOT_VFS_EP /* vfsd 的 endpoint */
+#define VFS_EP         0 /* vfsd 的 endpoint handle (Slot 0) */
 
 struct vfs_dir_state {
     uint32_t backend_ep;
@@ -386,10 +386,10 @@ static int vfsd_forward(struct ipc_message *msg, uint32_t pid, const char *path)
     memcpy(msg->regs.data, reply.regs.data, sizeof(msg->regs.data));
     msg->buffer = reply.buffer;
 
-    /* 对于 OPEN 操作,返回 fs_ep 供客户端后续直接通信 (必须通过 msg.caps 传递) */
+    /* 对于 OPEN 操作,返回 fs_ep 供客户端后续直接通信 (必须通过 msg.handles 传递) */
     if (op == UDM_VFS_OPEN || op == UDM_VFS_OPENDIR) {
-        msg->caps.handles[0] = fs_ep;
-        msg->caps.count      = 1;
+        msg->handles.handles[0] = fs_ep;
+        msg->handles.count      = 1;
     }
 
     return 0;
@@ -429,12 +429,12 @@ static int vfsd_opendir(struct ipc_message *msg, const char *abs_path) {
     st->backend_handle       = (uint32_t)result;
     vfsd_collect_mount_children(abs_path, st);
 
-    msg->regs.data[0]    = UDM_VFS_OPENDIR;
-    msg->regs.data[1]    = (uint32_t)h;
-    msg->caps.handles[0] = VFS_EP;
-    msg->caps.count      = 1;
-    msg->buffer.data     = NULL;
-    msg->buffer.size     = 0;
+    msg->regs.data[0]       = UDM_VFS_OPENDIR;
+    msg->regs.data[1]       = (uint32_t)h;
+    msg->handles.handles[0] = VFS_EP;
+    msg->handles.count      = 1;
+    msg->buffer.data        = NULL;
+    msg->buffer.size        = 0;
     return 0;
 }
 
@@ -507,11 +507,11 @@ static int vfsd_close_handle(struct ipc_message *msg, uint32_t h) {
     int32_t result = (int32_t)reply.regs.data[1];
     vfsd_dir_free(h);
 
-    msg->regs.data[0] = UDM_VFS_CLOSE;
-    msg->regs.data[1] = (uint32_t)result;
-    msg->buffer.data  = NULL;
-    msg->buffer.size  = 0;
-    msg->caps.count   = 0;
+    msg->regs.data[0]  = UDM_VFS_CLOSE;
+    msg->regs.data[1]  = (uint32_t)result;
+    msg->buffer.data   = NULL;
+    msg->buffer.size   = 0;
+    msg->handles.count = 0;
     return 0;
 }
 
@@ -605,14 +605,14 @@ static int vfsd_handler(struct ipc_message *msg) {
     if (op == 0x1000) { /* VFS_MOUNT */
         char path[VFS_PATH_MAX];
 
-        /* 从 IPC caps 中提取 FS endpoint capability */
-        if (msg->caps.count < 1) {
+        /* 从 IPC handles 中提取 FS endpoint handle */
+        if (msg->handles.count < 1) {
             msg->regs.data[0] = op;
             msg->regs.data[1] = (uint32_t)-22; /* EINVAL */
             return 0;
         }
 
-        uint32_t fs_ep = msg->caps.handles[0]; /* vfsd 现在拥有这个 capability */
+        uint32_t fs_ep = msg->handles.handles[0]; /* vfsd 现在拥有这个 handle */
 
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
             memcpy(path, msg->buffer.data, msg->buffer.size);

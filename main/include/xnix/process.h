@@ -31,13 +31,16 @@ typedef enum {
     PROCESS_ZOMBIE,  /* 已退出,等待父进程回收 */
 } process_state_t;
 
+struct perm_profile; /* 前向声明 */
+
 /**
  * 创建进程
  *
  * @param name 进程名,用于调试
+ * @param profile 权限配置文件 (NULL 表示无权限)
  * @return 进程句柄,失败返回 NULL
  */
-process_t process_create(const char *name);
+process_t process_create(const char *name, struct perm_profile *profile);
 
 /**
  * 销毁进程

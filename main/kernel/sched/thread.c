@@ -69,7 +69,7 @@ void thread_ref(struct thread *t) {
  * 减少线程引用计数
  *
  * 注意:线程的实际释放由 sched_cleanup_zombie 处理,
- * 这里只管理 Capability 系统的引用计数.
+ * 这里只管理 Handle 系统的引用计数.
  * 当 refcount 归零时,表示没有外部引用,
  * 但线程可能仍在运行或等待 join.
  */

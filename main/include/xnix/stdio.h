@@ -49,6 +49,16 @@ void klog(int level, const char *fmt, ...);
 #define pr_debug(fmt, ...) \
     do {                   \
     } while (0)
+/**
+ * @brief 格式化输出到字符串
+ * @param buf 目标缓冲区
+ * @param size 缓冲区大小
+ * @param fmt 格式字符串
+ * @param ... 可变参数
+ * @return 写入的字符数
+ */
+int snprintf(char *buf, size_t size, const char *fmt, ...);
+
 #endif
 
 /**

@@ -6,8 +6,26 @@
 #ifndef XNIX_ABI_PROCESS_H
 #define XNIX_ABI_PROCESS_H
 
-#include <xnix/abi/capability.h>
+#include <xnix/abi/handle.h>
 #include <xnix/abi/stdint.h>
+
+/*
+ * spawn 系统调用参数
+ */
+#define ABI_SPAWN_MAX_HANDLES 8
+#define ABI_SPAWN_NAME_LEN    16
+#define ABI_SPAWN_PROFILE_LEN 32
+
+/**
+ * @brief spawn 系统调用参数结构
+ */
+struct abi_spawn_args {
+    char                name[ABI_SPAWN_NAME_LEN];            /* 进程名 */
+    char                profile_name[ABI_SPAWN_PROFILE_LEN]; /* 权限 profile 名称 */
+    uint32_t            module_index;                        /* 启动模块索引 */
+    uint32_t            handle_count;                        /* 传递的 handle 数量 */
+    struct spawn_handle handles[ABI_SPAWN_MAX_HANDLES];      /* 传递的 handles */
+};
 
 /*
  * exec 系统调用参数限制
@@ -15,30 +33,35 @@
 #define ABI_EXEC_MAX_ARGS    16  /* 最大参数数量 */
 #define ABI_EXEC_MAX_ARG_LEN 256 /* 单个参数最大长度 */
 #define ABI_EXEC_PATH_MAX    256 /* 路径最大长度 */
-#define ABI_EXEC_MAX_CAPS    8   /* 最大传递 cap 数量 */
-#define ABI_PROC_NAME_MAX    16
+#define ABI_EXEC_MAX_HANDLES 8   /* 最大传递 handle 数量 */
+#define ABI_PROC_NAME_MAX    16  /* 进程名最大长度 */
 
 /**
- * exec 系统调用参数结构
+ * @brief exec 系统调用参数结构
  */
 struct abi_exec_args {
-    char                 path[ABI_EXEC_PATH_MAX];                       /* 可执行文件路径 */
-    int32_t              argc;                                          /* 参数数量 */
-    char                 argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN]; /* 参数数组 */
-    uint32_t             flags;                                         /* 执行标志(保留) */
-    uint32_t             cap_count;                                     /* 传递的 cap 数量 */
-    struct abi_spawn_cap caps[ABI_EXEC_MAX_CAPS];                       /* 传递的 caps */
+    char                path[ABI_EXEC_PATH_MAX];                       /* 可执行文件路径 */
+    char                profile_name[ABI_SPAWN_PROFILE_LEN];           /* 权限 profile 名称 */
+    int32_t             argc;                                          /* 参数数量 */
+    char                argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN]; /* 参数数组 */
+    uint32_t            flags;                                         /* 执行标志(保留) */
+    uint32_t            handle_count;                                  /* 传递的 handle 数量 */
+    struct spawn_handle handles[ABI_EXEC_MAX_HANDLES];                 /* 传递的 handles */
 };
 
+/**
+ * @brief exec_image 系统调用参数结构
+ */
 struct abi_exec_image_args {
-    char                 name[ABI_PROC_NAME_MAX];
-    uint32_t             elf_ptr;
-    uint32_t             elf_size;
-    int32_t              argc;
-    char                 argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN];
-    uint32_t             flags;
-    uint32_t             cap_count;
-    struct abi_spawn_cap caps[ABI_EXEC_MAX_CAPS];
+    char                name[ABI_PROC_NAME_MAX];                       /* 进程名称 */
+    char                profile_name[ABI_SPAWN_PROFILE_LEN];           /* 权限 profile 名称 */
+    uint32_t            elf_ptr;                                       /* ELF 镜像地址 */
+    uint32_t            elf_size;                                      /* ELF 镜像大小 */
+    int32_t             argc;                                          /* 参数数量 */
+    char                argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN]; /* 参数数组 */
+    uint32_t            flags;                                         /* 执行标志 */
+    uint32_t            handle_count;                                  /* 传递的 handle 数量 */
+    struct spawn_handle handles[ABI_EXEC_MAX_HANDLES];                 /* 传递的 handles */
 };
 
 /*
@@ -47,22 +70,22 @@ struct abi_exec_image_args {
 #define ABI_PROCLIST_MAX 64 /* 单次返回最多 64 条 */
 
 /**
- * 进程信息结构(用于用户态获取进程列表)
+ * @brief 进程信息结构(用于用户态获取进程列表)
  */
 struct abi_proc_info {
-    int32_t  pid;
-    int32_t  ppid;
-    uint8_t  state; /* 0=RUNNING, 1=ZOMBIE */
-    uint8_t  reserved[3];
-    uint32_t thread_count;
-    uint64_t cpu_ticks; /* 累计 CPU ticks(所有线程总和) */
-    uint32_t heap_kb;   /* 堆内存(KB) */
-    uint32_t stack_kb;  /* 栈内存(KB) */
-    char     name[ABI_PROC_NAME_MAX];
+    int32_t  pid;                     /* 进程 ID */
+    int32_t  ppid;                    /* 父进程 ID */
+    uint8_t  state;                   /* 0=RUNNING, 1=ZOMBIE */
+    uint8_t  reserved[3];             /* 保留 */
+    uint32_t thread_count;            /* 线程数量 */
+    uint64_t cpu_ticks;               /* 累计 CPU ticks(所有线程总和) */
+    uint32_t heap_kb;                 /* 堆内存(KB) */
+    uint32_t stack_kb;                /* 栈内存(KB) */
+    char     name[ABI_PROC_NAME_MAX]; /* 进程名 */
 };
 
 /**
- * 系统信息结构
+ * @brief 系统信息结构
  */
 struct abi_sys_info {
     uint32_t cpu_count;   /* CPU 数量 */
@@ -71,7 +94,7 @@ struct abi_sys_info {
 };
 
 /**
- * proclist 系统调用参数
+ * @brief proclist 系统调用参数
  */
 struct abi_proclist_args {
     struct abi_proc_info *buf;         /* 用户缓冲区 */

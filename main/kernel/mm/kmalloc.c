@@ -63,11 +63,56 @@ void kfree(void *ptr) {
         return;
     }
 
-    /* 找到 header */
     struct kmalloc_header *hdr =
         (struct kmalloc_header *)((char *)ptr - sizeof(struct kmalloc_header));
 
     /* 转换虚拟地址为物理地址 */
     paddr_t phys = VIRT_TO_PHYS((uint32_t)hdr);
     free_pages((void *)phys, hdr->pages);
+}
+
+void *krealloc(void *ptr, size_t new_size) {
+    if (!ptr) {
+        return kmalloc(new_size);
+    }
+
+    if (new_size == 0) {
+        kfree(ptr);
+        return NULL;
+    }
+
+    /* 找到 header */
+    struct kmalloc_header *hdr =
+        (struct kmalloc_header *)((char *)ptr - sizeof(struct kmalloc_header));
+
+    size_t old_size = hdr->pages * PAGE_SIZE - sizeof(struct kmalloc_header);
+
+    if (new_size <= old_size) {
+        /* 原地收缩(或者不作为) */
+        return ptr;
+    }
+
+    /* 分配新内存 */
+    void *new_ptr = kmalloc(new_size);
+    if (!new_ptr) {
+        return NULL;
+    }
+
+    /* 拷贝数据 */
+    memcpy(new_ptr, ptr, old_size);
+    kfree(ptr);
+
+    return new_ptr;
+}
+
+void *kstrdup(const char *s) {
+    if (!s) {
+        return NULL;
+    }
+    size_t len = strlen(s) + 1;
+    void  *ptr = kmalloc(len);
+    if (ptr) {
+        memcpy(ptr, s, len);
+    }
+    return ptr;
 }

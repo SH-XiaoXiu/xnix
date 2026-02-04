@@ -32,6 +32,12 @@
 #define SYS_MODULE_COUNT 12 /* 获取模块数量 */
 #define SYS_WRITE        13 /* 写stdout/stderr: ebx=fd, ecx=buf, edx=len */
 
+/* Handle 系统调用 */
+#define SYS_HANDLE_CLOSE     18 /* 关闭句柄: ebx=handle */
+#define SYS_HANDLE_DUPLICATE 19 /* 复制句柄: ebx=src, ecx=dst_hint, edx=name */
+#define SYS_PERM_CHECK       20 /* 检查权限: ebx=perm_id */
+#define SYS_HANDLE_FIND      21 /* 查找命名 handle: ebx=name */
+
 /* IPC 系统调用 */
 #define SYS_ENDPOINT_CREATE 3  /* 创建 endpoint */
 #define SYS_IPC_SEND        4  /* 发送消息 */
@@ -40,12 +46,12 @@
 #define SYS_IPC_REPLY       7  /* RPC 回复 */
 #define SYS_IPC_REPLY_TO    17 /* 延迟回复: ebx=sender_tid, ecx=reply_msg */
 
-/* I/O 端口访问(需要 IOPORT capability) */
-#define SYS_IOPORT_OUTB         8  /* 写端口(8位): ebx=cap, ecx=port, edx=val */
-#define SYS_IOPORT_INB          9  /* 读端口(8位): ebx=cap, ecx=port */
-#define SYS_IOPORT_OUTW         14 /* 写端口(16位): ebx=cap, ecx=port, edx=val */
-#define SYS_IOPORT_INW          15 /* 读端口(16位): ebx=cap, ecx=port */
-#define SYS_IOPORT_CREATE_RANGE 16 /* 创建 IOPORT capability: ebx=start, ecx=end, edx=rights */
+/* I/O 端口访问(需要 IOPORT 权限) */
+#define SYS_IOPORT_OUTB 8  /* 写端口(8位): ebx=port, ecx=val */
+#define SYS_IOPORT_INB  9  /* 读端口(8位): ebx=port */
+#define SYS_IOPORT_OUTW 14 /* 写端口(16位): ebx=port, ecx=val */
+#define SYS_IOPORT_INW  15 /* 读端口(16位): ebx=port */
+/* #define SYS_IOPORT_CREATE_RANGE 16 废弃 */
 
 /* 进程管理 */
 #define SYS_SPAWN 11 /* 创建进程: ebx=spawn_args* (from module) */
@@ -63,7 +69,7 @@
 #define SYS_GETPID   321 /* 获取当前进程 PID */
 #define SYS_GETPPID  322 /* 获取父进程 PID */
 #define SYS_KILL     323 /* 发送信号: ebx=pid, ecx=sig */
-#define SYS_EXEC     324
+#define SYS_EXEC     324 /* 执行新程序: ebx=exec_args* */
 #define SYS_PROCLIST 325 /* 获取进程列表: ebx=proclist_args* */
 
 /* 同步原语(310-319) */
@@ -76,8 +82,8 @@
 #define SYS_IRQ_BIND            50 /* 绑定 IRQ: ebx=irq, ecx=notif_handle, edx=bits */
 #define SYS_IRQ_UNBIND          51 /* 解除绑定: ebx=irq */
 #define SYS_IRQ_READ            52 /* 读取数据: ebx=irq, ecx=buf, edx=size, esi=flags */
-#define SYS_NOTIFICATION_CREATE 53
-#define SYS_NOTIFICATION_WAIT   54
+#define SYS_NOTIFICATION_CREATE 53 /* 创建通知: 返回 handle */
+#define SYS_NOTIFICATION_WAIT   54 /* 等待通知: ebx=handle */
 
 /*
  * 系统调用调用约定 (x86)

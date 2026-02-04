@@ -3,6 +3,7 @@
  * @brief IPC 相关系统调用
  */
 
+#include <kernel/ipc/endpoint.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/sys/syscall.h>
 #include <xnix/errno.h>
@@ -33,7 +34,7 @@ static int ipc_msg_copy_in(struct ipc_message **out_kmsg, struct ipc_message *us
     }
     memcpy(kmsg, &umsg, sizeof(*kmsg));
 
-    /* caps 已从用户态拷贝,将在 ipc_copy_msg 中处理 */
+    /* handles 已从用户态拷贝,将在 ipc_copy_msg 中处理 */
 
     if (copy_buffer && umsg.buffer.data && umsg.buffer.size) {
         void *kbuf = kmalloc(umsg.buffer.size);
@@ -85,7 +86,7 @@ static int ipc_msg_copy_out(struct ipc_message *user_msg, const struct ipc_messa
     memcpy(&out.regs, &kmsg->regs, sizeof(out.regs));
     out.buffer.data = user_buf_ptr;
     out.buffer.size = kmsg->buffer.size;
-    memcpy(&out.caps, &kmsg->caps, sizeof(out.caps)); /* 拷贝传递的 capabilities */
+    memcpy(&out.handles, &kmsg->handles, sizeof(out.handles)); /* 拷贝传递的 handles */
     out.flags      = kmsg->flags;
     out.sender_tid = kmsg->sender_tid; /* 拷贝发送者 TID */
 
@@ -125,8 +126,8 @@ static int ipc_msg_alloc_recv(struct ipc_message **out_kmsg, struct ipc_message 
     }
 
     memcpy(&kmsg->regs, &umsg.regs, sizeof(kmsg->regs));
-    kmsg->flags      = umsg.flags;
-    kmsg->caps.count = 0;
+    kmsg->flags         = umsg.flags;
+    kmsg->handles.count = 0;
 
     if (user_buf_ptr && user_buf_size) {
         kmsg->buffer.data = kmalloc(user_buf_size);
@@ -146,11 +147,19 @@ static int ipc_msg_alloc_recv(struct ipc_message **out_kmsg, struct ipc_message 
     return 0;
 }
 
-/* SYS_ENDPOINT_CREATE */
+/* SYS_ENDPOINT_CREATE: ebx=name (可选) */
 static int32_t sys_endpoint_create(const uint32_t *args) {
-    (void)args;
-    cap_handle_t h = endpoint_create();
-    if (h == CAP_HANDLE_INVALID) {
+    const char *user_name = (const char *)(uintptr_t)args[0];
+    char        kname[32] = {0};
+
+    /* 从用户空间复制名称(可选) */
+    if (user_name) {
+        copy_from_user(kname, user_name, sizeof(kname) - 1);
+        kname[sizeof(kname) - 1] = '\0';
+    }
+
+    handle_t h = endpoint_create(kname[0] ? kname : NULL);
+    if (h == HANDLE_INVALID) {
         return -ENOMEM;
     }
     return (int32_t)h;
@@ -158,7 +167,7 @@ static int32_t sys_endpoint_create(const uint32_t *args) {
 
 /* SYS_IPC_SEND: ebx=ep, ecx=msg, edx=timeout */
 static int32_t sys_ipc_send(const uint32_t *args) {
-    cap_handle_t        ep       = (cap_handle_t)args[0];
+    handle_t            ep       = (handle_t)args[0];
     struct ipc_message *user_msg = (struct ipc_message *)(uintptr_t)args[1];
     uint32_t            timeout  = args[2];
 
@@ -175,7 +184,7 @@ static int32_t sys_ipc_send(const uint32_t *args) {
 
 /* SYS_IPC_RECV: ebx=ep, ecx=msg, edx=timeout */
 static int32_t sys_ipc_recv(const uint32_t *args) {
-    cap_handle_t        ep       = (cap_handle_t)args[0];
+    handle_t            ep       = (handle_t)args[0];
     struct ipc_message *user_msg = (struct ipc_message *)(uintptr_t)args[1];
     uint32_t            timeout  = args[2];
 
@@ -198,7 +207,7 @@ static int32_t sys_ipc_recv(const uint32_t *args) {
 
 /* SYS_IPC_CALL: ebx=ep, ecx=req, edx=reply, esi=timeout */
 static int32_t sys_ipc_call(const uint32_t *args) {
-    cap_handle_t        ep         = (cap_handle_t)args[0];
+    handle_t            ep         = (handle_t)args[0];
     struct ipc_message *user_req   = (struct ipc_message *)(uintptr_t)args[1];
     struct ipc_message *user_reply = (struct ipc_message *)(uintptr_t)args[2];
     uint32_t            timeout    = args[3];
@@ -263,8 +272,8 @@ static int32_t sys_ipc_reply_to(const uint32_t *args) {
 /* SYS_NOTIFICATION_CREATE */
 static int32_t sys_notification_create(const uint32_t *args) {
     (void)args;
-    cap_handle_t h = notification_create();
-    if (h == CAP_HANDLE_INVALID) {
+    handle_t h = notification_create();
+    if (h == HANDLE_INVALID) {
         return -ENOMEM;
     }
     return (int32_t)h;
@@ -272,7 +281,7 @@ static int32_t sys_notification_create(const uint32_t *args) {
 
 /* SYS_NOTIFICATION_WAIT: ebx=handle */
 static int32_t sys_notification_wait(const uint32_t *args) {
-    cap_handle_t h = (cap_handle_t)args[0];
+    handle_t h = (handle_t)args[0];
     return (int32_t)notification_wait(h);
 }
 
@@ -280,7 +289,7 @@ static int32_t sys_notification_wait(const uint32_t *args) {
  * 注册 IPC 系统调用
  */
 void sys_ipc_init(void) {
-    syscall_register(SYS_ENDPOINT_CREATE, sys_endpoint_create, 0, "endpoint_create");
+    syscall_register(SYS_ENDPOINT_CREATE, sys_endpoint_create, 1, "endpoint_create");
     syscall_register(SYS_IPC_SEND, sys_ipc_send, 3, "ipc_send");
     syscall_register(SYS_IPC_RECV, sys_ipc_recv, 3, "ipc_recv");
     syscall_register(SYS_IPC_CALL, sys_ipc_call, 4, "ipc_call");

@@ -14,16 +14,16 @@ MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](http
 
 ## 核心能力
 
-| 能力                | 说明                  | 示例                      |
-|-------------------|---------------------|-------------------------|
-| 微内核设计             | 最小化内核，策略与机制分离       | 内核仅含调度、IPC、内存管理         |
-| 平台抽象              | HAL + 弱符号机制，支持多平台移植 | 新增架构只需实现少量强符号           |
-| 能力系统 (Capability) | 细粒度权限控制，无全局特权       | I/O 端口访问需持有对应 cap       |
-| IPC 通信            | 同步/异步消息传递，支持 RPC 模式 | endpoint send/recv/call |
-| 用户态驱动 (UDM)       | 驱动隔离，崩溃可恢复，支持热更新    | seriald、kbd 均为用户进程      |
-| 进程管理              | 完整生命周期、信号机制、进程树     | fork-like spawn、SIGTERM |
-| FAT32 文件系统        | 支持读写 FAT32 格式磁盘     | 可挂载硬盘镜像进行文件操作           |
-| 声明式服务管理           | INI 配置、依赖管理、自动重启    | services.conf 定义启动顺序    |
+| 能力           | 说明                  | 示例                         |
+|--------------|---------------------|----------------------------|
+| 微内核设计        | 最小化内核，策略与机制分离       | 内核仅含调度、IPC、内存管理            |
+| 平台抽象         | HAL + 弱符号机制，支持多平台移植 | 新增架构只需实现少量强符号              |
+| 权限系统 (Perms) | 字符串节点权限，Profile 管理  | `xnix.io.port.*` 控制 I/O 访问 |
+| IPC 通信       | 同步/异步消息传递，支持 RPC 模式 | endpoint send/recv/call    |
+| 用户态驱动 (UDM)  | 驱动隔离，崩溃可恢复，支持热更新    | seriald、kbd 均为用户进程         |
+| 进程管理         | 完整生命周期、信号机制、进程树     | fork-like spawn、SIGTERM    |
+| FAT32 文件系统   | 支持读写 FAT32 格式磁盘     | 可挂载硬盘镜像进行文件操作              |
+| 声明式服务管理      | INI 配置、依赖管理、自动重启    | services.conf 定义启动顺序       |
 
 ## 项目亮点
 
@@ -134,7 +134,8 @@ xnix/
 │   │   ├── ipc/            # IPC 机制
 │   │   ├── mm/             # 内存管理
 │   │   ├── process/        # 进程管理
-│   │   └── cap/            # Capability 系统
+│   │   ├── perm/           # 权限系统
+│   │   └── handle/         # 句柄系统
 │   ├── lib/                # 内核库（同步原语等）
 │   ├── drivers/            # 内核态控制台（早期输出）
 │   └── include/            # 公共头文件
@@ -176,7 +177,7 @@ graph TD
             Sched[调度器]
             IPC[IPC]
             MM[内存管理]
-            Cap[Capability]
+            Perms[权限系统]
             Proc[进程管理]
         end
 
@@ -265,39 +266,41 @@ Xnix 采用声明式服务配置，分为核心服务和用户服务两类。
 # user/drivers/mydrv/service.conf
 core = true          # 核心服务（Multiboot 模块）
 after = seriald      # 启动顺序依赖
-caps = my_ep:0       # Capability 传递（名称:目标槽位）
+profile = driver     # 权限 Profile
+handles = my_ep:0    # Handle 传递（名称:目标槽位）
 mount = /dev         # 挂载点（可选）
 respawn = true       # 退出后自动重启
 ```
 
 ### 配置字段
 
-| 字段        | 类型     | 说明                       |
-|-----------|--------|--------------------------|
-| `core`    | bool   | `true`=核心服务，`false`=用户服务 |
-| `after`   | string | 启动顺序依赖，空格分隔多个服务          |
-| `caps`    | string | Capability 传递（见下方格式说明）   |
-| `mount`   | string | 服务提供的挂载点                 |
-| `respawn` | bool   | 退出后自动重启                  |
-| `path`    | string | 自定义 ELF 路径（可选）           |
+| 字段        | 类型     | 说明                                 |
+|-----------|--------|------------------------------------|
+| `core`    | bool   | `true`=核心服务，`false`=用户服务           |
+| `after`   | string | 启动顺序依赖，空格分隔多个服务                    |
+| `profile` | string | 权限配置 Profile (如 driver, io_driver) |
+| `handles` | string | Handle 传递，格式 `name:dst_hint`，可多次指定 |
+| `mount`   | string | 服务提供的挂载点                           |
+| `respawn` | bool   | 退出后自动重启                            |
+| `path`    | string | 自定义 ELF 路径（可选）                     |
 
-### Capability 传递格式
+### Handle 传递格式
 
-`caps` 字段格式：`名称:目标槽位 名称:目标槽位 ...`
+`handles` 字段格式：`名称:目标槽位 名称:目标槽位 ...`
 
 ```ini
 # 示例：传递 ata_io 到槽位 1，ata_ctrl 到槽位 2
-caps = ata_io:1 ata_ctrl:2
+handles = ata_io:1 ata_ctrl:2
 ```
 
-- **名称**：init 持有的 capability 名称（见下表）
+- **名称**：init 持有的 handle 名称（见下表）
 - **目标槽位**：传递给子进程后的 handle 编号
 
-子进程通过槽位编号访问 capability：
+子进程通过槽位编号访问 handle（或者通过 `sys_handle_find` 按名称查找）：
 
 ```c
-#define MY_EP_CAP 0   // 对应 caps = my_ep:0
-sys_ipc_send(MY_EP_CAP, &msg);
+#define MY_EP_HANDLE 0   // 对应 handles = my_ep:0
+sys_ipc_send(MY_EP_HANDLE, &msg);
 ```
 
 ### 生成的配置文件
@@ -308,7 +311,7 @@ CMake 构建时会自动生成：
 - `build/include/core_services.h` - 核心服务嵌入配置
 - `build/generated/services.conf` - 用户服务配置
 
-### 内置 Capability 名称
+### 内置 Handle 名称
 
 | 名称           | 槽位 | 说明                   |
 |--------------|----|----------------------|
@@ -344,13 +347,17 @@ user/drivers/mydrv/
 # core=false/默认 表示用户服务（从 rootfs 加载）
 core = false
 after = rootfsd
-caps = my_ep:0
+profile = driver
+handles = my_ep:0
 ```
 
 **驱动基本结构：**
 
 ```c
 int main(void) {
+    // 按名称查找 handle (推荐)
+    handle_t ep = sys_handle_find("my_ep");
+    
     // 初始化
     while (1) {
         ipc_msg_t msg;

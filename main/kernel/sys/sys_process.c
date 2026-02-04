@@ -11,8 +11,10 @@
 #include <xnix/abi/process.h>
 #include <xnix/boot.h>
 #include <xnix/errno.h>
+#include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/percpu.h>
+#include <xnix/perm.h>
 #include <xnix/process.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
@@ -22,19 +24,9 @@
 
 extern void thread_exit(int code);
 
-/* 用户态 spawn 参数结构(与用户态定义一致) */
-struct user_spawn_cap {
-    uint32_t src;
-    uint32_t rights;
-    uint32_t dst_hint;
-};
-
-struct user_spawn_args {
-    char                  name[16];
-    uint32_t              module_index;
-    uint32_t              cap_count;
-    struct user_spawn_cap caps[8];
-};
+/* 用户态 spawn 参数结构(使用 ABI 定义) */
+/* 使用 xnix/abi/handle.h 中的 struct spawn_handle */
+/* 使用 xnix/abi/process.h 中的 struct abi_spawn_args */
 
 /* SYS_EXIT: ebx=code */
 static int32_t sys_exit(const uint32_t *args) {
@@ -136,16 +128,17 @@ static int32_t sys_exec(const uint32_t *args) {
                elf_bytes[3]);
     }
 
-    uint32_t cap_count = kargs->cap_count;
-    if (cap_count > ABI_EXEC_MAX_CAPS) {
-        cap_count = ABI_EXEC_MAX_CAPS;
+    uint32_t handle_count = kargs->handle_count;
+    if (handle_count > ABI_EXEC_MAX_HANDLES) {
+        handle_count = ABI_EXEC_MAX_HANDLES;
     }
 
-    struct spawn_inherit_cap inherit_caps[ABI_EXEC_MAX_CAPS];
-    for (uint32_t i = 0; i < cap_count; i++) {
-        inherit_caps[i].src          = (cap_handle_t)kargs->caps[i].src;
-        inherit_caps[i].rights       = kargs->caps[i].rights;
-        inherit_caps[i].expected_dst = (cap_handle_t)kargs->caps[i].dst_hint;
+    struct spawn_handle handles[ABI_EXEC_MAX_HANDLES];
+    for (uint32_t i = 0; i < handle_count; i++) {
+        handles[i].src      = (handle_t)kargs->handles[i].src;
+        handles[i].dst_hint = (handle_t)kargs->handles[i].dst_hint;
+        strncpy(handles[i].name, kargs->handles[i].name, ABI_SPAWN_NAME_LEN);
+        handles[i].name[ABI_SPAWN_NAME_LEN - 1] = '\0';
     }
 
     int argc = (int)kargs->argc;
@@ -156,8 +149,15 @@ static int32_t sys_exec(const uint32_t *args) {
         argc = ABI_EXEC_MAX_ARGS;
     }
 
-    pid_t pid = process_spawn_elf_ex_with_args(kargs->name, elf_paddr, kargs->elf_size,
-                                               inherit_caps, cap_count, argc, kargs->argv);
+    /* 查找 Profile */
+    struct perm_profile *profile = perm_profile_find(kargs->profile_name);
+    if (!profile && kargs->profile_name[0] != '\0') {
+        kprintf("[sys_exec] WARNING: Profile '%s' not found for process '%s'\n",
+                kargs->profile_name, kargs->name);
+    }
+
+    pid_t pid = process_spawn_elf_ex_with_args(kargs->name, elf_paddr, kargs->elf_size, handles,
+                                               handle_count, profile, argc, kargs->argv);
     free_pages(elf_paddr, page_count);
     kfree(kargs);
 
@@ -169,15 +169,16 @@ static int32_t sys_exec(const uint32_t *args) {
 
 /* SYS_SPAWN: ebx=args */
 static int32_t sys_spawn(const uint32_t *args) {
-    struct user_spawn_args *user_args = (struct user_spawn_args *)(uintptr_t)args[0];
-    struct user_spawn_args  kargs;
+    struct abi_spawn_args *user_args = (struct abi_spawn_args *)(uintptr_t)args[0];
+    struct abi_spawn_args  kargs;
 
     int ret = copy_from_user(&kargs, user_args, sizeof(kargs));
     if (ret < 0) {
         return ret;
     }
 
-    kargs.name[sizeof(kargs.name) - 1] = '\0';
+    kargs.name[sizeof(kargs.name) - 1]                 = '\0';
+    kargs.profile_name[sizeof(kargs.profile_name) - 1] = '\0';
 
     /* 获取模块数据 */
     void    *mod_addr = NULL;
@@ -187,20 +188,23 @@ static int32_t sys_spawn(const uint32_t *args) {
         return -EINVAL;
     }
 
-    /* 构建 capability 继承列表 */
-    uint32_t cap_count = kargs.cap_count;
-    if (cap_count > 8) {
-        cap_count = 8;
+    /* 构建 handle 传递列表 */
+    uint32_t handle_count = kargs.handle_count;
+    if (handle_count > 8) {
+        handle_count = 8;
     }
 
-    struct spawn_inherit_cap inherit_caps[8];
-    for (uint32_t i = 0; i < cap_count; i++) {
-        inherit_caps[i].src          = (cap_handle_t)kargs.caps[i].src;
-        inherit_caps[i].rights       = kargs.caps[i].rights;
-        inherit_caps[i].expected_dst = (cap_handle_t)kargs.caps[i].dst_hint;
+    /* kargs.handles 已经是 struct spawn_handle 类型 */
+
+    /* 查找 Profile */
+    struct perm_profile *profile = perm_profile_find(kargs.profile_name);
+    if (!profile && kargs.profile_name[0] != '\0') {
+        kprintf("[sys_spawn] WARNING: Profile '%s' not found for process '%s'\n",
+                kargs.profile_name, kargs.name);
     }
 
-    pid_t pid = process_spawn_module_ex(kargs.name, mod_addr, mod_size, inherit_caps, cap_count);
+    pid_t pid = process_spawn_module_ex(kargs.name, mod_addr, mod_size, kargs.handles, handle_count,
+                                        profile);
 
     if (pid == PID_INVALID) {
         return -ENOMEM;

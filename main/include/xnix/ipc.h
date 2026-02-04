@@ -6,12 +6,12 @@
 #ifndef XNIX_IPC_H
 #define XNIX_IPC_H
 
+#include <xnix/abi/handle.h>
 #include <xnix/abi/ipc.h>
-#include <xnix/capability.h>
 #include <xnix/types.h>
 
-#define IPC_MSG_REGS     ABI_IPC_MSG_REGS
-#define IPC_MSG_CAPS_MAX ABI_IPC_MSG_CAPS_MAX
+#define IPC_MSG_REGS        ABI_IPC_MSG_REGS
+#define IPC_MSG_HANDLES_MAX ABI_IPC_MSG_HANDLES_MAX
 
 /* 内核使用的消息结构(与 ABI 结构布局兼容) */
 struct ipc_msg_regs {
@@ -23,17 +23,17 @@ struct ipc_msg_buffer {
     size_t size;
 };
 
-struct ipc_msg_caps {
-    cap_handle_t handles[IPC_MSG_CAPS_MAX];
-    uint32_t     count;
+struct ipc_msg_handles {
+    handle_t handles[IPC_MSG_HANDLES_MAX];
+    uint32_t count;
 };
 
 struct ipc_message {
-    struct ipc_msg_regs   regs;
-    struct ipc_msg_buffer buffer;
-    struct ipc_msg_caps   caps;
-    uint32_t              flags;
-    tid_t                 sender_tid; /* 发送者 TID (receive 时填充, 用于延迟回复) */
+    struct ipc_msg_regs    regs;
+    struct ipc_msg_buffer  buffer;
+    struct ipc_msg_handles handles;
+    uint32_t               flags;
+    tid_t                  sender_tid; /* 发送者 TID (receive 时填充, 用于延迟回复) */
 };
 
 /* 消息标志 */
@@ -54,9 +54,9 @@ struct ipc_message {
 
 /**
  * 创建 Endpoint
- * @return Endpoint 句柄, 失败返回 CAP_HANDLE_INVALID
+ * @return Endpoint 句柄, 失败返回 HANDLE_INVALID
  */
-cap_handle_t endpoint_create(void);
+handle_t endpoint_create(const char *name);
 
 /**
  * 发送消息
@@ -66,7 +66,7 @@ cap_handle_t endpoint_create(void);
  * @param timeout_ms 超时时间(ms)
  * @return 0 成功, 负数失败
  */
-int ipc_send(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms);
+int ipc_send(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms);
 
 /**
  * 接收消息
@@ -76,7 +76,7 @@ int ipc_send(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_m
  * @param timeout_ms 超时时间(ms)
  * @return 0 成功, 负数失败
  */
-int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms);
+int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms);
 
 /**
  * RPC 调用 (Send + Receive)
@@ -87,7 +87,7 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
  * @param timeout_ms 超时时间(ms)
  * @return 0 成功, 负数失败
  */
-int ipc_call(cap_handle_t ep_handle, struct ipc_message *request, struct ipc_message *reply,
+int ipc_call(handle_t ep_handle, struct ipc_message *request, struct ipc_message *reply,
              uint32_t timeout_ms);
 
 /**
@@ -117,15 +117,15 @@ int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply);
  * @param msg       消息内容
  * @return 0 成功, 负数失败
  */
-int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg);
+int ipc_send_async(handle_t ep_handle, struct ipc_message *msg);
 
 /**
  * 等待多个对象(Endpoint 或 Notification)
  */
 #define IPC_WAIT_MAX 8
 struct ipc_wait_set {
-    cap_handle_t handles[IPC_WAIT_MAX];
-    uint32_t     count;
+    handle_t handles[IPC_WAIT_MAX];
+    uint32_t count;
 };
 
 /**
@@ -133,16 +133,16 @@ struct ipc_wait_set {
  *
  * @param set        等待集合
  * @param timeout_ms 超时时间
- * @return 就绪的句柄,超时返回 CAP_HANDLE_INVALID
+ * @return 就绪的句柄,超时返回 HANDLE_INVALID
  */
-cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms);
+handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms);
 
 /**
  * 创建 Notification
  *
  * @return Notification 句柄
  */
-cap_handle_t notification_create(void);
+handle_t notification_create(void);
 
 /**
  * 发送信号(非阻塞,设置 bit)
@@ -150,7 +150,7 @@ cap_handle_t notification_create(void);
  * @param notif_handle Notification 句柄
  * @param bits         要设置的位
  */
-void notification_signal(cap_handle_t notif_handle, uint32_t bits);
+void notification_signal(handle_t notif_handle, uint32_t bits);
 
 /**
  * 等待信号(阻塞直到有信号)
@@ -158,7 +158,7 @@ void notification_signal(cap_handle_t notif_handle, uint32_t bits);
  * @param notif_handle Notification 句柄
  * @return 收到的位
  */
-uint32_t notification_wait(cap_handle_t notif_handle);
+uint32_t notification_wait(handle_t notif_handle);
 
 /*
  * 内核接口

@@ -29,7 +29,6 @@ set(CMAKE_EXE_LINKER_FLAGS "-m32 -T${ARCH_DIR}/boot/kernel.ld -nostdlib -no-pie 
 # ============================================
 option(CFG_ENABLE_IPC "Enable IPC subsystem" ON)
 option(CFG_ENABLE_VFS "Enable VFS subsystem" ON)
-option(CFG_ENABLE_CAPS "Enable Capability subsystem" ON)
 option(CFG_ENABLE_INPUT "Enable Input subsystem" ON)
 
 # 依赖检查
@@ -58,7 +57,6 @@ set(CFG_MAX_THREADS 4096 CACHE STRING "Thread table size")
 option(CFG_PID_DYNAMIC "Enable dynamic PID allocation" ON)
 set(CFG_MAX_PROCESSES 1024 CACHE STRING "Process table size")
 
-option(CFG_CAP_DYNAMIC "Enable dynamic capability table" ON)
 option(CFG_BITMAP_DYNAMIC "Enable dynamic bitmap allocator" ON)
 
 # ============================================
@@ -86,9 +84,9 @@ endif ()
 # ============================================
 # IPC 配置
 # ============================================
-set(CFG_CAP_TABLE_SIZE 256 CACHE STRING "Per-process capability table initial size")
 set(CFG_IPC_MSG_REGS 8 CACHE STRING "Number of short message registers")
-set(CFG_IPC_MSG_CAPS_MAX 4 CACHE STRING "Max capability handles per message")
+set(CFG_IPC_MSG_HANDLES_MAX 4 CACHE STRING "Max handles per message")
+set(CFG_HANDLE_TABLE_SIZE 1024 CACHE STRING "Handle table initial size")
 option(CFG_IPC_MSG_POOL "Enable IPC global message pool for async buffering" ON)
 
 # ============================================
@@ -135,14 +133,13 @@ if (CFG_ENABLE_VFS)
     list(APPEND KERNEL_SOURCES ${VFS_C})
 endif ()
 
-if (CFG_ENABLE_CAPS)
-    list(APPEND KERNEL_SOURCES "${CMAKE_SOURCE_DIR}/main/kernel/capability/capability.c")
-    if (CFG_CAP_DYNAMIC)
-        list(APPEND KERNEL_SOURCES "${CMAKE_SOURCE_DIR}/main/kernel/capability/capability_dynamic.c")
-    else ()
-        list(APPEND KERNEL_SOURCES "${CMAKE_SOURCE_DIR}/main/kernel/capability/capability_static.c")
-    endif ()
-endif ()
+# Permission System
+file(GLOB_RECURSE PERM_C "${CMAKE_SOURCE_DIR}/main/kernel/perm/*.c")
+list(APPEND KERNEL_SOURCES ${PERM_C})
+
+# Handle System
+file(GLOB_RECURSE HANDLE_C "${CMAKE_SOURCE_DIR}/main/kernel/handle/*.c")
+list(APPEND KERNEL_SOURCES ${HANDLE_C})
 
 if (CFG_ENABLE_INPUT)
     file(GLOB_RECURSE INPUT_C "${CMAKE_SOURCE_DIR}/main/kernel/io/input.c")

@@ -1,9 +1,9 @@
 #ifndef KERNEL_IPC_ENDPOINT_H
 #define KERNEL_IPC_ENDPOINT_H
 
+#include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/sync.h>
-#include <xnix/types.h>
 
 struct thread;
 struct ipc_kmsg;
@@ -25,7 +25,7 @@ struct ipc_async_msg {
  */
 struct poll_entry {
     struct thread     *waiter;    /* 等待的线程 */
-    cap_handle_t       handle;    /* 对应的句柄(用于返回) */
+    handle_t           handle;    /* 对应的句柄(用于返回) */
     struct poll_entry *next;      /* 对象内的 poll 链表 */
     volatile bool      triggered; /* 是否已触发 */
 };
@@ -76,11 +76,11 @@ void endpoint_unref(void *ptr);
  *   - ipc_call_direct(ep):内核内部调用,跳过能力表查找,直接使用已验证的 ep
  *
  * 场景:
- *   内核子系统(如 VFS)在初始化时已通过 cap_lookup() 验证过 endpoint 的权限,
+ *   内核子系统(如 VFS)在初始化时已通过 handle_lookup() 验证过 endpoint 的权限,
  *   后续操作不需要重复查表,直接用缓存的 ep 指针调用即可.
  *
  * 调用者责任:
- *   - 确保 ep 指针有效(已通过 cap_lookup 获取)
+ *   - 确保 ep 指针有效(已通过 handle_lookup 获取)
  *   - 确保 ep 的引用计数已增加(防止被释放)
  *
  * @param ep         已验证的 endpoint 指针

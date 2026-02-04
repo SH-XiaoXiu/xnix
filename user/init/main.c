@@ -11,9 +11,6 @@
  *   4. 等待 /sys 挂载完成
  *   5. 加载用户配置(可通过引导参数 config=xxx 覆盖)
  *   6. 按配置启动用户服务
- *
- * 内核传递的 capability handles(按名称映射):
- *   serial_ep, ioport, vfs_ep, ata_io, ata_ctrl, fat_vfs_ep, fb_ep, rootfs_ep
  */
 
 #include "svc_manager.h"
@@ -26,6 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <vfs_client.h>
+#include <xnix/ipc.h>
 #include <xnix/syscall.h>
 
 /* 服务管理器 */
@@ -78,17 +76,29 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* 动态获取 VFS endpoint 句柄 (从 g_mgr.cap_defs 中查找) */
+    /* 动态获取 VFS endpoint 句柄 (从 g_mgr.handle_defs 中查找) */
     uint32_t vfs_ep_handle = 2; /* 默认回退 */
-    for (int i = 0; i < g_mgr.cap_def_count; i++) {
-        if (strcmp(g_mgr.cap_defs[i].name, "vfs_ep") == 0) {
-            vfs_ep_handle = g_mgr.cap_defs[i].handle;
+    for (int i = 0; i < g_mgr.handle_def_count; i++) {
+        if (strcmp(g_mgr.handle_defs[i].name, "vfs_ep") == 0) {
+            if (g_mgr.handle_defs[i].handle != HANDLE_INVALID) {
+                vfs_ep_handle = g_mgr.handle_defs[i].handle;
+            }
             break;
         }
     }
 
     /* 初始化 VFS 客户端 */
     vfs_client_init(vfs_ep_handle);
+
+    /* 创建 init_notify endpoint 用于接收服务就绪通知 */
+    int init_notify_ep = sys_endpoint_create("init_notify");
+    if (init_notify_ep < 0) {
+        printf(ACOLOR_BRED "[INIT]" ACOLOR_RESET " failed to create init_notify endpoint\n");
+    } else {
+        printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " init_notify endpoint created (handle %d)\n",
+               init_notify_ep);
+    }
+
     printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " ready\n");
 
     /* 主循环:先启动核心服务,等待 /sys 可用后加载用户配置 */
@@ -98,8 +108,24 @@ int main(int argc, char **argv) {
         /* 收割子进程 */
         reap_children();
 
-        /* 服务管理器 tick */
-        svc_tick(&g_mgr);
+        /* 非阻塞接收就绪通知 */
+        if (init_notify_ep >= 0) {
+            struct ipc_message msg     = {0};
+            char               buf[64] = {0};
+            msg.buffer.data            = buf;
+            msg.buffer.size            = sizeof(buf);
+            int ipc_ret                = sys_ipc_receive((uint32_t)init_notify_ep, &msg, 1);
+            if (ipc_ret == 0) {
+                svc_handle_ready_notification(&g_mgr, &msg);
+            }
+        }
+
+        /* 服务管理器 tick (并行调度) */
+        if (g_mgr.graph_valid) {
+            svc_tick_parallel(&g_mgr);
+        } else {
+            svc_tick(&g_mgr); /* 回退到旧的 tick */
+        }
 
         /* 尝试加载用户配置(在 /sys 挂载后) */
         if (!user_config_loaded) {

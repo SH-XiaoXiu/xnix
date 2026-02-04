@@ -7,12 +7,13 @@
 #define _XNIX_IPC_H
 
 #include <stdint.h>
+#include <xnix/abi/handle.h>
 #include <xnix/abi/ipc.h>
 #include <xnix/abi/types.h>
 
 /* 从 ABI 派生的常量 */
-#define IPC_MSG_REGS     ABI_IPC_MSG_REGS
-#define IPC_MSG_CAPS_MAX ABI_IPC_MSG_CAPS_MAX
+#define IPC_MSG_REGS        ABI_IPC_MSG_REGS
+#define IPC_MSG_HANDLES_MAX ABI_IPC_MSG_HANDLES_MAX
 
 /* 消息结构(与 ABI 布局兼容) */
 struct ipc_msg_regs {
@@ -24,17 +25,17 @@ struct ipc_msg_buffer {
     uint32_t size;
 };
 
-struct ipc_msg_caps {
-    uint32_t handles[IPC_MSG_CAPS_MAX];
+struct ipc_msg_handles {
+    handle_t handles[IPC_MSG_HANDLES_MAX];
     uint32_t count;
 };
 
 struct ipc_message {
-    struct ipc_msg_regs   regs;
-    struct ipc_msg_buffer buffer;
-    struct ipc_msg_caps   caps;
-    uint32_t              flags;
-    uint32_t              sender_tid; /* 发送者 TID (receive 时填充, 用于延迟回复) */
+    struct ipc_msg_regs    regs;
+    struct ipc_msg_buffer  buffer;
+    struct ipc_msg_handles handles;
+    uint32_t               flags;
+    uint32_t               sender_tid; /* 发送者 TID (receive 时填充, 用于延迟回复) */
 };
 
 /* 错误码 */

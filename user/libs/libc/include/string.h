@@ -16,6 +16,7 @@ int   memcmp(const void *s1, const void *s2, size_t n);
 
 /* 字符串操作 */
 size_t strlen(const char *s);
+size_t strnlen(const char *s, size_t n);
 int    strcmp(const char *s1, const char *s2);
 int    strncmp(const char *s1, const char *s2, size_t n);
 char  *strcpy(char *dest, const char *src);

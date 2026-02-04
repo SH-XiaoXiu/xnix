@@ -3,18 +3,20 @@
  * @brief IRQ 绑定系统调用
  */
 
-#include <kernel/capability/capability.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/irq/irq.h>
 #include <kernel/sys/syscall.h>
 #include <xnix/errno.h>
+#include <xnix/handle.h>
+#include <xnix/perm.h>
 #include <xnix/process.h>
+#include <xnix/stdio.h>
 #include <xnix/syscall.h>
 
 /* SYS_IRQ_BIND: ebx=irq, ecx=notif_handle(-1 表示无), edx=bits */
 static int32_t sys_irq_bind(const uint32_t *args) {
     uint8_t                  irq          = (uint8_t)args[0];
-    cap_handle_t             notif_handle = (cap_handle_t)args[1];
+    handle_t                 notif_handle = (handle_t)args[1];
     uint32_t                 bits         = args[2];
     struct process          *proc         = process_current();
     struct ipc_notification *notif        = NULL;
@@ -23,11 +25,22 @@ static int32_t sys_irq_bind(const uint32_t *args) {
         return -ESRCH;
     }
 
-    /* notification 可选 */
-    if (notif_handle != CAP_HANDLE_INVALID) {
-        notif = cap_lookup(proc, notif_handle, CAP_TYPE_NOTIFICATION, CAP_WRITE);
-        if (!notif) {
+    /* 检查 IRQ 绑定权限 */
+    char perm_name[32];
+    snprintf(perm_name, sizeof(perm_name), "xnix.irq.%u", irq);
+    if (!perm_check_name(proc, perm_name)) {
+        /* 如果没有特定 IRQ 权限,检查通用权限 */
+        if (!perm_check_name(proc, "xnix.irq.all")) {
             return -EPERM;
+        }
+    }
+
+    /* notification 可选 */
+    if (notif_handle != HANDLE_INVALID) {
+        /* Notification 通常不需要额外权限,只要拥有 handle */
+        notif = handle_resolve(proc, notif_handle, HANDLE_NOTIFICATION, PERM_ID_INVALID);
+        if (!notif) {
+            return -EINVAL; /* 或 EPERM */
         }
     }
 

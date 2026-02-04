@@ -5,10 +5,10 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/capability/capability.h>
 #include <kernel/ipc/endpoint.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/sched/sched.h>
+#include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/process.h>
@@ -49,34 +49,33 @@ void notification_unref(void *ptr) {
     cpu_irq_restore(flags);
 }
 
-cap_handle_t notification_create(void) {
+handle_t notification_create(void) {
     struct ipc_notification *notif;
-    cap_handle_t             handle;
+    handle_t                 handle;
     struct process          *current;
 
     current = process_current();
     if (!current) {
-        return CAP_HANDLE_INVALID;
+        return HANDLE_INVALID;
     }
 
     notif = kzalloc(sizeof(struct ipc_notification));
     if (!notif) {
-        return CAP_HANDLE_INVALID;
+        return HANDLE_INVALID;
     }
 
     spin_init(&notif->lock);
     notif->pending_bits = 0;
     notif->wait_queue   = NULL;
     notif->poll_queue   = NULL;
-    notif->refcount     = 0; /* cap_alloc 会增加引用计数 */
+    notif->refcount     = 0; /* handle_alloc 会增加引用计数 */
 
     /* 分配句柄: 默认给予读写和管理权限 */
-    cap_rights_t rights = CAP_READ | CAP_WRITE | CAP_GRANT | CAP_MANAGE;
-    handle              = cap_alloc(current, CAP_TYPE_NOTIFICATION, notif, rights);
+    handle = handle_alloc(current, HANDLE_NOTIFICATION, notif, NULL);
 
-    if (handle == CAP_HANDLE_INVALID) {
+    if (handle == HANDLE_INVALID) {
         kfree(notif);
-        return CAP_HANDLE_INVALID;
+        return HANDLE_INVALID;
     }
 
     return handle;
@@ -133,7 +132,7 @@ void notification_signal_by_ptr(struct ipc_notification *notif, uint32_t bits) {
     spin_unlock(&notif->lock);
 }
 
-void notification_signal(cap_handle_t notif_handle, uint32_t bits) {
+void notification_signal(handle_t notif_handle, uint32_t bits) {
     struct process          *proc = process_current();
     struct ipc_notification *notif;
 
@@ -141,8 +140,8 @@ void notification_signal(cap_handle_t notif_handle, uint32_t bits) {
         return;
     }
 
-    /* 查找 Notification (需要 WRITE 权限) */
-    notif = cap_lookup(proc, notif_handle, CAP_TYPE_NOTIFICATION, CAP_WRITE);
+    /* 查找 Notification */
+    notif = handle_resolve(proc, notif_handle, HANDLE_NOTIFICATION, PERM_ID_INVALID);
     if (!notif) {
         return;
     }
@@ -150,7 +149,7 @@ void notification_signal(cap_handle_t notif_handle, uint32_t bits) {
     notification_signal_by_ptr(notif, bits);
 }
 
-uint32_t notification_wait(cap_handle_t notif_handle) {
+uint32_t notification_wait(handle_t notif_handle) {
     struct process          *proc = process_current();
     struct thread           *current;
     struct ipc_notification *notif;
@@ -160,8 +159,8 @@ uint32_t notification_wait(cap_handle_t notif_handle) {
         return 0;
     }
 
-    /* 查找 Notification (需要 READ 权限) */
-    notif = cap_lookup(proc, notif_handle, CAP_TYPE_NOTIFICATION, CAP_READ);
+    /* 查找 Notification */
+    notif = handle_resolve(proc, notif_handle, HANDLE_NOTIFICATION, PERM_ID_INVALID);
     if (!notif) {
         return 0;
     }

@@ -5,13 +5,14 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/capability/capability.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
+#include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
+#include <xnix/perm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 
@@ -44,16 +45,22 @@ void process_subsystem_init(void) {
     kernel_process.state         = PROCESS_RUNNING;
     kernel_process.exit_code     = 0;
     kernel_process.page_dir_phys = NULL; /* 内核进程使用当前(或内核)页表 */
-    kernel_process.cap_table     = cap_table_create();
-    kernel_process.threads       = NULL;
-    kernel_process.thread_count  = 0;
-    kernel_process.thread_lock   = mutex_create();
-    kernel_process.sync_table    = kzalloc(sizeof(struct sync_table));
-    kernel_process.parent        = NULL;
-    kernel_process.children      = NULL;
-    kernel_process.next_sibling  = NULL;
-    kernel_process.next          = NULL;
-    kernel_process.refcount      = 1;
+    kernel_process.handles       = handle_table_create();
+    kernel_process.perms         = perm_state_create(NULL); /* 内核进程拥有所有权限(隐式) */
+    /* 显式授予内核进程所有权限 */
+    if (kernel_process.perms) {
+        perm_grant(kernel_process.perms, "xnix.*");
+    }
+
+    kernel_process.threads      = NULL;
+    kernel_process.thread_count = 0;
+    kernel_process.thread_lock  = mutex_create();
+    kernel_process.sync_table   = kzalloc(sizeof(struct sync_table));
+    kernel_process.parent       = NULL;
+    kernel_process.children     = NULL;
+    kernel_process.next_sibling = NULL;
+    kernel_process.next         = NULL;
+    kernel_process.refcount     = 1;
 
     if (kernel_process.sync_table) {
         spin_init(&kernel_process.sync_table->lock);
@@ -62,8 +69,9 @@ void process_subsystem_init(void) {
 
     process_list = &kernel_process;
 
-    /* 注册 PROCESS 能力类型 */
-    cap_register_type(CAP_TYPE_PROCESS, (cap_ref_fn)process_ref, (cap_unref_fn)process_unref);
+    /* 初始化权限注册表和 Profile 系统 */
+    perm_registry_init();
+    perm_profile_init();
 
     pr_info("Process subsystem initialized (kernel PID 0)");
 }
@@ -175,8 +183,11 @@ void process_unref(struct process *proc) {
             }
             proc->page_dir_phys = NULL;
         }
-        if (proc->cap_table) {
-            cap_table_destroy(proc->cap_table);
+        if (proc->handles) {
+            handle_table_destroy(proc->handles);
+        }
+        if (proc->perms) {
+            perm_state_destroy(proc->perms);
         }
         if (proc->thread_lock) {
             mutex_destroy(proc->thread_lock);
@@ -220,7 +231,7 @@ void process_unref(struct process *proc) {
     cpu_irq_restore(flags);
 }
 
-process_t process_create(const char *name) {
+process_t process_create(const char *name, struct perm_profile *profile) {
     struct process *proc = kzalloc(sizeof(struct process));
     if (!proc) {
         return NULL;
@@ -254,7 +265,10 @@ process_t process_create(const char *name) {
         kfree(proc);
         return NULL;
     }
-    proc->cap_table    = cap_table_create();
+
+    proc->handles = handle_table_create();
+    proc->perms   = perm_state_create(profile);
+
     proc->threads      = NULL;
     proc->thread_count = 0;
     proc->thread_lock  = mutex_create();
@@ -269,14 +283,17 @@ process_t process_create(const char *name) {
         proc->sync_table->mutex_bitmap = 0;
     }
 
-    if (!proc->cap_table || !proc->thread_lock || !proc->sync_table) {
+    if (!proc->handles || !proc->perms || !proc->thread_lock || !proc->sync_table) {
         if (proc->page_dir_phys) {
             if (mm->destroy_as) {
                 mm->destroy_as(proc->page_dir_phys);
             }
         }
-        if (proc->cap_table) {
-            cap_table_destroy(proc->cap_table);
+        if (proc->handles) {
+            handle_table_destroy(proc->handles);
+        }
+        if (proc->perms) {
+            perm_state_destroy(proc->perms);
         }
         if (proc->thread_lock) {
             mutex_destroy(proc->thread_lock);

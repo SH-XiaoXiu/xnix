@@ -21,6 +21,7 @@
 #include <xnix/driver.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
+#include <xnix/perm.h>
 #include <xnix/stdio.h>
 
 #include "xnix/debug.h"
@@ -98,6 +99,7 @@ static void boot_phase_subsys(void) {
     ipc_init();
     pr_ok("IPC subsystem.");
 
+    perm_init();
     ioport_init();
     input_init();
 
@@ -191,12 +193,16 @@ static void boot_start_services(void) {
         }
     }
 
-    pid_t init_pid = PID_INVALID;
+    pid_t                init_pid     = PID_INVALID;
+    struct perm_profile *init_profile = perm_profile_find("init");
+    if (!init_profile) {
+        pr_warn("Init profile not found, spawning init without profile");
+    }
     if (init_argc > 0) {
-        init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, NULL, 0, init_argc,
-                                                     init_argv);
+        init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, NULL, 0,
+                                                     init_profile, init_argc, init_argv);
     } else {
-        init_pid = process_spawn_module_ex("init", mod_addr, mod_size, NULL, 0);
+        init_pid = process_spawn_module_ex("init", mod_addr, mod_size, NULL, 0, init_profile);
     }
 
     if (init_pid == PID_INVALID) {

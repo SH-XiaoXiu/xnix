@@ -11,12 +11,6 @@
 #include <xnix/abi/stdint.h>
 
 /*
- * 能力句柄
- */
-typedef uint32_t cap_handle_t;
-#define CAP_HANDLE_INVALID ((cap_handle_t) - 1)
-
-/*
  * 进程/线程 ID
  *
  * 使用有符号类型,负数表示错误或无效

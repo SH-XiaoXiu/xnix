@@ -5,15 +5,16 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/capability/capability.h>
 #include <kernel/ipc/endpoint.h>
 #include <kernel/ipc/msg_pool.h>
 #include <kernel/ipc/notification.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <xnix/config.h>
+#include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
+#include <xnix/perm.h>
 #include <xnix/process.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
@@ -63,26 +64,27 @@ void endpoint_unref(void *ptr) {
     cpu_irq_restore(flags);
 }
 
-cap_handle_t endpoint_create(void) {
+handle_t endpoint_create(const char *name) {
     struct ipc_endpoint *ep;
-    cap_handle_t         handle;
+    handle_t             handle;
     struct process      *current;
 
     current = process_current();
     if (!current) {
-        return CAP_HANDLE_INVALID;
+        return HANDLE_INVALID;
     }
 
     ep = kzalloc(sizeof(struct ipc_endpoint));
     if (!ep) {
-        return CAP_HANDLE_INVALID;
+        return HANDLE_INVALID;
     }
 
     spin_init(&ep->lock);
     ep->send_queue = NULL;
     ep->recv_queue = NULL;
     ep->poll_queue = NULL;
-    ep->refcount   = 0; /* cap_alloc 会增加引用计数 */
+    ep->refcount   = 1; /* Handle 持有引用 */
+
 #if CFG_IPC_MSG_POOL
     ep->async_head = NULL;
     ep->async_tail = NULL;
@@ -92,13 +94,12 @@ cap_handle_t endpoint_create(void) {
     ep->async_tail = 0;
 #endif
 
-    /* 分配句柄: 默认给予读写和管理权限 */
-    cap_rights_t rights = CAP_READ | CAP_WRITE | CAP_GRANT | CAP_MANAGE;
-    handle              = cap_alloc(current, CAP_TYPE_ENDPOINT, ep, rights);
+    /* 分配句柄(传递名称用于权限注册) */
+    handle = handle_alloc(current, HANDLE_ENDPOINT, ep, name);
 
-    if (handle == CAP_HANDLE_INVALID) {
+    if (handle == HANDLE_INVALID) {
         kfree(ep);
-        return CAP_HANDLE_INVALID;
+        return HANDLE_INVALID;
     }
 
     return handle;
@@ -132,24 +133,22 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
         dst_msg->buffer.size = 0;
     }
 
-    /* 拷贝能力句柄(capability transfer)*/
-    dst_msg->caps.count = 0;
-    if (src_msg->caps.count > 0 && src_msg->caps.count <= IPC_MSG_CAPS_MAX) {
+    /* 拷贝 Handle (handle transfer)*/
+    dst_msg->handles.count = 0;
+    if (src_msg->handles.count > 0 && src_msg->handles.count <= IPC_MSG_HANDLES_MAX) {
         struct process *src_proc = src->owner;
         struct process *dst_proc = dst->owner;
 
         if (src_proc && dst_proc) {
-            struct cap_table *src_table = src_proc->cap_table;
-            for (uint32_t i = 0; i < src_msg->caps.count; i++) {
-                cap_handle_t src_handle = src_msg->caps.handles[i];
+            for (uint32_t i = 0; i < src_msg->handles.count; i++) {
+                handle_t src_handle = src_msg->handles.handles[i];
 
-                /* 复制 capability 到接收者进程 (保持原有的权限,包括 GRANT) */
-                cap_rights_t rights = src_table->caps[src_handle].rights;
-                cap_handle_t dst_handle =
-                    cap_duplicate_to(src_proc, src_handle, dst_proc, rights, CAP_HANDLE_INVALID);
+                /* 传递 Handle 到接收者进程 */
+                handle_t dst_handle =
+                    handle_transfer(src_proc, src_handle, dst_proc, NULL, HANDLE_INVALID);
 
-                if (dst_handle != CAP_HANDLE_INVALID) {
-                    dst_msg->caps.handles[dst_msg->caps.count++] = dst_handle;
+                if (dst_handle != HANDLE_INVALID) {
+                    dst_msg->handles.handles[dst_msg->handles.count++] = dst_handle;
                 }
             }
         }
@@ -227,21 +226,44 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
     return IPC_OK;
 }
 
-int ipc_send(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
+int ipc_send(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
     struct process      *proc = process_current();
-    struct ipc_endpoint *ep =
-        proc ? cap_lookup(proc, ep_handle, CAP_TYPE_ENDPOINT, CAP_WRITE) : NULL;
+    struct handle_entry *entry;
+    struct ipc_endpoint *ep = NULL;
+
+    if (proc && proc->handles) {
+        /* 手动查找以获取权限 ID */
+        entry = handle_get_entry(proc->handles, ep_handle);
+        if (entry && entry->type == HANDLE_ENDPOINT) {
+            /* 检查 send 权限 */
+            if (entry->perm_send == PERM_ID_INVALID || perm_check(proc, entry->perm_send)) {
+                ep = entry->object;
+            }
+        }
+    }
+
     if (!ep) {
         return IPC_ERR_INVALID;
     }
     return ipc_send_to_ep(ep, msg, NULL, timeout_ms);
 }
 
-int ipc_call(cap_handle_t ep_handle, struct ipc_message *request, struct ipc_message *reply,
+int ipc_call(handle_t ep_handle, struct ipc_message *request, struct ipc_message *reply,
              uint32_t timeout_ms) {
     struct process      *proc = process_current();
-    struct ipc_endpoint *ep =
-        proc ? cap_lookup(proc, ep_handle, CAP_TYPE_ENDPOINT, CAP_WRITE) : NULL;
+    struct handle_entry *entry;
+    struct ipc_endpoint *ep = NULL;
+
+    if (proc && proc->handles) {
+        entry = handle_get_entry(proc->handles, ep_handle);
+        if (entry && entry->type == HANDLE_ENDPOINT) {
+            /* 检查 send 权限 (call = send + recv reply, 但只需要 send 权限即可发起) */
+            if (entry->perm_send == PERM_ID_INVALID || perm_check(proc, entry->perm_send)) {
+                ep = entry->object;
+            }
+        }
+    }
+
     if (!ep) {
         return IPC_ERR_INVALID;
     }
@@ -256,17 +278,27 @@ int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc
     return ipc_send_to_ep(ep, msg, reply_buf, timeout_ms);
 }
 
-int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
+int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
     struct process      *proc = process_current();
     struct thread       *current;
-    struct ipc_endpoint *ep;
+    struct ipc_endpoint *ep = NULL;
     struct thread       *sender;
+    struct handle_entry *entry;
 
     if (!proc) {
         return IPC_ERR_INVALID;
     }
 
-    ep = cap_lookup(proc, ep_handle, CAP_TYPE_ENDPOINT, CAP_READ);
+    if (proc->handles) {
+        entry = handle_get_entry(proc->handles, ep_handle);
+        if (entry && entry->type == HANDLE_ENDPOINT) {
+            /* 检查 recv 权限 */
+            if (entry->perm_recv == PERM_ID_INVALID || perm_check(proc, entry->perm_recv)) {
+                ep = entry->object;
+            }
+        }
+    }
+
     if (!ep) {
         return IPC_ERR_INVALID;
     }
@@ -355,18 +387,28 @@ int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg, uint32_t timeou
     return IPC_OK;
 }
 
-int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
+int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
     struct process      *proc = process_current();
     struct thread       *current;
-    struct ipc_endpoint *ep;
+    struct ipc_endpoint *ep = NULL;
     struct thread       *receiver;
+    struct handle_entry *entry;
 
     if (!proc) {
         return IPC_ERR_INVALID;
     }
 
     /* 查找 Endpoint */
-    ep = cap_lookup(proc, ep_handle, CAP_TYPE_ENDPOINT, CAP_WRITE);
+    if (proc->handles) {
+        entry = handle_get_entry(proc->handles, ep_handle);
+        if (entry && entry->type == HANDLE_ENDPOINT) {
+            /* 检查 send 权限 */
+            if (entry->perm_send == PERM_ID_INVALID || perm_check(proc, entry->perm_send)) {
+                ep = entry->object;
+            }
+        }
+    }
+
     if (!ep) {
         return IPC_ERR_INVALID;
     }
@@ -522,28 +564,38 @@ static void notification_poll_remove(struct ipc_notification *notif, struct poll
  * 4. 被唤醒后找出就绪的对象
  * 5. 清理所有 poll_entry
  */
-cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
+handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
     struct process *proc    = process_current();
     struct thread  *current = sched_current();
-    cap_handle_t    result  = CAP_HANDLE_INVALID;
+    handle_t        result  = HANDLE_INVALID;
 
     if (!set || set->count == 0 || set->count > IPC_WAIT_MAX || !proc || !current) {
-        return CAP_HANDLE_INVALID;
+        return HANDLE_INVALID;
     }
 
     /* 在栈上分配 poll entries */
     struct poll_entry entries[IPC_WAIT_MAX];
     void             *objects[IPC_WAIT_MAX]; /* 对象指针 */
-    cap_type_t        types[IPC_WAIT_MAX];   /* 对象类型 */
+    handle_type_t     types[IPC_WAIT_MAX];   /* 对象类型 */
     uint32_t          valid_count = 0;
 
     /* 第一遍:查找所有对象,检查是否有已就绪的 */
     for (uint32_t i = 0; i < set->count; i++) {
-        cap_handle_t handle = set->handles[i];
+        handle_t handle = set->handles[i];
 
-        /* 尝试作为 endpoint */
-        struct ipc_endpoint *ep = cap_lookup(proc, handle, CAP_TYPE_ENDPOINT, CAP_READ);
-        if (ep) {
+        /* 解析 Handle */
+        struct handle_entry *entry = handle_get_entry(proc->handles, handle);
+        if (!entry) {
+            continue;
+        }
+
+        if (entry->type == HANDLE_ENDPOINT) {
+            /* 检查 recv 权限 */
+            if (entry->perm_recv != PERM_ID_INVALID && !perm_check(proc, entry->perm_recv)) {
+                continue;
+            }
+
+            struct ipc_endpoint *ep = entry->object;
             spin_lock(&ep->lock);
             if (endpoint_has_message_locked(ep)) {
                 spin_unlock(&ep->lock);
@@ -552,18 +604,14 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
             spin_unlock(&ep->lock);
 
             objects[valid_count]           = ep;
-            types[valid_count]             = CAP_TYPE_ENDPOINT;
+            types[valid_count]             = HANDLE_ENDPOINT;
             entries[valid_count].handle    = handle;
             entries[valid_count].waiter    = current;
             entries[valid_count].triggered = false;
             entries[valid_count].next      = NULL;
             valid_count++;
-            continue;
-        }
-
-        /* 尝试作为 notification */
-        struct ipc_notification *notif = cap_lookup(proc, handle, CAP_TYPE_NOTIFICATION, CAP_READ);
-        if (notif) {
+        } else if (entry->type == HANDLE_NOTIFICATION) {
+            struct ipc_notification *notif = entry->object;
             spin_lock(&notif->lock);
             if (notification_has_signal_locked(notif)) {
                 spin_unlock(&notif->lock);
@@ -572,7 +620,7 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
             spin_unlock(&notif->lock);
 
             objects[valid_count]           = notif;
-            types[valid_count]             = CAP_TYPE_NOTIFICATION;
+            types[valid_count]             = HANDLE_NOTIFICATION;
             entries[valid_count].handle    = handle;
             entries[valid_count].waiter    = current;
             entries[valid_count].triggered = false;
@@ -582,12 +630,12 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
     }
 
     if (valid_count == 0) {
-        return CAP_HANDLE_INVALID;
+        return HANDLE_INVALID;
     }
 
     /* 第二遍:将 poll_entry 加入各对象的 poll_queue */
     for (uint32_t i = 0; i < valid_count; i++) {
-        if (types[i] == CAP_TYPE_ENDPOINT) {
+        if (types[i] == HANDLE_ENDPOINT) {
             struct ipc_endpoint *ep = objects[i];
             spin_lock(&ep->lock);
             entries[i].next = ep->poll_queue;
@@ -604,7 +652,7 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
 
     /* 阻塞等待 */
     if (!sched_block_timeout(current, timeout_ms)) {
-        result = CAP_HANDLE_INVALID; /* 超时 */
+        result = HANDLE_INVALID; /* 超时 */
     } else {
         /* 找出被触发的 entry */
         for (uint32_t i = 0; i < valid_count; i++) {
@@ -617,7 +665,7 @@ cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
 
     /* 清理:从所有对象的 poll_queue 中移除 entries */
     for (uint32_t i = 0; i < valid_count; i++) {
-        if (types[i] == CAP_TYPE_ENDPOINT) {
+        if (types[i] == HANDLE_ENDPOINT) {
             struct ipc_endpoint *ep = objects[i];
             spin_lock(&ep->lock);
             endpoint_poll_remove(ep, &entries[i]);
@@ -702,8 +750,5 @@ int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply) {
 
 void ipc_init(void) {
     ipc_kmsg_pool_init();
-    /* 注册 Endpoint 类型的能力操作 */
-    cap_register_type(CAP_TYPE_ENDPOINT, endpoint_ref, endpoint_unref);
-    /* 注册 Notification 类型的能力操作 */
-    cap_register_type(CAP_TYPE_NOTIFICATION, notification_ref, notification_unref);
+    /* Handle 系统负责资源释放,不需要注册类型回调 */
 }

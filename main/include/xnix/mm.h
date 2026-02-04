@@ -102,6 +102,23 @@ void *kzalloc(size_t size);
  */
 void kfree(void *ptr);
 
+/**
+ * 重新分配内存
+ *
+ * @param ptr     旧指针
+ * @param new_size 新大小
+ * @return 新指针,失败返回 NULL (原指针依然有效)
+ */
+void *krealloc(void *ptr, size_t new_size);
+
+/**
+ * 复制字符串
+ *
+ * @param s 源字符串
+ * @return 新分配的字符串副本
+ */
+void *kstrdup(const char *s);
+
 /*
  * 初始化和调试
  */

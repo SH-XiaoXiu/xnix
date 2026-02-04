@@ -13,7 +13,7 @@ typedef int (*udm_handler_t)(struct ipc_message *msg);
 
 /* UDM Server 配置 */
 struct udm_server {
-    cap_handle_t  endpoint; /* 从内核继承的 endpoint */
+    handle_t      endpoint; /* 从内核继承的 endpoint */
     udm_handler_t handler;  /* 消息处理函数 */
     const char   *name;     /* 服务名称(用于调试) */
 };

@@ -1,7 +1,6 @@
 #ifndef XNIX_CONSOLE_H
 #define XNIX_CONSOLE_H
 
-#include <xnix/capability.h>
 #include <xnix/types.h>
 
 /**

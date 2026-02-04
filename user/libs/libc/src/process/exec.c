@@ -1,5 +1,4 @@
 #include <d/protocol/vfs.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <vfs_client.h>
@@ -38,26 +37,20 @@ int sys_exec(struct abi_exec_args *args) {
         return -EINVAL;
     }
 
-    // printf("[exec] Checking %s\n", args->path);
     struct vfs_stat st;
     int             ret = vfs_stat(args->path, &st);
     if (ret < 0) {
-        // printf("[exec] stat failed: %d\n", ret);
         return ret;
     }
-    // printf("[exec] File size: %u bytes\n", st.size);
 
     if (st.type != VFS_TYPE_FILE || st.size == 0) {
         return -EINVAL;
     }
 
-    // printf("[exec] Opening file...\n");
     int fd = vfs_open(args->path, 0);
     if (fd < 0) {
-        // printf("[exec] open failed: %d\n", fd);
         return fd;
     }
-    // printf("[exec] File opened, fd=%d\n", fd);
 
     void *elf = malloc(st.size);
     if (!elf) {
@@ -65,7 +58,6 @@ int sys_exec(struct abi_exec_args *args) {
         return -ENOMEM;
     }
 
-    // printf("[exec] Reading %u bytes...\n", st.size);
     uint32_t total = 0;
     while (total < st.size) {
         ssize_t n = vfs_read(fd, (uint8_t *)elf + total, (size_t)(st.size - total));
@@ -82,11 +74,15 @@ int sys_exec(struct abi_exec_args *args) {
         total += (uint32_t)n;
     }
     vfs_close(fd);
-    // printf("[exec] Read complete (%u bytes)\n", total);
 
     struct abi_exec_image_args img_args;
     memset(&img_args, 0, sizeof(img_args));
     derive_proc_name(img_args.name, args->path);
+    if (args->profile_name[0] != '\0') {
+        size_t profile_len = strnlen(args->profile_name, ABI_SPAWN_PROFILE_LEN - 1);
+        memcpy(img_args.profile_name, args->profile_name, profile_len);
+        img_args.profile_name[profile_len] = '\0';
+    }
     img_args.elf_ptr  = (uint32_t)(uintptr_t)elf;
     img_args.elf_size = st.size;
     img_args.flags    = args->flags;
@@ -101,16 +97,14 @@ int sys_exec(struct abi_exec_args *args) {
     img_args.argc = argc;
     memcpy(img_args.argv, args->argv, sizeof(img_args.argv));
 
-    uint32_t cap_count = args->cap_count;
-    if (cap_count > ABI_EXEC_MAX_CAPS) {
-        cap_count = ABI_EXEC_MAX_CAPS;
+    uint32_t handle_count = args->handle_count;
+    if (handle_count > ABI_EXEC_MAX_HANDLES) {
+        handle_count = ABI_EXEC_MAX_HANDLES;
     }
-    img_args.cap_count = cap_count;
-    memcpy(img_args.caps, args->caps, cap_count * sizeof(args->caps[0]));
+    img_args.handle_count = handle_count;
+    memcpy(img_args.handles, args->handles, handle_count * sizeof(args->handles[0]));
 
-    // printf("[exec] Calling kernel syscall...\n");
     int pid = syscall1(SYS_EXEC, (uint32_t)(uintptr_t)&img_args);
     free(elf);
-    // printf("[exec] Syscall returned pid=%d\n", pid);
     return pid;
 }

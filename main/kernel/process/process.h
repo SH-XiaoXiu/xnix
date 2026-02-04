@@ -10,14 +10,16 @@
 #define KERNEL_PROCESS_H
 
 #include <xnix/abi/process.h>
-#include <xnix/capability.h>
+#include <xnix/handle.h>
+#include <xnix/perm.h>
 #include <xnix/process.h>
 #include <xnix/sync.h>
 #include <xnix/types.h>
 
-struct cap_table;  /* 前向声明 */
-struct thread;     /* 前向声明 */
-struct page_table; /* 前向声明 */
+struct handle_table; /* 前向声明 */
+struct perm_state;   /* 前向声明 */
+struct thread;       /* 前向声明 */
+struct page_table;   /* 前向声明 */
 
 /**
  * 同步对象表
@@ -32,11 +34,6 @@ struct sync_table {
 };
 
 /**
- * 当前工作目录最大长度
- */
-#define PROCESS_CWD_MAX 256
-
-/**
  * 进程控制块 (PCB)
  */
 struct process {
@@ -49,8 +46,11 @@ struct process {
     /* 地址空间 (页目录物理地址) */
     void *page_dir_phys;
 
-    /* 能力表 */
-    struct cap_table *cap_table;
+    /* Handle 表 */
+    struct handle_table *handles;
+
+    /* 权限状态 */
+    struct perm_state *perms;
 
     /* 线程列表 */
     struct thread *threads;      /* 属于此进程的线程链表 */
@@ -151,42 +151,33 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size);
  */
 int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, uint32_t *out_entry);
 
-pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size);
-
-struct spawn_inherit_cap {
-    cap_handle_t src;
-    cap_rights_t rights;
-    cap_handle_t expected_dst;
-};
+pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size,
+                           struct perm_profile *profile);
 
 pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
-                              const struct spawn_inherit_cap *inherit_caps, uint32_t inherit_count);
+                              const struct spawn_handle *handles, uint32_t handle_count,
+                              struct perm_profile *profile);
 
 /**
- * 创建进程(带 capability 继承和 argv)
+ * 创建进程(带 handle 传递和 argv)
  */
 pid_t process_spawn_module_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
-                                        const struct spawn_inherit_cap *inherit_caps,
-                                        uint32_t inherit_count, int argc,
+                                        const struct spawn_handle *handles, uint32_t handle_count,
+                                        struct perm_profile *profile, int argc,
                                         char argv[][ABI_EXEC_MAX_ARG_LEN]);
 
 /**
  * 从 ELF 创建进程(带 argv)
- * @param name     进程名
- * @param elf_data ELF 数据
- * @param elf_size ELF 大小
- * @param argc     参数数量
- * @param argv     参数数组
  */
 pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf_size, int argc,
-                                  char argv[][ABI_EXEC_MAX_ARG_LEN]);
+                                  char argv[][ABI_EXEC_MAX_ARG_LEN], struct perm_profile *profile);
 
 /**
- * 从 ELF 创建进程(带 capability 继承和 argv)
+ * 从 ELF 创建进程(带 handle 传递和 argv)
  */
 pid_t process_spawn_elf_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
-                                     const struct spawn_inherit_cap *inherit_caps,
-                                     uint32_t inherit_count, int argc,
+                                     const struct spawn_handle *handles, uint32_t handle_count,
+                                     struct perm_profile *profile, int argc,
                                      char argv[][ABI_EXEC_MAX_ARG_LEN]);
 
 /**

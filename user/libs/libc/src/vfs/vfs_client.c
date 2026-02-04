@@ -37,7 +37,7 @@ static struct vfs_file fd_table[VFS_MAX_FD];
  * 初始化 VFS 客户端
  */
 void vfs_client_init(uint32_t vfsd_ep) {
-    if (vfsd_ep != 0) {
+    if (vfsd_ep != HANDLE_INVALID) {
         g_vfsd_ep = vfsd_ep;
     }
     for (int i = 0; i < VFS_MAX_FD; i++) {
@@ -46,7 +46,7 @@ void vfs_client_init(uint32_t vfsd_ep) {
 }
 
 /**
- * 挂载文件系统(通过 vfsd,传递 capability)
+ * 挂载文件系统(通过 vfsd,传递 handle)
  */
 int vfs_mount(const char *path, uint32_t fs_ep) {
     if (!path) {
@@ -60,9 +60,9 @@ int vfs_mount(const char *path, uint32_t fs_ep) {
     msg.buffer.data  = (void *)path;
     msg.buffer.size  = strlen(path);
 
-    /* 通过 IPC capability 传递 FS endpoint */
-    msg.caps.handles[0] = fs_ep;
-    msg.caps.count      = 1;
+    /* 通过 IPC handle 传递 FS endpoint */
+    msg.handles.handles[0] = fs_ep;
+    msg.handles.count      = 1;
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
@@ -122,10 +122,12 @@ int vfs_open(const char *path, uint32_t flags) {
         return result;
     }
 
-    /* vfsd 在 reply.caps.handles[0] 返回 fs_ep */
+    /* vfsd 在 reply.handles.handles[0] 返回 fs_ep */
     fd_table[fd].fs_handle = (uint32_t)result;
-    fd_table[fd].fs_ep     = reply.caps.handles[0];
-    fd_table[fd].flags     = flags;
+    if (reply.handles.count > 0) {
+        fd_table[fd].fs_ep = reply.handles.handles[0];
+    }
+    fd_table[fd].flags = flags;
 
     return fd;
 }
@@ -340,7 +342,7 @@ int vfs_opendir(const char *path) {
     }
 
     fd_table[fd].fs_handle = (uint32_t)result;
-    fd_table[fd].fs_ep     = reply.caps.handles[0];
+    fd_table[fd].fs_ep     = reply.handles.handles[0];
     fd_table[fd].flags     = 0;
     return fd;
 }

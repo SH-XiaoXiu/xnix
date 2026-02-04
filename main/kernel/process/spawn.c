@@ -5,12 +5,13 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/capability/capability.h>
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
 #include <xnix/debug.h>
+#include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
+#include <xnix/perm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 
@@ -50,24 +51,22 @@ static void spawn_setup_parent(struct process *proc, struct process *creator) {
 }
 
 /**
- * 继承 capability
+ * 传递 handles
  * @return 0 成功,-1 失败
  */
-static int spawn_inherit_caps(struct process *proc, struct process *creator, const char *name,
-                              const struct spawn_inherit_cap *inherit_caps,
-                              uint32_t                        inherit_count) {
-    for (uint32_t i = 0; i < inherit_count; i++) {
-        cap_handle_t dup = cap_duplicate_to(creator, inherit_caps[i].src, proc,
-                                            inherit_caps[i].rights, inherit_caps[i].expected_dst);
-        if (dup == CAP_HANDLE_INVALID) {
-            kprintf("[spawn] Failed to inherit cap %d (src=%u, hint=%u)\n", i, inherit_caps[i].src,
-                    inherit_caps[i].expected_dst);
+static int spawn_transfer_handles(struct process *proc, struct process *creator,
+                                  const struct spawn_handle *handles, uint32_t handle_count) {
+    for (uint32_t i = 0; i < handle_count; i++) {
+        handle_t dst =
+            handle_transfer(creator, handles[i].src, proc, handles[i].name, handles[i].dst_hint);
+        if (dst == HANDLE_INVALID) {
+            kprintf("[spawn] Failed to transfer handle %d (src=%u, hint=%u)\n", i, handles[i].src,
+                    handles[i].dst_hint);
             continue;
         }
-        if (inherit_caps[i].expected_dst != CAP_HANDLE_INVALID &&
-            dup != inherit_caps[i].expected_dst) {
-            pr_warn("Spawn: inherited handle mismatch (expected %u, got %u)",
-                    inherit_caps[i].expected_dst, dup);
+        if (handles[i].dst_hint != HANDLE_INVALID && dst != handles[i].dst_hint) {
+            pr_warn("Spawn: inherited handle mismatch (expected %u, got %u)", handles[i].dst_hint,
+                    dst);
         }
     }
     return 0;
@@ -205,9 +204,9 @@ static void user_thread_entry_with_args(void *arg) {
  * 内部核心 spawn 函数
  */
 static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
-                        const struct spawn_inherit_cap *inherit_caps, uint32_t inherit_count,
-                        int argc, char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    struct process *proc = (struct process *)process_create(name);
+                        const struct spawn_handle *handles, uint32_t handle_count,
+                        struct perm_profile *profile, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN]) {
+    struct process *proc = (struct process *)process_create(name, profile);
     if (!proc) {
         pr_err("Failed to create process");
         return PID_INVALID;
@@ -216,9 +215,9 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
     struct process *creator = process_get_current();
     spawn_setup_parent(proc, creator);
 
-    /* 继承 capability */
-    if (inherit_count > 0 && inherit_caps) {
-        if (spawn_inherit_caps(proc, creator, name, inherit_caps, inherit_count) < 0) {
+    /* 传递 handles */
+    if (handle_count > 0 && handles) {
+        if (spawn_transfer_handles(proc, creator, handles, handle_count) < 0) {
             process_destroy((process_t)proc);
             return PID_INVALID;
         }
@@ -282,34 +281,36 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
  */
 
 pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
-    return spawn_core("init", elf_data, elf_size, NULL, 0, 0, NULL);
+    struct perm_profile *profile = perm_profile_find("init");
+    return spawn_core("init", elf_data, elf_size, NULL, 0, profile, 0, NULL);
 }
 
-pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size) {
-    return spawn_core(name, elf_data, elf_size, NULL, 0, 0, NULL);
+pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size,
+                           struct perm_profile *profile) {
+    return spawn_core(name, elf_data, elf_size, NULL, 0, profile, 0, NULL);
 }
 
 pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
-                              const struct spawn_inherit_cap *inherit_caps,
-                              uint32_t                        inherit_count) {
-    return spawn_core(name, elf_data, elf_size, inherit_caps, inherit_count, 0, NULL);
+                              const struct spawn_handle *handles, uint32_t handle_count,
+                              struct perm_profile *profile) {
+    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, 0, NULL);
 }
 
 pid_t process_spawn_module_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
-                                        const struct spawn_inherit_cap *inherit_caps,
-                                        uint32_t inherit_count, int argc,
+                                        const struct spawn_handle *handles, uint32_t handle_count,
+                                        struct perm_profile *profile, int argc,
                                         char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_core(name, elf_data, elf_size, inherit_caps, inherit_count, argc, argv);
+    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv);
 }
 
 pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf_size, int argc,
-                                  char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_core(name, elf_data, elf_size, NULL, 0, argc, argv);
+                                  char argv[][ABI_EXEC_MAX_ARG_LEN], struct perm_profile *profile) {
+    return spawn_core(name, elf_data, elf_size, NULL, 0, profile, argc, argv);
 }
 
 pid_t process_spawn_elf_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
-                                     const struct spawn_inherit_cap *inherit_caps,
-                                     uint32_t inherit_count, int argc,
+                                     const struct spawn_handle *handles, uint32_t handle_count,
+                                     struct perm_profile *profile, int argc,
                                      char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_core(name, elf_data, elf_size, inherit_caps, inherit_count, argc, argv);
+    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv);
 }

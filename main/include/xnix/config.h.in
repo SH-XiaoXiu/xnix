@@ -44,9 +44,9 @@
 /* ============================================
  * IPC 配置
  * ============================================ */
-#define CFG_CAP_TABLE_SIZE    @CFG_CAP_TABLE_SIZE@
+#define CFG_HANDLE_TABLE_SIZE @CFG_HANDLE_TABLE_SIZE@
 #define CFG_IPC_MSG_REGS      @CFG_IPC_MSG_REGS@
-#define CFG_IPC_MSG_CAPS_MAX  @CFG_IPC_MSG_CAPS_MAX@
+#define CFG_IPC_MSG_HANDLES_MAX  @CFG_IPC_MSG_HANDLES_MAX@
 #cmakedefine01 CFG_IPC_MSG_POOL
 
 /* ============================================

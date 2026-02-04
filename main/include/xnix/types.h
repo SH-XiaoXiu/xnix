@@ -30,9 +30,17 @@ typedef __arch_intptr_t  intptr_t;
 typedef __arch_ptrdiff_t ptrdiff_t;
 
 /* 架构相关极值 */
-#define SIZE_MAX    __ARCH_SIZE_MAX
+#ifndef SIZE_MAX
+#define SIZE_MAX __ARCH_SIZE_MAX
+#endif
+
+#ifndef PTRDIFF_MIN
 #define PTRDIFF_MIN __ARCH_PTRDIFF_MIN
+#endif
+
+#ifndef PTRDIFF_MAX
 #define PTRDIFF_MAX __ARCH_PTRDIFF_MAX
+#endif
 
 /* 通用常量 */
 #define NULL ((void *)0)

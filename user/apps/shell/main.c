@@ -129,6 +129,8 @@ static void run_external(const char *path, int argc, char **argv, int background
     struct abi_exec_args exec_args;
     memset(&exec_args, 0, sizeof(exec_args));
 
+    memcpy(exec_args.profile_name, "app", 4);
+
     /* 复制路径 */
     size_t path_len = strlen(path);
     if (path_len >= ABI_EXEC_PATH_MAX) {
@@ -152,11 +154,12 @@ static void run_external(const char *path, int argc, char **argv, int background
         exec_args.argv[i][len] = '\0';
     }
 
-    /* 传递 vfsd capability */
-    exec_args.cap_count        = 1;
-    exec_args.caps[0].src      = 2; /* shell 的 handle 2 是 vfsd */
-    exec_args.caps[0].rights   = 0x7;
-    exec_args.caps[0].dst_hint = 2; /* 子进程也用 handle 2 */
+    /* 传递 vfsd handle */
+    exec_args.handle_count        = 1;
+    exec_args.handles[0].src      = 2; /* shell 的 handle 2 是 vfsd */
+    exec_args.handles[0].dst_hint = 2; /* 子进程也用 handle 2 */
+    /* 命名为 vfs_ep, 虽然 dst_hint=2 已经决定了位置, 但名字有助于调试 */
+    strncpy(exec_args.handles[0].name, "vfs_ep", sizeof(exec_args.handles[0].name) - 1);
 
     /* 执行 */
     int pid = sys_exec(&exec_args);
@@ -295,7 +298,7 @@ static void cmd_run(int argc, char **argv) {
         spawn.name[i] = name[i];
     }
     spawn.module_index = (uint32_t)index;
-    spawn.cap_count    = 0;
+    spawn.handle_count = 0;
 
     int pid = sys_spawn(&spawn);
     if (pid < 0) {
@@ -429,7 +432,7 @@ int main(int argc, char **argv) {
     char line[MAX_LINE];
 
     /* 初始化 VFS 客户端(使用默认 endpoint)*/
-    vfs_client_init(0);
+    vfs_client_init(2);
 
     /* 初始化 PATH */
     path_init();

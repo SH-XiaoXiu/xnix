@@ -8,6 +8,7 @@
 #ifndef XNIX_ABI_IPC_H
 #define XNIX_ABI_IPC_H
 
+#include <xnix/abi/handle.h>
 #include <xnix/abi/stdint.h>
 #include <xnix/abi/types.h>
 
@@ -18,8 +19,8 @@
 /** 消息寄存器数量(短消息快速路径) */
 #define ABI_IPC_MSG_REGS 8
 
-/** 消息中最多能力句柄数 */
-#define ABI_IPC_MSG_CAPS_MAX 4
+/** 消息中最多句柄数 */
+#define ABI_IPC_MSG_HANDLES_MAX 4
 
 /** 异步消息队列大小 */
 #define ABI_IPC_ASYNC_QUEUE_SIZE 64
@@ -40,18 +41,18 @@ struct abi_ipc_msg_buffer {
     uint32_t _pad;
 };
 
-/** 消息能力传递 */
-struct abi_ipc_msg_caps {
-    cap_handle_t handles[ABI_IPC_MSG_CAPS_MAX];
-    uint32_t     count;
+/** 消息句柄传递 */
+struct abi_ipc_msg_handles {
+    handle_t handles[ABI_IPC_MSG_HANDLES_MAX];
+    uint32_t count;
 };
 
 /** 完整 IPC 消息 */
 struct abi_ipc_message {
-    struct abi_ipc_msg_regs   regs;   /* 短数据 */
-    struct abi_ipc_msg_buffer buffer; /* 长数据缓冲区(可选) */
-    struct abi_ipc_msg_caps   caps;   /* 能力句柄(可选) */
-    uint32_t                  flags;
+    struct abi_ipc_msg_regs    regs;    /* 短数据 */
+    struct abi_ipc_msg_buffer  buffer;  /* 长数据缓冲区(可选) */
+    struct abi_ipc_msg_handles handles; /* 句柄(可选) */
+    uint32_t                   flags;
 };
 
 /*

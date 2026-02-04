@@ -6,8 +6,8 @@
  * 当子系统被禁用时,调用方链接到这些空实现,无需条件编译.
  */
 
-#include <xnix/capability.h>
 #include <xnix/errno.h>
+#include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/types.h>
 
@@ -19,11 +19,12 @@ __attribute__((weak)) void ipc_init(void) {
     /* 空实现 */
 }
 
-__attribute__((weak)) cap_handle_t endpoint_create(void) {
-    return CAP_HANDLE_INVALID;
+__attribute__((weak)) int sys_endpoint_create(const char *name) {
+    (void)name;
+    return HANDLE_INVALID;
 }
 
-__attribute__((weak)) int ipc_send(cap_handle_t ep_handle, struct ipc_message *msg,
+__attribute__((weak)) int ipc_send(handle_t ep_handle, struct ipc_message *msg,
                                    uint32_t timeout_ms) {
     (void)ep_handle;
     (void)msg;
@@ -31,7 +32,7 @@ __attribute__((weak)) int ipc_send(cap_handle_t ep_handle, struct ipc_message *m
     return -ENOSYS;
 }
 
-__attribute__((weak)) int ipc_receive(cap_handle_t ep_handle, struct ipc_message *msg,
+__attribute__((weak)) int ipc_receive(handle_t ep_handle, struct ipc_message *msg,
                                       uint32_t timeout_ms) {
     (void)ep_handle;
     (void)msg;
@@ -39,7 +40,7 @@ __attribute__((weak)) int ipc_receive(cap_handle_t ep_handle, struct ipc_message
     return -ENOSYS;
 }
 
-__attribute__((weak)) int ipc_call(cap_handle_t ep_handle, struct ipc_message *request,
+__attribute__((weak)) int ipc_call(handle_t ep_handle, struct ipc_message *request,
                                    struct ipc_message *reply, uint32_t timeout_ms) {
     (void)ep_handle;
     (void)request;
@@ -53,28 +54,29 @@ __attribute__((weak)) int ipc_reply(struct ipc_message *reply) {
     return -ENOSYS;
 }
 
-__attribute__((weak)) int ipc_send_async(cap_handle_t ep_handle, struct ipc_message *msg) {
+__attribute__((weak)) int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
     (void)ep_handle;
     (void)msg;
     return -ENOSYS;
 }
 
-__attribute__((weak)) cap_handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
+__attribute__((weak)) handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
     (void)set;
     (void)timeout_ms;
-    return CAP_HANDLE_INVALID;
+    return HANDLE_INVALID;
 }
 
-__attribute__((weak)) cap_handle_t notification_create(void) {
-    return CAP_HANDLE_INVALID;
+__attribute__((weak)) int sys_notification_create(const char *name) {
+    (void)name;
+    return HANDLE_INVALID;
 }
 
-__attribute__((weak)) void notification_signal(cap_handle_t notif_handle, uint32_t bits) {
+__attribute__((weak)) void notification_signal(handle_t notif_handle, uint32_t bits) {
     (void)notif_handle;
     (void)bits;
 }
 
-__attribute__((weak)) uint32_t notification_wait(cap_handle_t notif_handle) {
+__attribute__((weak)) uint32_t notification_wait(handle_t notif_handle) {
     (void)notif_handle;
     return 0;
 }
@@ -82,21 +84,17 @@ __attribute__((weak)) uint32_t notification_wait(cap_handle_t notif_handle) {
 /* VFS moved to userspace - no kernel stubs needed */
 
 /*
- * Capability 子系统空实现
- *
- * 注意:cap_close 和 cap_duplicate 是公共 API,
- * 完整实现在 capability.c 中.这里仅为极简配置提供空实现.
+ * Handle 子系统空实现
  */
 
-__attribute__((weak)) int cap_close(cap_handle_t handle) {
+__attribute__((weak)) int sys_handle_close(handle_t handle) {
     (void)handle;
     return -ENOSYS;
 }
 
-__attribute__((weak)) cap_handle_t cap_duplicate(cap_handle_t handle, cap_rights_t new_rights) {
+__attribute__((weak)) handle_t sys_handle_duplicate(handle_t handle) {
     (void)handle;
-    (void)new_rights;
-    return CAP_HANDLE_INVALID;
+    return HANDLE_INVALID;
 }
 
 /*

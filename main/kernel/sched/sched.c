@@ -7,13 +7,13 @@
 #include <arch/smp.h>
 
 #include <asm/irq.h>
-#include <kernel/capability/capability.h>
 #include <kernel/irq/irq.h>
 #include <kernel/sched/sched.h>
 #include <kernel/sched/tid.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/errno.h>
+#include <xnix/handle.h>
 #include <xnix/stdio.h>
 #include <xnix/sync.h>
 
@@ -194,8 +194,8 @@ void sched_init(void) {
     /* 初始化 idle 线程 */
     thread_init_idle();
 
-    /* 注册 THREAD 能力类型 */
-    cap_register_type(CAP_TYPE_THREAD, (cap_ref_fn)thread_ref, (cap_unref_fn)thread_unref);
+    /* 注册 THREAD 能力类型(已废弃,改为 Handle) */
+    /* cap_register_type(CAP_TYPE_THREAD, ...); */
 }
 
 void sched_set_policy(struct sched_policy *policy) {

@@ -13,26 +13,35 @@
 /* 输出锁,保证多核输出不交错(导出给 sys_write 使用) */
 spinlock_t kprintf_lock = SPINLOCK_INIT;
 
-void kputc(char c) {
+typedef void (*print_fn)(void *ctx, char c);
+
+struct snprintf_ctx {
+    char  *buf;
+    size_t size;
+    size_t pos;
+};
+
+static void kputc_wrapper(void *ctx, char c) {
+    (void)ctx;
     if (c == '\n') {
         console_putc('\r');
     }
     console_putc(c);
 }
 
-void kputs(const char *str) {
-    if (!str) {
-        return;
-    }
-    while (*str) {
-        kputc(*str++);
+static void snprintf_wrapper(void *ctx, char c) {
+    struct snprintf_ctx *s = ctx;
+    if (s->pos < s->size - 1) {
+        s->buf[s->pos++] = c;
+    } else if (s->size > 0) {
+        s->pos++; /* 记录总长度,但不写入 */
     }
 }
 
-static void print_padding(int width, int len, int pad_zero) {
+static void print_padding(print_fn emit, void *ctx, int width, int len, int pad_zero) {
     char padc = pad_zero ? '0' : ' ';
     while (width-- > len) {
-        kputc(padc);
+        emit(ctx, padc);
     }
 }
 
@@ -66,21 +75,21 @@ static int itoa_buf(int32_t num, char *buf) {
     return utoa_buf((uint32_t)num, 10, buf);
 }
 
-static inline void print_hex_padded(uint32_t num, int width) {
+static inline void print_hex_padded(print_fn emit, void *ctx, uint32_t num, int width) {
     static const char digits[] = "0123456789abcdef";
     for (int i = width - 1; i >= 0; i--) {
-        kputc(digits[(num >> (i * 4)) & 0xf]);
+        emit(ctx, digits[(num >> (i * 4)) & 0xf]);
     }
 }
 
-void vkprintf(const char *fmt, __builtin_va_list args) {
+static void do_printf(print_fn emit, void *ctx, const char *fmt, __builtin_va_list args) {
     if (!fmt) {
         return;
     }
 
     while (*fmt) {
         if (*fmt != '%') {
-            kputc(*fmt++);
+            emit(ctx, *fmt++);
             continue;
         }
 
@@ -104,14 +113,16 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
             while (s[len]) {
                 len++;
             }
-            print_padding(width, len, 0);
-            kputs(s);
+            print_padding(emit, ctx, width, len, 0);
+            while (*s) {
+                emit(ctx, *s++);
+            }
             break;
         }
         case 'c': {
             char c = (char)__builtin_va_arg(args, int);
-            print_padding(width, 1, 0);
-            kputc(c);
+            print_padding(emit, ctx, width, 1, 0);
+            emit(ctx, c);
             break;
         }
         case 'd':
@@ -121,15 +132,15 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
             int     len = itoa_buf(v, buf);
 
             if (pad_zero && buf[0] == '-') {
-                kputc('-');
-                print_padding(width, len, 1);
+                emit(ctx, '-');
+                print_padding(emit, ctx, width, len, 1);
                 for (int i = 1; i < len; i++) {
-                    kputc(buf[i]);
+                    emit(ctx, buf[i]);
                 }
             } else {
-                print_padding(width, len, pad_zero);
+                print_padding(emit, ctx, width, len, pad_zero);
                 for (int i = 0; i < len; i++) {
-                    kputc(buf[i]);
+                    emit(ctx, buf[i]);
                 }
             }
             break;
@@ -137,68 +148,109 @@ void vkprintf(const char *fmt, __builtin_va_list args) {
         case 'u': {
             char buf[32];
             int  len = utoa_buf(__builtin_va_arg(args, uint32_t), 10, buf);
-            print_padding(width, len, pad_zero);
+            print_padding(emit, ctx, width, len, pad_zero);
             for (int i = 0; i < len; i++) {
-                kputc(buf[i]);
+                emit(ctx, buf[i]);
             }
             break;
         }
         case 'x': {
             uint32_t v = __builtin_va_arg(args, uint32_t);
             if (pad_zero && width > 0) {
-                print_hex_padded(v, width);
+                print_hex_padded(emit, ctx, v, width);
             } else {
                 char buf[32];
                 int  len = utoa_buf(v, 16, buf);
-                print_padding(width, len, pad_zero);
+                print_padding(emit, ctx, width, len, pad_zero);
                 for (int i = 0; i < len; i++) {
-                    kputc(buf[i]);
+                    emit(ctx, buf[i]);
                 }
             }
             break;
         }
         case 'p':
-            kputs("0x");
-            print_hex_padded((uint32_t)(uintptr_t)__builtin_va_arg(args, void *), 8);
+            if (ctx == NULL) {
+                kputs("0x");
+            } else {
+                emit(ctx, '0');
+                emit(ctx, 'x');
+            }
+
+            print_hex_padded(emit, ctx, (uint32_t)(uintptr_t)__builtin_va_arg(args, void *), 8);
             break;
         case '%':
-            kputc('%');
+            emit(ctx, '%');
             break;
-        /* 颜色格式符 */
+        /* 颜色格式符 - 仅对 kprintf 有效 */
         case 'K':
-            console_set_color(KCOLOR_BLACK);
+            if (!ctx) {
+                console_set_color(KCOLOR_BLACK);
+            }
             break;
         case 'R':
-            console_set_color(KCOLOR_RED);
+            if (!ctx) {
+                console_set_color(KCOLOR_RED);
+            }
             break;
         case 'G':
-            console_set_color(KCOLOR_GREEN);
+            if (!ctx) {
+                console_set_color(KCOLOR_GREEN);
+            }
             break;
         case 'Y':
-            console_set_color(KCOLOR_YELLOW);
+            if (!ctx) {
+                console_set_color(KCOLOR_YELLOW);
+            }
             break;
         case 'B':
-            console_set_color(KCOLOR_BLUE);
+            if (!ctx) {
+                console_set_color(KCOLOR_BLUE);
+            }
             break;
         case 'M':
-            console_set_color(KCOLOR_MAGENTA);
+            if (!ctx) {
+                console_set_color(KCOLOR_MAGENTA);
+            }
             break;
         case 'C':
-            console_set_color(KCOLOR_CYAN);
+            if (!ctx) {
+                console_set_color(KCOLOR_CYAN);
+            }
             break;
         case 'W':
-            console_set_color(KCOLOR_WHITE);
+            if (!ctx) {
+                console_set_color(KCOLOR_WHITE);
+            }
             break;
         case 'N':
-            console_reset_color();
+            if (!ctx) {
+                console_reset_color();
+            }
             break;
         default:
-            kputc('%');
-            kputc(*fmt);
+            emit(ctx, '%');
+            emit(ctx, *fmt);
             break;
         }
         fmt++;
     }
+}
+
+void kputc(char c) {
+    kputc_wrapper(NULL, c);
+}
+
+void kputs(const char *str) {
+    if (!str) {
+        return;
+    }
+    while (*str) {
+        kputc(*str++);
+    }
+}
+
+void vkprintf(const char *fmt, __builtin_va_list args) {
+    do_printf(kputc_wrapper, NULL, fmt, args);
 }
 
 void kprintf(const char *fmt, ...) {
@@ -208,6 +260,23 @@ void kprintf(const char *fmt, ...) {
     vkprintf(fmt, args);
     __builtin_va_end(args);
     spin_unlock_irqrestore(&kprintf_lock, flags);
+}
+
+int snprintf(char *buf, size_t size, const char *fmt, ...) {
+    struct snprintf_ctx ctx = {.buf = buf, .size = size, .pos = 0};
+    __builtin_va_list   args;
+    __builtin_va_start(args, fmt);
+    do_printf(snprintf_wrapper, &ctx, fmt, args);
+    __builtin_va_end(args);
+
+    if (size > 0) {
+        if (ctx.pos < size) {
+            buf[ctx.pos] = '\0';
+        } else {
+            buf[size - 1] = '\0';
+        }
+    }
+    return (int)ctx.pos;
 }
 
 void klog(int level, const char *fmt, ...) {
