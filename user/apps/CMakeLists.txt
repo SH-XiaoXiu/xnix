@@ -103,4 +103,4 @@ message(STATUS "App targets: ${_APP_TARGETS}")
 # ============================================
 # bin 工具（独立构建，不打包进 ISO）
 # ============================================
-add_subdirectory(bin)
+# add_subdirectory(bin)  # Disabled - moved to .disabled/user/apps/bin
