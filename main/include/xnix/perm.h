@@ -20,6 +20,8 @@
 #define PERM_NODE_HANDLE_GRANT        "xnix.handle.grant"
 #define PERM_NODE_IO_PORT_ALL         "xnix.io.port.*"
 #define PERM_NODE_MM_MMAP             "xnix.mm.mmap"
+#define PERM_NODE_PROCESS_SPAWN       "xnix.process.spawn"
+#define PERM_NODE_PROCESS_EXEC        "xnix.process.exec"
 
 /**
  * @brief 权限 ID 类型

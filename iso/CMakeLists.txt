@@ -85,13 +85,13 @@ add_custom_target(rootfs DEPENDS ${ROOTFS_IMG})
 # ============================================
 set(GRUB_CFG_CONTENT "set timeout=0\nset default=0\nmenuentry \"Xnix\" {\n")
 string(APPEND GRUB_CFG_CONTENT "  multiboot /boot/xnix.elf xnix.initmod=0\n")
-string(APPEND GRUB_CFG_CONTENT "  module /sbin/init.elf\n")
+string(APPEND GRUB_CFG_CONTENT "  module /sbin/init.elf name=init\n")
 
 foreach (SVC ${CORE_SERVICES})
-    string(APPEND GRUB_CFG_CONTENT "  module /drivers/${SVC}.elf\n")
+    string(APPEND GRUB_CFG_CONTENT "  module /drivers/${SVC}.elf name=${SVC}\n")
 endforeach ()
 
-string(APPEND GRUB_CFG_CONTENT "  module /rootfs.img\n")
+string(APPEND GRUB_CFG_CONTENT "  module /rootfs.img name=rootfs\n")
 string(APPEND GRUB_CFG_CONTENT "}\n")
 
 file(MAKE_DIRECTORY ${ISO_DIR}/boot/grub)

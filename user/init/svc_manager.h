@@ -99,7 +99,6 @@ struct svc_graph_node {
 struct svc_handle_desc {
     char     name[SVC_HANDLE_NAME_MAX];
     uint32_t src_handle; /* 源 handle */
-    uint32_t dst_hint;   /* 目标 handle 提示 */
 };
 
 typedef enum {
@@ -120,10 +119,10 @@ struct svc_handle_def {
 struct svc_config {
     char name[SVC_NAME_MAX];
 
-    bool       builtin;            /* 是否为内置服务(已启动) */
-    svc_type_t type;               /* 启动类型 */
-    uint32_t   module_index;       /* 模块索引(type=MODULE 时) */
-    char       path[SVC_PATH_MAX]; /* ELF 路径(type=PATH 时) */
+    bool       builtin;                   /* 是否为内置服务(已启动) */
+    svc_type_t type;                      /* 启动类型 */
+    char       module_name[SVC_NAME_MAX]; /* 模块名称(type=MODULE 时) */
+    char       path[SVC_PATH_MAX];        /* ELF 路径(type=PATH 时) */
 
     /* 依赖声明 */
     char     after[SVC_DEPS_MAX][SVC_NAME_MAX]; /* 启动顺序依赖 */
@@ -135,6 +134,10 @@ struct svc_config {
 
     /* Profile */
     char profile[32];
+
+    /* Permission overrides (格式: "xnix.io.port.0x3f8-0x3ff=true") */
+    char perms[8][64]; /* 最多 8 个权限覆盖 */
+    int  perm_count;
 
     /* Handle 传递 */
     struct svc_handle_desc handles[SVC_HANDLES_MAX];
@@ -160,6 +163,24 @@ struct svc_runtime {
 };
 
 /**
+ * Permission profile (权限模板)
+ */
+#define SVC_MAX_PROFILES   8
+#define SVC_PERM_NODES_MAX 32
+
+struct svc_perm_entry {
+    char name[64]; /* 权限节点名称,如 "xnix.ipc.send" */
+    bool value;    /* true=允许, false=拒绝 */
+};
+
+struct svc_profile {
+    char                  name[32];                  /* Profile 名称 */
+    char                  inherit[32];               /* 继承的 profile */
+    struct svc_perm_entry perms[SVC_PERM_NODES_MAX]; /* 权限列表 */
+    int                   perm_count;
+};
+
+/**
  * 服务管理器
  */
 struct svc_manager {
@@ -175,6 +196,10 @@ struct svc_manager {
     struct svc_handle_def handle_defs[SVC_MAX_HANDLE_DEFS];
     int                   handle_def_count;
     int                   count;
+
+    /* Permission profiles */
+    struct svc_profile profiles[SVC_MAX_PROFILES];
+    int                profile_count;
 };
 
 /**
@@ -213,7 +238,7 @@ int svc_find_by_name(struct svc_manager *mgr, const char *name);
 
 /**
  * 解析 handles 字符串
- * 格式: "name:dst_hint name:dst_hint ..."
+ * 格式: "name name ..."
  *
  * @param mgr          管理器实例
  * @param handles_str  输入字符串

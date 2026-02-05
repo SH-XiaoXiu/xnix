@@ -98,6 +98,7 @@ set(CFG_IRQ_USER_BUF_SIZE 64 CACHE STRING "IRQ user-mode buffer size")
 # 调试配置
 # ============================================
 option(CFG_DEBUG "Enable kernel debug logging" OFF)
+option(CONFIG_DEBUG_CONSOLE "Enable SYS_DEBUG_PUT syscall for early debugging" ON)
 
 # ============================================
 # 打包配置
@@ -182,6 +183,7 @@ list(APPEND KERNEL_SOURCES ${LIB_C} ${DRIVERS_C} ${ARCH_C} ${ARCH_ASM_LOWER} ${A
 add_executable(xnix.elf ${KERNEL_SOURCES})
 
 target_include_directories(xnix.elf PRIVATE
+        ${CMAKE_SOURCE_DIR}/sdk/include          # SDK ABI headers
         ${CMAKE_SOURCE_DIR}/main/include
         ${CMAKE_SOURCE_DIR}/main/include/arch
         ${CMAKE_SOURCE_DIR}/main
@@ -201,6 +203,11 @@ add_custom_command(TARGET xnix.elf POST_BUILD
 
 # 导出内核路径
 set(KERNEL_ELF "${CMAKE_BINARY_DIR}/xnix.elf" CACHE INTERNAL "Kernel ELF path")
+
+# ============================================
+# SDK (Public ABI)
+# ============================================
+add_subdirectory(sdk)
 
 # ============================================
 # 用户态

@@ -1,42 +1,14 @@
 /**
  * @file kernel/sys/sys_misc.c
- * @brief 杂项系统调用
+ * @brief 杂项系统调用(编号:900-999)
  */
 
 #include <kernel/sys/syscall.h>
-#include <xnix/boot.h>
+#include <xnix/errno.h>
 #include <xnix/stdio.h>
-#include <xnix/sync.h>
 #include <xnix/syscall.h>
 
 extern void sleep_ms(uint32_t ms);
-
-/* 使用与 kprintf 相同的锁,避免内核输出和用户输出交错 */
-extern spinlock_t kprintf_lock;
-
-/* SYS_WRITE: ebx=fd, ecx=buf, edx=len */
-static int32_t sys_write(const uint32_t *args) {
-    int         fd  = (int)args[0];
-    const char *buf = (const char *)args[1];
-    size_t      len = (size_t)args[2];
-
-    if (fd != 1 && fd != 2) { /* STDOUT/STDERR */
-        return -1;
-    }
-
-    if (!buf || len == 0) {
-        return 0;
-    }
-
-    /* 原子输出整个消息(使用 kprintf_lock 避免与内核输出交错) */
-    uint32_t flags = spin_lock_irqsave(&kprintf_lock);
-    for (size_t i = 0; i < len; i++) {
-        kputc(buf[i]);
-    }
-    spin_unlock_irqrestore(&kprintf_lock, flags);
-
-    return (int32_t)len;
-}
 
 /* SYS_SLEEP: ebx=ms */
 static int32_t sys_sleep(const uint32_t *args) {
@@ -44,17 +16,28 @@ static int32_t sys_sleep(const uint32_t *args) {
     return 0;
 }
 
-/* SYS_MODULE_COUNT */
-static int32_t sys_module_count(const uint32_t *args) {
-    (void)args;
-    return (int32_t)boot_get_module_count();
-}
+#ifdef CONFIG_DEBUG_CONSOLE
+#include <xnix/perm.h>
+#include <xnix/process.h>
 
-/**
- * 注册杂项系统调用
- */
+/* SYS_DEBUG_PUT: ebx=char (仅编译时启用,需要 xnix.debug.console 权限) */
+static int32_t sys_debug_put(const uint32_t *args) {
+    struct process *proc = (struct process *)process_current();
+
+    /* 检查权限 */
+    if (!perm_check_name(proc, "xnix.debug.console")) {
+        return -EPERM;
+    }
+
+    char c = (char)args[0];
+    kputc(c);
+    return 0;
+}
+#endif
+
 void sys_misc_init(void) {
-    syscall_register(SYS_WRITE, sys_write, 3, "write");
     syscall_register(SYS_SLEEP, sys_sleep, 1, "sleep");
-    syscall_register(SYS_MODULE_COUNT, sys_module_count, 0, "module_count");
+#ifdef CONFIG_DEBUG_CONSOLE
+    syscall_register(SYS_DEBUG_PUT, sys_debug_put, 1, "debug_put");
+#endif
 }

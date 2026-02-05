@@ -132,6 +132,9 @@ static void boot_phase_late(void) {
     console_start_consumers();
     console_async_enable();
     pr_ok("Async console output enabled");
+
+    /* 收集启动资源并创建 handles */
+    bootinfo_collect();
 }
 
 /**
@@ -193,16 +196,27 @@ static void boot_start_services(void) {
         }
     }
 
+    /* 获取 boot handles 传递给 init */
+    struct spawn_handle *boot_handles      = NULL;
+    uint32_t             boot_handle_count = 0;
+    if (bootinfo_get_handles(&boot_handles, &boot_handle_count) < 0) {
+        pr_warn("Failed to get boot handles, init will start without handles");
+    } else {
+        pr_info("Passing %u boot handles to init", boot_handle_count);
+    }
+
     pid_t                init_pid     = PID_INVALID;
     struct perm_profile *init_profile = perm_profile_find("init");
     if (!init_profile) {
         pr_warn("Init profile not found, spawning init without profile");
     }
     if (init_argc > 0) {
-        init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, NULL, 0,
-                                                     init_profile, init_argc, init_argv);
+        init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, boot_handles,
+                                                     boot_handle_count, init_profile, init_argc,
+                                                     init_argv);
     } else {
-        init_pid = process_spawn_module_ex("init", mod_addr, mod_size, NULL, 0, init_profile);
+        init_pid = process_spawn_module_ex("init", mod_addr, mod_size, boot_handles,
+                                           boot_handle_count, init_profile);
     }
 
     if (init_pid == PID_INVALID) {

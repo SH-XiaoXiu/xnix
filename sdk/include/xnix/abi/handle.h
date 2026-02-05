@@ -9,7 +9,7 @@
 #ifndef XNIX_ABI_HANDLE_H
 #define XNIX_ABI_HANDLE_H
 
-#include <stdint.h>
+#include <xnix/abi/types.h>
 
 /**
  * @brief Handle 类型定义
@@ -40,7 +40,6 @@ typedef enum {
  */
 struct spawn_handle {
     handle_t src;      /* 父进程中的 handle */
-    handle_t dst_hint; /* 子进程中的期望 slot(-1 = 自动分配) */
     char     name[16]; /* 子进程中的 handle 名称 */
 };
 

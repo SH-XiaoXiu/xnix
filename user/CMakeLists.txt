@@ -301,17 +301,6 @@ message(STATUS "[user] Sorted core: ${CORE_SERVICES}")
 set(MODULE_H "/* 自动生成 - user/CMakeLists.txt */\n")
 string(APPEND MODULE_H "#ifndef _MODULE_INDEX_H\n")
 string(APPEND MODULE_H "#define _MODULE_INDEX_H\n\n")
-string(APPEND MODULE_H "#define MODULE_INIT 0\n")
-
-set(MOD_IDX 1)
-foreach (SVC ${CORE_SERVICES})
-    string(TOUPPER ${SVC} SVC_UPPER)
-    string(APPEND MODULE_H "#define MODULE_${SVC_UPPER} ${MOD_IDX}\n")
-    set(SVC_${SVC}_MODULE ${MOD_IDX})
-    math(EXPR MOD_IDX "${MOD_IDX} + 1")
-endforeach ()
-
-string(APPEND MODULE_H "#define MODULE_ROOTFS ${MOD_IDX}\n\n")
 string(APPEND MODULE_H "#define USER_CONFIG_DEFAULT \"/sys/etc/services.conf\"\n\n")
 string(APPEND MODULE_H "#endif\n")
 
@@ -398,6 +387,7 @@ endif ()
 add_executable(init.elf
         libs/libc/src/crt0.s
         init/main.c
+        init/early_console.c
         init/ini_parser.c
         init/svc_manager.c
 )
@@ -407,8 +397,9 @@ target_include_directories(init.elf PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/libc/include
         ${CMAKE_SOURCE_DIR}/main/include
         ${CMAKE_BINARY_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/init
 )
-target_link_libraries(init.elf PRIVATE c)
+target_link_libraries(init.elf PRIVATE c serial)
 target_link_options(init.elf PRIVATE
         -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/libs/user.ld -nostdlib
 )

@@ -23,6 +23,9 @@ char *gets_s(char *buf, size_t size) {
     while (pos < max) {
         int c = getchar();
         if (c < 0) {
+            if (pos == 0) {
+                return NULL; /* 没有任何输入 */
+            }
             break;
         }
 

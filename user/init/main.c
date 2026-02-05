@@ -13,11 +13,13 @@
  *   6. 按配置启动用户服务
  */
 
+#include "early_console.h"
 #include "svc_manager.h"
 
 #include <acolor.h>
 #include <core_services.h>
 #include <d/protocol/vfs.h>
+#include <libs/serial/serial.h>
 #include <module_index.h>
 #include <stdio.h>
 #include <string.h>
@@ -57,7 +59,8 @@ static void reap_children(void) {
 }
 
 int main(int argc, char **argv) {
-    printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " init started (pid %d)\n", sys_getpid());
+    /* 使用早期控制台输出(seriald 启动前)*/
+    early_puts("[INIT] init started\n");
 
     /* 解析启动参数 */
     if (argc > 0) {
@@ -68,41 +71,39 @@ int main(int argc, char **argv) {
     svc_manager_init(&g_mgr);
 
     /* 加载嵌入式核心服务配置 */
+    early_puts("[INIT] loading core services config...\n");
     int ret = svc_load_config_string(&g_mgr, CORE_SERVICES_CONF);
     if (ret < 0) {
-        printf(ACOLOR_BRED "[INIT]" ACOLOR_RESET " failed to load core services\n");
+        early_puts("[INIT] FATAL: failed to load core services\n");
         while (1) {
             msleep(1000);
         }
     }
 
-    /* 动态获取 VFS endpoint 句柄 (从 g_mgr.handle_defs 中查找) */
-    uint32_t vfs_ep_handle = 2; /* 默认回退 */
-    for (int i = 0; i < g_mgr.handle_def_count; i++) {
-        if (strcmp(g_mgr.handle_defs[i].name, "vfs_ep") == 0) {
-            if (g_mgr.handle_defs[i].handle != HANDLE_INVALID) {
-                vfs_ep_handle = g_mgr.handle_defs[i].handle;
-            }
-            break;
-        }
+    {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "[INIT] loaded %d services, graph_valid=%d\n", g_mgr.count,
+                 g_mgr.graph_valid);
+        early_puts(buf);
     }
 
-    /* 初始化 VFS 客户端 */
-    vfs_client_init(vfs_ep_handle);
+    /* VFS 尚未就绪,跳过初始化 */
+    /* TODO:待 VFS 服务实现后重新启用 */
+    // vfs_client_init(vfs_ep_handle);
 
     /* 创建 init_notify endpoint 用于接收服务就绪通知 */
     int init_notify_ep = sys_endpoint_create("init_notify");
     if (init_notify_ep < 0) {
-        printf(ACOLOR_BRED "[INIT]" ACOLOR_RESET " failed to create init_notify endpoint\n");
+        early_puts("[INIT] failed to create init_notify endpoint\n");
     } else {
-        printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " init_notify endpoint created (handle %d)\n",
-               init_notify_ep);
+        early_puts("[INIT] init_notify endpoint created\n");
     }
 
-    printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " ready\n");
+    early_puts("[INIT] entering main loop\n");
 
     /* 主循环:先启动核心服务,等待 /sys 可用后加载用户配置 */
-    bool user_config_loaded = false;
+    bool serial_initialized = false;
+    int  loop_count         = 0;
 
     while (1) {
         /* 收割子进程 */
@@ -127,9 +128,38 @@ int main(int argc, char **argv) {
             svc_tick(&g_mgr); /* 回退到旧的 tick */
         }
 
+        /* 前几次 tick 输出诊断 */
+        if (loop_count < 5 && early_console_is_active()) {
+            char buf[80];
+            snprintf(buf, sizeof(buf), "[INIT] tick %d:", loop_count);
+            early_puts(buf);
+            for (int i = 0; i < g_mgr.count; i++) {
+                snprintf(buf, sizeof(buf), " %s=%d", g_mgr.configs[i].name, g_mgr.runtime[i].state);
+                early_puts(buf);
+            }
+            early_puts("\n");
+        }
+        loop_count++;
+
+        /* 检查是否可以切换到 IPC-based 输出 (seriald 就绪后) */
+        if (!serial_initialized && early_console_is_active()) {
+            if (serial_init() == 0) {
+                early_console_disable();
+                serial_initialized = true;
+                printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET
+                                     " switched to IPC-based console (pid %d)\n",
+                       sys_getpid());
+
+                /* 测试消息证明 IPC console 工作 */
+                printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET
+                                     " system ready, waiting for services...\n");
+            }
+        }
+
         /* 尝试加载用户配置(在 /sys 挂载后) */
-        if (!user_config_loaded) {
-            /* 检查配置文件是否存在(通过尝试打开) */
+        /* TODO: Re-enable when VFS service is implemented */
+        /*
+        if (!user_config_loaded && serial_initialized) {
             int test_fd = vfs_open(g_user_config_path, 0);
             if (test_fd >= 0) {
                 vfs_close(test_fd);
@@ -145,6 +175,7 @@ int main(int argc, char **argv) {
                 user_config_loaded = true;
             }
         }
+        */
 
         msleep(50);
     }

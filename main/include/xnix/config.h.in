@@ -6,9 +6,8 @@
 #ifndef XNIX_CONFIG_H
 #define XNIX_CONFIG_H
 
-/* ============================================
- * 资源表大小配置
- * ============================================
+/* 资源表大小配置
+ *
  * 注意：这些值的语义由 CMake 编译时选择的模式决定
  * - 动态模式（默认）：作为初始容量，满了会自动扩容
  * - 静态模式：作为固定最大值，满了返回失败
@@ -17,46 +16,33 @@
 #define CFG_MAX_THREADS       @CFG_MAX_THREADS@
 #define CFG_MAX_PROCESSES     @CFG_MAX_PROCESSES@
 
-/* ============================================
- * 类型大小配置（编译裁切）
- * ============================================ */
+/* 类型大小配置（编译裁切） */
 #define CFG_TID_BITS          @CFG_TID_BITS@
 #define CFG_PRIORITY_BITS     @CFG_PRIORITY_BITS@
 #define CFG_SLICE_BITS        @CFG_SLICE_BITS@
 
-/* ============================================
- * 调度器配置
- * ============================================ */
+/* 调度器配置 */
 #define CFG_SCHED_HZ          @CFG_SCHED_HZ@
 #define CFG_DEF_TIME_SLICE    @CFG_DEF_TIME_SLICE@
 
-/* ============================================
- * 内存配置
- * ============================================ */
+/* 内存配置 */
 #define CFG_THREAD_STACK_SIZE @CFG_THREAD_STACK_SIZE@
 #define CFG_KERNEL_DIRECT_MAP_MB @CFG_KERNEL_DIRECT_MAP_MB@
 
-/* ============================================
- * CPU 配置
- * ============================================ */
+/* CPU 配置 */
 #define CFG_MAX_CPUS          @CFG_MAX_CPUS@
 
-/* ============================================
- * IPC 配置
- * ============================================ */
+/* IPC 配置 */
 #define CFG_HANDLE_TABLE_SIZE @CFG_HANDLE_TABLE_SIZE@
 #define CFG_IPC_MSG_REGS      @CFG_IPC_MSG_REGS@
 #define CFG_IPC_MSG_HANDLES_MAX  @CFG_IPC_MSG_HANDLES_MAX@
 #cmakedefine01 CFG_IPC_MSG_POOL
 
-/* ============================================
- * IRQ 配置
- * ============================================ */
+/* IRQ 配置 */
 #define CFG_IRQ_USER_BUF_SIZE @CFG_IRQ_USER_BUF_SIZE@
 
-/* ============================================
- * 调试配置
- * ============================================ */
+/* 调试配置 */
 #cmakedefine CFG_DEBUG
+#cmakedefine CONFIG_DEBUG_CONSOLE
 
 #endif

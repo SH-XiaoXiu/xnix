@@ -66,7 +66,8 @@ static inline int syscall5(int num, uint32_t arg1, uint32_t arg2, uint32_t arg3,
  */
 
 /**
- * @brief 退出当前进程
+ * 退出当前进程
+ *
  * @param code 退出码
  */
 static inline void sys_exit(int code) {
@@ -75,7 +76,8 @@ static inline void sys_exit(int code) {
 }
 
 /**
- * @brief 关闭句柄
+ * 关闭句柄
+ *
  * @param handle 要关闭的 handle
  * @return 0 成功,负数失败
  */
@@ -84,7 +86,8 @@ static inline int sys_handle_close(uint32_t handle) {
 }
 
 /**
- * @brief 复制句柄
+ * 复制句柄
+ *
  * @param src 源 handle
  * @param dst_hint 目标 slot hint
  * @param name 新 handle 名称
@@ -95,7 +98,8 @@ static inline int sys_handle_duplicate(uint32_t src, uint32_t dst_hint, const ch
 }
 
 /**
- * @brief 检查权限
+ * 检查权限
+ *
  * @param perm_id 权限 ID
  * @return 0 有权限,负数无权限
  */
@@ -104,7 +108,8 @@ static inline int sys_perm_check(uint32_t perm_id) {
 }
 
 /**
- * @brief 按名称查找 handle
+ * 按名称查找 handle
+ *
  * @param name handle 名称
  * @return handle 值,负数失败
  */
@@ -113,46 +118,36 @@ static inline handle_t sys_handle_find(const char *name) {
 }
 
 /**
- * @brief 写文件/设备
- * @param fd 文件描述符
- * @param buf 数据缓冲区
- * @param len 长度
- * @return 写入字节数,负数失败
- */
-static inline int sys_write(int fd, const void *buf, size_t len) {
-    return syscall3(SYS_WRITE, (uint32_t)fd, (uint32_t)(uintptr_t)buf, (uint32_t)len);
-}
-
-/**
- * @brief 写 I/O 端口 (8位)
+ * 写 I/O 端口(8 位)
  */
 static inline int sys_ioport_outb(uint16_t port, uint8_t val) {
     return syscall2(SYS_IOPORT_OUTB, (uint32_t)port, (uint32_t)val);
 }
 
 /**
- * @brief 读 I/O 端口 (8位)
+ * 读 I/O 端口(8 位)
  */
 static inline int sys_ioport_inb(uint16_t port) {
     return syscall1(SYS_IOPORT_INB, (uint32_t)port);
 }
 
 /**
- * @brief 写 I/O 端口 (16位)
+ * 写 I/O 端口(16 位)
  */
 static inline int sys_ioport_outw(uint16_t port, uint16_t val) {
     return syscall2(SYS_IOPORT_OUTW, (uint32_t)port, (uint32_t)val);
 }
 
 /**
- * @brief 读 I/O 端口 (16位)
+ * 读 I/O 端口(16 位)
  */
 static inline uint16_t sys_ioport_inw(uint16_t port) {
     return syscall1(SYS_IOPORT_INW, (uint32_t)port);
 }
 
 /**
- * @brief 睡眠
+ * 睡眠
+ *
  * @param ms 毫秒数
  */
 static inline void sys_sleep(uint32_t ms) {
@@ -160,14 +155,8 @@ static inline void sys_sleep(uint32_t ms) {
 }
 
 /**
- * @brief 获取模块数量
- */
-static inline int sys_module_count(void) {
-    return syscall0(SYS_MODULE_COUNT);
-}
-
-/**
- * @brief 创建 Endpoint
+ * 创建 Endpoint
+ *
  * @return Handle 值
  */
 static inline int sys_endpoint_create(const char *name) {
@@ -175,7 +164,8 @@ static inline int sys_endpoint_create(const char *name) {
 }
 
 /**
- * @brief 创建 Notification
+ * 创建 Notification
+ *
  * @return Handle 值
  */
 static inline int sys_notification_create(void) {
@@ -183,7 +173,8 @@ static inline int sys_notification_create(void) {
 }
 
 /**
- * @brief 等待 Notification
+ * 等待 Notification
+ *
  * @param handle Notification handle
  * @return 信号位掩码
  */
@@ -197,21 +188,21 @@ static inline uint32_t sys_notification_wait(uint32_t handle) {
 struct ipc_message;
 
 /**
- * @brief 发送 IPC 消息
+ * 发送 IPC 消息
  */
 static inline int sys_ipc_send(uint32_t ep, struct ipc_message *msg, uint32_t timeout_ms) {
     return syscall3(SYS_IPC_SEND, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
 }
 
 /**
- * @brief 接收 IPC 消息
+ * 接收 IPC 消息
  */
 static inline int sys_ipc_receive(uint32_t ep, struct ipc_message *msg, uint32_t timeout_ms) {
     return syscall3(SYS_IPC_RECV, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
 }
 
 /**
- * @brief 发起 IPC 调用 (RPC)
+ * 发起 IPC 调用(RPC)
  */
 static inline int sys_ipc_call(uint32_t ep, struct ipc_message *req, struct ipc_message *reply,
                                uint32_t timeout_ms) {
@@ -220,14 +211,14 @@ static inline int sys_ipc_call(uint32_t ep, struct ipc_message *req, struct ipc_
 }
 
 /**
- * @brief 回复 IPC 调用
+ * 回复 IPC 调用
  */
 static inline int sys_ipc_reply(struct ipc_message *reply) {
     return syscall1(SYS_IPC_REPLY, (uint32_t)(uintptr_t)reply);
 }
 
 /**
- * @brief 延迟回复 IPC 调用
+ * 延迟回复 IPC 调用
  */
 static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *reply) {
     return syscall2(SYS_IPC_REPLY_TO, sender_tid, (uint32_t)(uintptr_t)reply);
@@ -241,7 +232,7 @@ static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *repl
 #define spawn_args abi_spawn_args
 
 /**
- * @brief 创建新进程 (spawn)
+ * 创建新进程(spawn)
  */
 static inline int sys_spawn(struct spawn_args *args) {
     return syscall1(SYS_SPAWN, (uint32_t)(uintptr_t)args);
@@ -251,28 +242,28 @@ static inline int sys_spawn(struct spawn_args *args) {
 #define WNOHANG 1
 
 /**
- * @brief 等待子进程退出
+ * 等待子进程退出
  */
 static inline int sys_waitpid(int pid, int *status, int options) {
     return syscall3(SYS_WAITPID, (uint32_t)pid, (uint32_t)(uintptr_t)status, (uint32_t)options);
 }
 
 /**
- * @brief 获取当前进程 PID
+ * 获取当前进程 PID
  */
 static inline int sys_getpid(void) {
     return syscall0(SYS_GETPID);
 }
 
 /**
- * @brief 获取父进程 PID
+ * 获取父进程 PID
  */
 static inline int sys_getppid(void) {
     return syscall0(SYS_GETPPID);
 }
 
 /**
- * @brief 发送信号
+ * 发送信号
  */
 static inline int sys_kill(int pid, int sig) {
     return syscall2(SYS_KILL, (uint32_t)pid, (uint32_t)sig);
@@ -312,35 +303,6 @@ static inline int sys_irq_read(uint8_t irq, void *buf, size_t size, uint32_t fla
  */
 static inline void *sys_sbrk(int32_t increment) {
     return (void *)syscall1(SYS_SBRK, (uint32_t)increment);
-}
-
-/*
- * Framebuffer
- */
-struct abi_fb_info;
-
-/**
- * @brief 获取 Framebuffer 信息
- */
-static inline int sys_fb_info(struct abi_fb_info *info) {
-    return syscall1(SYS_FB_INFO, (uint32_t)(uintptr_t)info);
-}
-
-/**
- * @brief 映射 Framebuffer
- */
-static inline void *sys_fb_map(void) {
-    return (void *)syscall0(SYS_FB_MAP);
-}
-
-/*
- * Boot Module
- */
-/**
- * @brief 映射 Boot Module
- */
-static inline void *sys_module_map(uint32_t index, uint32_t *size_out) {
-    return (void *)syscall2(SYS_MODULE_MAP, index, (uint32_t)(uintptr_t)size_out);
 }
 
 /*

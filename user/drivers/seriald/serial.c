@@ -22,7 +22,7 @@
 
 /* g_io_handle removed */
 
-void serial_init(void) {
+void serial_hw_init(void) {
     sys_ioport_outb(COM1 + REG_INTR_ENABLE, 0x00);
     sys_ioport_outb(COM1 + REG_LINE_CTRL, 0x80);
     sys_ioport_outb(COM1 + REG_DIVISOR_LO, 0x03);

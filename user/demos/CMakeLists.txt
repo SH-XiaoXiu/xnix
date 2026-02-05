@@ -73,7 +73,7 @@ foreach (DEMO_DIR ${DEMO_DIRS})
             ${CMAKE_SOURCE_DIR}/main/include
             ${CMAKE_BINARY_DIR}/include
     )
-    target_link_libraries(${DEMO_ELF} PRIVATE c)
+    target_link_libraries(${DEMO_ELF} PRIVATE c serial)
     if (TARGET pthread)
         target_link_libraries(${DEMO_ELF} PRIVATE pthread)
     endif ()

@@ -3,12 +3,17 @@
  * @brief 简易 printf 实现
  *
  * stdout 使用行缓冲,减少 syscall 次数.
+ * 使用 libserial SDK 通过 IPC 输出到 seriald (可选)
  */
 
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <xnix/syscall.h>
+#include <xnix/abi/syscall.h>
+
+/* Weak references to libserial (optional linkage) */
+extern int serial_write(const char *buf, size_t len) __attribute__((weak));
+extern int serial_init(void) __attribute__((weak));
 
 /*
  * stdout 缓冲区
@@ -23,7 +28,11 @@ static int  stdout_len = 0;
 /* 刷新 stdout 缓冲区 */
 static void stdout_flush(void) {
     if (stdout_len > 0) {
-        sys_write(1, stdout_buf, stdout_len); /* STDOUT */
+        /* Use IPC to seriald if libserial is linked */
+        if (serial_write != NULL) {
+            serial_write(stdout_buf, stdout_len);
+        }
+        /* Otherwise output is silently discarded (pure microkernel design) */
         stdout_len = 0;
     }
 }

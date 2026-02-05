@@ -56,8 +56,6 @@ extern void sys_sync_init(void);
 extern void sys_irq_init(void);
 extern void sys_input_init(void);
 extern void sys_mm_init(void);
-extern void sys_fb_init(void);
-extern void sys_module_init(void);
 extern void sys_handle_init(void);
 extern void sys_perm_init(void);
 
@@ -75,8 +73,6 @@ void syscall_init(void) {
     sys_irq_init();
     sys_input_init();
     sys_mm_init();
-    sys_fb_init();
-    sys_module_init();
     sys_misc_init();
     sys_handle_init();
     sys_perm_init();

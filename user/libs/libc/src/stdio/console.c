@@ -6,6 +6,7 @@
  */
 
 #include <stdio.h>
+#include <unistd.h>
 #include <xnix/ipc.h>
 #include <xnix/ipc/console.h>
 #include <xnix/syscall.h>
@@ -16,20 +17,24 @@
 
 /**
  * 从控制台读取字符 (阻塞)
+ *
+ * 如果 kbd 驱动尚未就绪,会阻塞重试直到可用.
  */
 int console_getc(void) {
-    struct ipc_message msg   = {0};
-    struct ipc_message reply = {0};
+    while (1) {
+        struct ipc_message msg   = {0};
+        struct ipc_message reply = {0};
 
-    msg.regs.data[0] = CONSOLE_OP_GETC;
+        msg.regs.data[0] = CONSOLE_OP_GETC;
 
-    /* 使用无限超时,等待用户输入 */
-    int ret = sys_ipc_call(CONSOLE_IN_EP, &msg, &reply, 0);
-    if (ret < 0) {
-        return -1;
+        int ret = sys_ipc_call(CONSOLE_IN_EP, &msg, &reply, 0);
+        if (ret == 0) {
+            return (int)reply.regs.data[0];
+        }
+
+        /* kbd 驱动未就绪,等待后重试 */
+        msleep(500);
     }
-
-    return (int)reply.regs.data[0];
 }
 
 /**

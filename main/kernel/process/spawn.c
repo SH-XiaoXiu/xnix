@@ -58,15 +58,11 @@ static int spawn_transfer_handles(struct process *proc, struct process *creator,
                                   const struct spawn_handle *handles, uint32_t handle_count) {
     for (uint32_t i = 0; i < handle_count; i++) {
         handle_t dst =
-            handle_transfer(creator, handles[i].src, proc, handles[i].name, handles[i].dst_hint);
+            handle_transfer(creator, handles[i].src, proc, handles[i].name, HANDLE_INVALID);
         if (dst == HANDLE_INVALID) {
-            kprintf("[spawn] Failed to transfer handle %d (src=%u, hint=%u)\n", i, handles[i].src,
-                    handles[i].dst_hint);
+            kprintf("[spawn] Failed to transfer handle %d (src=%u, name=%s)\n", i, handles[i].src,
+                    handles[i].name);
             continue;
-        }
-        if (handles[i].dst_hint != HANDLE_INVALID && dst != handles[i].dst_hint) {
-            pr_warn("Spawn: inherited handle mismatch (expected %u, got %u)", handles[i].dst_hint,
-                    dst);
         }
     }
     return 0;

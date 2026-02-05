@@ -22,7 +22,7 @@
 struct abi_spawn_args {
     char                name[ABI_SPAWN_NAME_LEN];            /* 进程名 */
     char                profile_name[ABI_SPAWN_PROFILE_LEN]; /* 权限 profile 名称 */
-    uint32_t            module_index;                        /* 启动模块索引 */
+    char                module_name[ABI_SPAWN_NAME_LEN];     /* 启动模块名称 */
     uint32_t            handle_count;                        /* 传递的 handle 数量 */
     struct spawn_handle handles[ABI_SPAWN_MAX_HANDLES];      /* 传递的 handles */
 };

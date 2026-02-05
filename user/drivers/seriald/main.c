@@ -1,40 +1,50 @@
 /**
  * @file main.c
  * @brief Seriald UDM 驱动入口
+ *
+ * 使用新的IPC消息格式 (SERIAL_MSG_WRITE, SERIAL_MSG_COLOR)
  */
 
 #include "serial.h"
 
 #include <d/protocol/serial.h>
 #include <d/server.h>
+#include <libs/serial/serial.h> /* 消息类型定义 */
 #include <pthread.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <unistd.h>
+#include <xnix/abi/ipc.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
 
-static int console_handler(struct ipc_message *msg) {
-    uint32_t op = UDM_MSG_OPCODE(msg);
+/* 保护串口硬件访问的互斥锁 */
+static pthread_mutex_t serial_lock;
 
-    switch (op) {
-    case UDM_CONSOLE_PUTC:
-        serial_putc(UDM_MSG_ARG(msg, 0) & 0xFF);
-        break;
-    case UDM_CONSOLE_WRITE: {
-        /* 字符串从 data[1] 开始,最多 24 字节 */
+static int console_handler(struct ipc_message *msg) {
+    uint32_t type = msg->regs.data[0];
+
+    switch (type) {
+    case SERIAL_MSG_WRITE: {
+        /* 数据从 data[1] 开始,最多 ABI_IPC_MSG_PAYLOAD_BYTES */
         const char *str = (const char *)&msg->regs.data[1];
-        for (uint32_t i = 0; i < UDM_CONSOLE_WRITE_MAX && str[i]; i++) {
+        /* 计算实际长度 */
+        size_t max_len = ABI_IPC_MSG_PAYLOAD_BYTES;
+
+        /* 加锁保护硬件访问 */
+        pthread_mutex_lock(&serial_lock);
+        for (size_t i = 0; i < max_len && str[i]; i++) {
             serial_putc(str[i]);
         }
+        pthread_mutex_unlock(&serial_lock);
         break;
     }
-    /* SET_COLOR 和 RESET_COLOR 不再使用,颜色通过 ANSI 序列在文本中传递 */
-    case UDM_CONSOLE_CLEAR:
-        serial_clear();
+    case SERIAL_MSG_COLOR: {
+        /* 颜色设置 (保留,暂不实现) */
+        (void)msg;
         break;
+    }
     default:
         break;
     }
@@ -49,27 +59,27 @@ static void *input_thread(void *arg) {
     (void)arg;
 
     /* kbd 驱动的 endpoint */
-    const handle_t kbd_ep      = 3;
-    bool           last_was_cr = false;
+    const handle_t kbd_ep = env_get_handle("kbd_ep");
+    if (kbd_ep == HANDLE_INVALID) {
+        serial_puts("[seriald] kbd_ep not found, input forwarding disabled\n");
+        return NULL;
+    }
+    bool last_was_cr = false;
 
     /* 创建 notification 用于接收中断通知 */
     handle_t notif = sys_notification_create();
     if (notif == HANDLE_INVALID) {
-        printf("[seriald] failed to create notification\n");
         return NULL;
     }
 
     /* 绑定 IRQ 4 (COM1) 到 notification 的第 0 位 */
     int ret = sys_irq_bind(4, notif, 1 << 0);
     if (ret < 0) {
-        printf("[seriald] failed to bind IRQ 4: %d\n", ret);
         return NULL;
     }
 
     /* 开启硬件中断 */
     serial_enable_irq();
-
-    printf("[seriald] IRQ-driven input thread started (IRQ 4 -> handle %u)\n", notif);
 
     while (1) {
         /* 等待中断通知 */
@@ -112,19 +122,31 @@ static void *input_thread(void *arg) {
 }
 
 int main(void) {
-    printf("[seriald] Starting serial driver\n");
+    /* 初始化串口硬件 (直接访问硬件,基于权限) */
+    serial_hw_init();
 
-    /* 使用 init 传递的 endpoint handle (seriald provides serial_ep) */
-    /* Init 传递的第一个 handle 是自己提供的 endpoint */
-    handle_t ep = 0; /* Slot 0: serial_ep (provides) */
-    printf("[seriald] Using endpoint handle %u for 'serial_ep'\n", ep);
+    /* Early output to confirm we're running */
+    serial_puts("[seriald] main() entered\n");
 
-    serial_init();
+    /* 初始化互斥锁 */
+    pthread_mutex_init(&serial_lock, NULL);
+    serial_puts("[seriald] mutex initialized\n");
+
+    /* 使用 init 传递的 endpoint handle (seriald provides serial) */
+    handle_t ep = env_get_handle("serial");
+    if (ep == HANDLE_INVALID) {
+        serial_puts("[seriald] ERROR: 'serial' handle not found\n");
+        return 1;
+    }
+    serial_puts("[seriald] found serial endpoint handle\n");
 
     /* 启动输入处理线程 */
+    serial_puts("[seriald] creating input thread\n");
     pthread_t tid;
     if (pthread_create(&tid, NULL, input_thread, NULL) != 0) {
-        printf("[seriald] failed to create input thread\n");
+        serial_puts("[seriald] ERROR: failed to create input thread\n");
+    } else {
+        serial_puts("[seriald] input thread created\n");
     }
 
     struct udm_server srv = {
@@ -133,13 +155,18 @@ int main(void) {
         .name     = "seriald",
     };
 
+    serial_puts("[seriald] initializing UDM server\n");
     udm_server_init(&srv);
-    printf("[seriald] Ready, serving on endpoint %u\n", ep);
+    serial_puts("[seriald] UDM server initialized\n");
 
     /* 通知 init 服务已就绪 */
+    serial_puts("[seriald] notifying ready\n");
     svc_notify_ready("seriald");
+    serial_puts("[seriald] ready notification sent\n");
 
+    serial_puts("[seriald] entering server loop\n");
     udm_server_run(&srv);
 
+    serial_puts("[seriald] ERROR: server loop exited\n");
     return 0;
 }

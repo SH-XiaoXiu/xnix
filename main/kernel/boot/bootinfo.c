@@ -1,0 +1,132 @@
+/**
+ * @file kernel/boot/bootinfo.c
+ * @brief Boot 资源信息收集
+ *
+ * 收集启动时的硬件资源信息(暂不创建 handles)
+ * Handles 将在启动 init 时直接在其 handle table 中创建
+ */
+
+#include <arch/mmu.h>
+
+#include <xnix/abi/handle.h>
+#include <xnix/boot.h>
+#include <xnix/handle.h>
+#include <xnix/stdio.h>
+#include <xnix/string.h>
+#include <xnix/types.h>
+
+#define MAX_BOOT_RESOURCES 32
+
+/**
+ * Boot 资源描述符
+ */
+struct boot_resource {
+    paddr_t  phys_addr; /* 物理地址 */
+    uint32_t size;      /* 大小 */
+    char     name[16];  /* 名称 */
+};
+
+/**
+ * Boot 阶段收集的资源信息(物理地址和大小)
+ */
+static struct {
+    struct boot_resource resources[MAX_BOOT_RESOURCES];
+    uint32_t             count;
+} g_boot_resources;
+
+/**
+ * 收集启动资源信息
+ *
+ * 在 boot_phase_late() 调用,仅记录物理地址和大小
+ */
+void bootinfo_collect(void) {
+    g_boot_resources.count = 0;
+
+    uint32_t mod_count = boot_get_module_count();
+    pr_info("bootinfo: found %u multiboot modules", mod_count);
+
+    for (uint32_t i = 0; i < mod_count; i++) {
+        void    *addr = NULL;
+        uint32_t size = 0;
+
+        if (boot_get_module(i, &addr, &size) < 0) {
+            continue;
+        }
+
+        if (g_boot_resources.count >= MAX_BOOT_RESOURCES) {
+            pr_err("bootinfo: too many boot resources");
+            break;
+        }
+
+        struct boot_resource *res = &g_boot_resources.resources[g_boot_resources.count];
+        res->phys_addr            = (paddr_t)(uintptr_t)addr;
+        res->size                 = size;
+
+        /* 从模块 cmdline 的 name= 参数获取名称,回退到索引 */
+        const char *cmdline = boot_get_module_cmdline(i);
+        bool        named   = false;
+        if (cmdline) {
+            /* 查找 "name=" 参数 */
+            const char *p = cmdline;
+            while (*p) {
+                while (*p == ' ') {
+                    p++;
+                }
+                if (!strncmp(p, "name=", 5)) {
+                    const char *val = p + 5;
+                    size_t      len = 0;
+                    while (val[len] && val[len] != ' ') {
+                        len++;
+                    }
+                    if (len > 0 && len < sizeof(res->name)) {
+                        memcpy(res->name, val, len);
+                        res->name[len] = '\0';
+                        named          = true;
+                    }
+                    break;
+                }
+                while (*p && *p != ' ') {
+                    p++;
+                }
+            }
+        }
+        if (!named) {
+            snprintf(res->name, sizeof(res->name), "module%u", i);
+        }
+
+        pr_debug("bootinfo: module %u: addr=0x%08x, size=%u, name=%s", i, res->phys_addr, res->size,
+                 res->name);
+
+        g_boot_resources.count++;
+    }
+
+    pr_info("bootinfo: collected %u boot resources", g_boot_resources.count);
+}
+
+/* 外部函数声明(将在 physmem.c 中实现) */
+extern handle_t physmem_create_handle_for_proc(struct process *proc, paddr_t phys_addr,
+                                               uint32_t size, const char *name);
+
+/**
+ * 为 init 进程创建 boot handles
+ *
+ * 当前模块加载使用 module_index 方式(init 通过 sys_module_map 直接访问),
+ * 不需要通过 handle 传递.返回空列表.
+ *
+ * @param out_handles 输出 handle 数组
+ * @param out_count   输出 handle 数量
+ * @return 0 成功
+ */
+int bootinfo_get_handles(struct spawn_handle **out_handles, uint32_t *out_count) {
+    if (!out_handles || !out_count) {
+        return -1;
+    }
+
+    static struct spawn_handle spawn_handles[MAX_BOOT_RESOURCES];
+
+    *out_handles = spawn_handles;
+    *out_count   = 0;
+
+    pr_debug("bootinfo_get_handles: module_index mode, no handles to pass");
+    return 0;
+}

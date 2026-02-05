@@ -26,6 +26,15 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
         continue()
     endif ()
 
+    # If driver has its own CMakeLists.txt, use add_subdirectory
+    if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}/CMakeLists.txt)
+        message(STATUS "Found driver with CMakeLists.txt: ${DRIVER_DIR}")
+        add_subdirectory(${DRIVER_DIR})
+        list(APPEND _DRIVER_TARGETS ${DRIVER_DIR}.elf)
+        list(APPEND _DRIVER_NAMES ${DRIVER_DIR})
+        continue()
+    endif ()
+
     if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${DRIVER_DIR}/main.c)
         message(STATUS "Skipping driver ${DRIVER_DIR}: no main.c")
         continue()

@@ -39,6 +39,25 @@ static bool parse_handle_section(const char *section, char *name, size_t name_si
     return true;
 }
 
+static bool parse_profile_section(const char *section, char *name, size_t name_size) {
+    const char *prefix     = "profile.";
+    size_t      prefix_len = strlen(prefix);
+
+    if (strncmp(section, prefix, prefix_len) != 0) {
+        return false;
+    }
+
+    const char *profile_name = section + prefix_len;
+    size_t      len          = strlen(profile_name);
+    if (len == 0 || len >= name_size) {
+        return false;
+    }
+
+    memcpy(name, profile_name, len);
+    name[len] = '\0';
+    return true;
+}
+
 static struct svc_handle_def *handle_def_find(struct svc_manager *mgr, const char *name) {
     for (int i = 0; i < mgr->handle_def_count; i++) {
         if (strcmp(mgr->handle_defs[i].name, name) == 0) {
@@ -107,36 +126,6 @@ uint32_t svc_get_ticks(void) {
 
 void svc_manager_init(struct svc_manager *mgr) {
     memset(mgr, 0, sizeof(*mgr));
-
-    /* 确保 /run 目录存在 */
-    vfs_mkdir(SVC_READY_DIR);
-
-    struct svc_handle_def *handle = NULL;
-
-    handle = handle_def_get_or_add(mgr, "serial_ep");
-    if (handle) {
-        handle->type = SVC_HANDLE_TYPE_ENDPOINT;
-    }
-
-    handle = handle_def_get_or_add(mgr, "vfs_ep");
-    if (handle) {
-        handle->type = SVC_HANDLE_TYPE_ENDPOINT;
-    }
-
-    handle = handle_def_get_or_add(mgr, "fat_vfs_ep");
-    if (handle) {
-        handle->type = SVC_HANDLE_TYPE_ENDPOINT;
-    }
-
-    handle = handle_def_get_or_add(mgr, "fb_ep");
-    if (handle) {
-        handle->type = SVC_HANDLE_TYPE_ENDPOINT;
-    }
-
-    handle = handle_def_get_or_add(mgr, "rootfs_ep");
-    if (handle) {
-        handle->type = SVC_HANDLE_TYPE_ENDPOINT;
-    }
 }
 
 /**
@@ -195,15 +184,12 @@ static int parse_dep_list(const char *value, char deps[][SVC_NAME_MAX], int max_
     return count;
 }
 
-/* 格式: "name:dst_hint name:dst_hint ..." */
 int svc_parse_handles(struct svc_manager *mgr, const char *handles_str,
                       struct svc_handle_desc *handles, int max_handles) {
-    (void)mgr;
     int         count = 0;
     const char *p     = handles_str;
 
     while (*p && count < max_handles) {
-        /* 跳过空格 */
         while (*p == ' ' || *p == '\t') {
             p++;
         }
@@ -211,7 +197,6 @@ int svc_parse_handles(struct svc_manager *mgr, const char *handles_str,
             break;
         }
 
-        /* 提取 name:dst_hint */
         char spec[64];
         int  spec_len = 0;
         while (*p && *p != ' ' && *p != '\t' && spec_len < 63) {
@@ -219,30 +204,15 @@ int svc_parse_handles(struct svc_manager *mgr, const char *handles_str,
         }
         spec[spec_len] = '\0';
 
-        /* 解析 name:dst_hint */
-        char *colon = strchr(spec, ':');
-        if (colon) {
-            *colon              = '\0';
-            const char *name    = spec;
-            const char *dst_str = colon + 1;
-            snprintf(handles[count].name, sizeof(handles[count].name), "%s", name);
-            handles[count].src_handle = HANDLE_INVALID;
-            handles[count].dst_hint   = 0;
+        snprintf(handles[count].name, sizeof(handles[count].name), "%s", spec);
+        handles[count].src_handle = HANDLE_INVALID;
 
-            for (const char *s = dst_str; *s; s++) {
-                if (*s >= '0' && *s <= '9') {
-                    handles[count].dst_hint = handles[count].dst_hint * 10 + (*s - '0');
-                }
-            }
-
-            /* 注册 handle 定义(如果尚未存在) */
-            struct svc_handle_def *def = handle_def_get_or_add(mgr, name);
-            if (def && def->type == SVC_HANDLE_TYPE_NONE) {
-                def->type = SVC_HANDLE_TYPE_ENDPOINT; /* 默认为 endpoint */
-            }
-
-            count++;
+        struct svc_handle_def *def = handle_def_get_or_add(mgr, spec);
+        if (def && def->type == SVC_HANDLE_TYPE_NONE) {
+            def->type = SVC_HANDLE_TYPE_ENDPOINT;
         }
+
+        count++;
     }
 
     return count;
@@ -255,6 +225,7 @@ struct ini_ctx {
     struct svc_manager    *mgr;
     struct svc_config     *current; /* 当前正在解析的服务 */
     struct svc_handle_def *current_handle;
+    struct svc_profile    *current_profile; /* 当前正在解析的 profile */
 };
 
 static void svc_resolve_handles(struct svc_manager *mgr) {
@@ -315,13 +286,13 @@ static bool ini_handler(const char *section, const char *key, const char *value,
             } else if (strcmp(value, "path") == 0) {
                 cfg->type = SVC_TYPE_PATH;
             }
-        } else if (strcmp(key, "module") == 0) {
-            cfg->module_index = 0;
-            for (const char *s = value; *s; s++) {
-                if (*s >= '0' && *s <= '9') {
-                    cfg->module_index = cfg->module_index * 10 + (*s - '0');
-                }
+        } else if (strcmp(key, "module_name") == 0) {
+            size_t len = strlen(value);
+            if (len >= SVC_NAME_MAX) {
+                len = SVC_NAME_MAX - 1;
             }
+            memcpy(cfg->module_name, value, len);
+            cfg->module_name[len] = '\0';
         } else if (strcmp(key, "path") == 0) {
             size_t len = strlen(value);
             if (len >= SVC_PATH_MAX) {
@@ -354,8 +325,6 @@ static bool ini_handler(const char *section, const char *key, const char *value,
         } else if (strcmp(key, "no_ready_file") == 0) {
             cfg->no_ready_file = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
         } else if (strcmp(key, "handles") == 0) {
-            cfg->handle_count = svc_parse_handles(mgr, value, cfg->handles, SVC_HANDLES_MAX);
-        } else if (strcmp(key, "caps") == 0) { /* 兼容旧配置 */
             cfg->handle_count = svc_parse_handles(mgr, value, cfg->handles, SVC_HANDLES_MAX);
         } else if (strcmp(key, "mount") == 0) {
             size_t len = strlen(value);
@@ -392,6 +361,12 @@ static bool ini_handler(const char *section, const char *key, const char *value,
                 struct svc_graph_node *node = &mgr->graph[idx];
                 node->wants_count           = parse_dep_list(value, node->wants, SVC_DEPS_MAX);
             }
+        } else if (key[0] == 'x' && strncmp(key, "xnix.", 5) == 0) {
+            /* 权限覆盖:xnix.xxx = true/false */
+            if (cfg->perm_count < 8) {
+                snprintf(cfg->perms[cfg->perm_count], 64, "%s=%s", key, value);
+                cfg->perm_count++;
+            }
         }
 
         return true;
@@ -399,7 +374,8 @@ static bool ini_handler(const char *section, const char *key, const char *value,
 
     char handle_name[SVC_HANDLE_NAME_MAX];
     if (parse_handle_section(section, handle_name, sizeof(handle_name))) {
-        ictx->current = NULL;
+        ictx->current         = NULL;
+        ictx->current_profile = NULL;
 
         if (ictx->current_handle == NULL || strcmp(ictx->current_handle->name, handle_name) != 0) {
             ictx->current_handle = handle_def_get_or_add(mgr, handle_name);
@@ -419,17 +395,66 @@ static bool ini_handler(const char *section, const char *key, const char *value,
         return true;
     }
 
-    ictx->current        = NULL;
-    ictx->current_handle = NULL;
+    /* 处理 [profile.xxx] */
+    char profile_name[32];
+    if (parse_profile_section(section, profile_name, sizeof(profile_name))) {
+        ictx->current        = NULL;
+        ictx->current_handle = NULL;
+
+        /* 查找或创建 profile */
+        if (ictx->current_profile == NULL ||
+            strcmp(ictx->current_profile->name, profile_name) != 0) {
+            struct svc_profile *prof = NULL;
+            for (int i = 0; i < mgr->profile_count; i++) {
+                if (strcmp(mgr->profiles[i].name, profile_name) == 0) {
+                    prof = &mgr->profiles[i];
+                    break;
+                }
+            }
+
+            if (!prof && mgr->profile_count < SVC_MAX_PROFILES) {
+                prof = &mgr->profiles[mgr->profile_count++];
+                memset(prof, 0, sizeof(*prof));
+                strncpy(prof->name, profile_name, sizeof(prof->name) - 1);
+            }
+
+            ictx->current_profile = prof;
+        }
+
+        struct svc_profile *prof = ictx->current_profile;
+        if (!prof) {
+            printf("Too many profiles\n");
+            return true;
+        }
+
+        /* 解析 profile 字段 */
+        if (strcmp(key, "inherit") == 0) {
+            strncpy(prof->inherit, value, sizeof(prof->inherit) - 1);
+        } else if (key[0] == 'x' && strncmp(key, "xnix.", 5) == 0) {
+            /* 权限节点:xnix.xxx = true/false */
+            if (prof->perm_count < SVC_PERM_NODES_MAX) {
+                struct svc_perm_entry *perm = &prof->perms[prof->perm_count++];
+                strncpy(perm->name, key, sizeof(perm->name) - 1);
+                perm->value = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
+            }
+        }
+
+        return true;
+    }
+
+    ictx->current         = NULL;
+    ictx->current_handle  = NULL;
+    ictx->current_profile = NULL;
 
     return true;
 }
 
 int svc_load_config(struct svc_manager *mgr, const char *path) {
     struct ini_ctx ctx = {
-        .mgr            = mgr,
-        .current        = NULL,
-        .current_handle = NULL,
+        .mgr             = mgr,
+        .current         = NULL,
+        .current_handle  = NULL,
+        .current_profile = NULL,
     };
 
     int ret = ini_parse_file(path, ini_handler, &ctx);
@@ -459,9 +484,10 @@ int svc_load_config(struct svc_manager *mgr, const char *path) {
 
 int svc_load_config_string(struct svc_manager *mgr, const char *content) {
     struct ini_ctx ctx = {
-        .mgr            = mgr,
-        .current        = NULL,
-        .current_handle = NULL,
+        .mgr             = mgr,
+        .current         = NULL,
+        .current_handle  = NULL,
+        .current_profile = NULL,
     };
 
     int ret = ini_parse_buffer(content, strlen(content), ini_handler, &ctx);
@@ -598,7 +624,16 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     struct svc_config  *cfg = &mgr->configs[idx];
     struct svc_runtime *rt  = &mgr->runtime[idx];
 
-    printf("Starting %s...\n", cfg->name);
+    /* 启动早期服务时使用早期控制台 */
+    extern void early_puts(const char *);
+    extern bool early_console_is_active(void);
+    if (early_console_is_active()) {
+        early_puts("[INIT] starting ");
+        early_puts(cfg->name);
+        early_puts("\n");
+    } else {
+        printf("Starting %s...\n", cfg->name);
+    }
 
     rt->state = SVC_STATE_STARTING;
 
@@ -633,9 +668,7 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
         /* 传递 handles */
         exec_args.handle_count = (uint32_t)cfg->handle_count;
         for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
-            exec_args.handles[i].src      = cfg->handles[i].src_handle;
-            exec_args.handles[i].dst_hint = cfg->handles[i].dst_hint;
-            /* exec_args 中 handle 结构包含 name,可以传递 name */
+            exec_args.handles[i].src = cfg->handles[i].src_handle;
             snprintf(exec_args.handles[i].name, sizeof(exec_args.handles[i].name), "%s",
                      cfg->handles[i].name);
         }
@@ -665,12 +698,11 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
             args.profile_name[0] = '\0';
         }
 
-        args.module_index = cfg->module_index;
+        memcpy(args.module_name, cfg->module_name, sizeof(args.module_name));
         args.handle_count = (uint32_t)cfg->handle_count;
 
         for (int i = 0; i < cfg->handle_count; i++) {
-            args.handles[i].src      = cfg->handles[i].src_handle;
-            args.handles[i].dst_hint = cfg->handles[i].dst_hint;
+            args.handles[i].src = cfg->handles[i].src_handle;
             snprintf(args.handles[i].name, sizeof(args.handles[i].name), "%s",
                      cfg->handles[i].name);
         }
@@ -679,12 +711,31 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     }
 
     if (pid < 0) {
-        printf("Failed to start %s: %d\n", cfg->name, pid);
+        /* 错误输出使用早期控制台 */
+        extern void early_puts(const char *);
+        extern bool early_console_is_active(void);
+        if (early_console_is_active()) {
+            early_puts("[INIT] ERROR: failed to start ");
+            early_puts(cfg->name);
+            early_puts("\n");
+        } else {
+            printf("Failed to start %s: %d\n", cfg->name, pid);
+        }
         rt->state = SVC_STATE_FAILED;
         return pid;
     }
 
-    printf("%s started (pid=%d)\n", cfg->name, pid);
+    /* Success - show PID */
+    if (early_console_is_active()) {
+        early_puts("[INIT] started ");
+        early_puts(cfg->name);
+        char pidbuf[16];
+        snprintf(pidbuf, sizeof(pidbuf), " (pid %d)\n", pid);
+        early_puts(pidbuf);
+    } else {
+        printf("%s started (pid=%d)\n", cfg->name, pid);
+    }
+
     rt->state = SVC_STATE_RUNNING;
     rt->pid   = pid;
 
@@ -1067,10 +1118,8 @@ static bool svc_can_start_advanced(struct svc_manager *mgr, int idx) {
 
     /* 检查 wait_path */
     if (cfg->wait_path[0]) {
-        struct vfs_stat st;
-        if (vfs_stat(cfg->wait_path, &st) < 0) {
-            return false;
-        }
+        /* VFS not available in current architecture, skip */
+        return false;
     }
 
     return true;
@@ -1191,7 +1240,6 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
             struct svc_handle_desc *h = &cfg->handles[cfg->handle_count++];
             strncpy(h->name, ep_name, SVC_HANDLE_NAME_MAX);
             h->src_handle = HANDLE_INVALID; /* 将在 svc_resolve_handles 中创建 */
-            h->dst_hint   = HANDLE_INVALID;
 
             printf("Service '%s' will receive its own handle '%s' (provides)\n", cfg->name,
                    ep_name);
@@ -1225,7 +1273,6 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
             struct svc_handle_desc *h = &cfg->handles[cfg->handle_count++];
             strncpy(h->name, ep_name, SVC_HANDLE_NAME_MAX);
             h->src_handle = HANDLE_INVALID; /* 稍后由 svc_resolve_handles 填充 */
-            h->dst_hint   = HANDLE_INVALID;
         }
 
         /* 处理 wants */
@@ -1249,7 +1296,6 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
             struct svc_handle_desc *h = &cfg->handles[cfg->handle_count++];
             strncpy(h->name, ep_name, SVC_HANDLE_NAME_MAX);
             h->src_handle = HANDLE_INVALID;
-            h->dst_hint   = HANDLE_INVALID;
         }
     }
 

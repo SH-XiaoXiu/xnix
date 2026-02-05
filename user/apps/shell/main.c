@@ -5,6 +5,7 @@
 
 #include "acolor.h"
 #include "path.h"
+#include "unistd.h"
 
 #include <d/protocol/vfs.h>
 #include <signal.h>
@@ -12,25 +13,30 @@
 #include <string.h>
 #include <vfs_client.h>
 #include <xnix/abi/process.h>
+#include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/ipc/console.h>
 #include <xnix/syscall.h>
 
-#define MAX_LINE     256
-#define MAX_ARGS     16
-#define KBD_ENDPOINT 3 /* kbd 驱动的 IPC endpoint */
+#define MAX_LINE 256
+#define MAX_ARGS 16
+
+static handle_t g_kbd_ep = HANDLE_INVALID;
+static handle_t g_vfs_ep = HANDLE_INVALID;
 
 /**
  * 通过 IPC 通知 kbd 驱动设置前台进程
  */
 static void shell_set_foreground(pid_t pid) {
+    if (g_kbd_ep == HANDLE_INVALID) {
+        return;
+    }
     struct ipc_message msg;
     memset(&msg, 0, sizeof(msg));
     msg.regs.data[0] = CONSOLE_OP_SET_FOREGROUND;
     msg.regs.data[1] = (uint32_t)pid;
 
-    /* 发送给 kbd 驱动 */
-    sys_ipc_send(KBD_ENDPOINT, &msg, 100);
+    sys_ipc_send(g_kbd_ep, &msg, 100);
 }
 
 /* 内置命令 */
@@ -53,7 +59,7 @@ struct builtin_cmd {
 static const struct builtin_cmd builtins[] = {{"help", cmd_help, "Show available commands"},
                                               {"echo", cmd_echo, "Echo text"},
                                               {"clear", cmd_clear, "Clear screen"},
-                                              {"run", cmd_run, "Run module by index"},
+                                              {"run", cmd_run, "Run module by name"},
                                               {"kill", cmd_kill, "Terminate process"},
                                               {"path", cmd_path, "Manage PATH"},
                                               {"cd", cmd_cd, "Change directory"},
@@ -155,11 +161,11 @@ static void run_external(const char *path, int argc, char **argv, int background
     }
 
     /* 传递 vfsd handle */
-    exec_args.handle_count        = 1;
-    exec_args.handles[0].src      = 2; /* shell 的 handle 2 是 vfsd */
-    exec_args.handles[0].dst_hint = 2; /* 子进程也用 handle 2 */
-    /* 命名为 vfs_ep, 虽然 dst_hint=2 已经决定了位置, 但名字有助于调试 */
-    strncpy(exec_args.handles[0].name, "vfs_ep", sizeof(exec_args.handles[0].name) - 1);
+    if (g_vfs_ep != HANDLE_INVALID) {
+        exec_args.handle_count   = 1;
+        exec_args.handles[0].src = g_vfs_ep;
+        strncpy(exec_args.handles[0].name, "vfs_ep", sizeof(exec_args.handles[0].name) - 1);
+    }
 
     /* 执行 */
     int pid = sys_exec(&exec_args);
@@ -279,37 +285,26 @@ static void cmd_clear(int argc, char **argv) {
 
 static void cmd_run(int argc, char **argv) {
     if (argc < 2) {
-        printf("Usage: run <module_index>\n");
+        printf("Usage: run <module_name>\n");
         return;
     }
-
-    int index = simple_atoi(argv[1]);
-    if (index < 4) {
-        printf("Error: module index must be >= 4\n");
-        return;
-    }
-
-    char name[16];
-    snprintf(name, sizeof(name), "mod%d", index);
 
     struct spawn_args spawn;
     memset(&spawn, 0, sizeof(spawn));
-    for (int i = 0; name[i] && i < 15; i++) {
-        spawn.name[i] = name[i];
-    }
-    spawn.module_index = (uint32_t)index;
+    strncpy(spawn.name, argv[1], ABI_SPAWN_NAME_LEN - 1);
+    strncpy(spawn.module_name, argv[1], ABI_SPAWN_NAME_LEN - 1);
     spawn.handle_count = 0;
 
     int pid = sys_spawn(&spawn);
     if (pid < 0) {
-        printf("Failed to spawn module %d (error %d)\n", index, pid);
+        printf("Failed to spawn module '%s' (error %d)\n", argv[1], pid);
         return;
     }
 
     /* 复制CWD到子进程 */
     vfs_copy_cwd_to_child(pid);
 
-    printf("Started module %d (pid=%d)\n", index, pid);
+    printf("Started module '%s' (pid=%d)\n", argv[1], pid);
 
     shell_set_foreground(pid);
 
@@ -431,11 +426,21 @@ int main(int argc, char **argv) {
 
     char line[MAX_LINE];
 
-    /* 初始化 VFS 客户端(使用默认 endpoint)*/
-    vfs_client_init(2);
+    printf("[shell] starting\n");
+
+    /* 查找 handles */
+    g_kbd_ep = env_get_handle("kbd_ep");
+    g_vfs_ep = env_get_handle("vfs_ep");
+
+    printf("[shell] kbd_ep=%d vfs_ep=%d\n", g_kbd_ep, g_vfs_ep);
+
+    /* 初始化 VFS 客户端 */
+    vfs_client_init(g_vfs_ep);
 
     /* 初始化 PATH */
     path_init();
+
+    printf("[shell] init done, entering main loop\n");
 
     printf("\n");
     printf("Xnix Shell\n");
@@ -453,6 +458,7 @@ int main(int argc, char **argv) {
         fflush(NULL);
 
         if (gets_s(line, sizeof(line)) == NULL) {
+            msleep(100);
             continue;
         }
 

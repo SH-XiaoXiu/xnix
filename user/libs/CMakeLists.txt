@@ -116,7 +116,12 @@ foreach (LIB_NAME ${_SORTED_LIBS})
 
     target_compile_options(${LIB_NAME} PRIVATE ${USER_C_FLAGS})
 
-    # 添加 include 目录（顺序：自己的 -> 依赖的 -> 内核的）
+    # 添加 include 目录（顺序：SDK -> 自己的 -> 依赖的 -> 内核的）
+    # SDK include (always available for ABI headers)
+    target_include_directories(${LIB_NAME} PUBLIC
+            ${CMAKE_SOURCE_DIR}/sdk/include
+    )
+
     # 自己的 include
     if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/include)
         target_include_directories(${LIB_NAME} PUBLIC

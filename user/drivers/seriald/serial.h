@@ -9,9 +9,9 @@
 #include <stdint.h>
 
 /**
- * 初始化串口
+ * 初始化串口硬件
  */
-void serial_init(void);
+void serial_hw_init(void);
 
 /**
  * 开启串口中断

@@ -112,8 +112,41 @@ static int32_t sys_sbrk(const uint32_t *args) {
 }
 
 /**
- * 注册内存管理系统调用
+ * SYS_MMAP_PHYS: 映射物理内存到用户空间(使用 handle)
+ *
+ * @param args[0] handle  HANDLE_PHYSMEM 类型的 handle
+ * @param args[1] offset  资源内的偏移
+ * @param args[2] size    映射大小
+ * @param args[3] prot    保护标志 (PROT_READ | PROT_WRITE)
+ * @return 用户空间虚拟地址, 失败返回负错误码
+ *
+ * 权限检查: 需要 xnix.mm.mmap 权限
+ */
+static int32_t sys_mmap_phys(const uint32_t *args) {
+    handle_t handle = (handle_t)args[0];
+    uint32_t offset = args[1];
+    uint32_t size   = args[2];
+    uint32_t prot   = args[3];
+
+    (void)handle;
+    (void)offset;
+    (void)size;
+    (void)prot;
+
+    /* TODO: 实现 handle 查找和物理内存映射 */
+    /* 需要:
+     * 1. 查找 handle,验证类型为 HANDLE_PHYSMEM
+     * 2. 检查 xnix.mm.mmap 权限
+     * 3. 获取物理地址范围
+     * 4. 映射到用户空间
+     */
+    return -ENOSYS; /* 暂未实现 */
+}
+
+/**
+ * 注册内存管理系统调用(编号:200-219)
  */
 void sys_mm_init(void) {
     syscall_register(SYS_SBRK, sys_sbrk, 1, "sbrk");
+    syscall_register(SYS_MMAP_PHYS, sys_mmap_phys, 4, "mmap_phys");
 }

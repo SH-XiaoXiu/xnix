@@ -4,6 +4,7 @@
 .section .text
 .global _start
 .extern main
+.extern __libc_init
 
 _start:
     # 栈上有: argc, argv
@@ -14,7 +15,16 @@ _start:
     movl (%esp), %eax       # argc
     movl 4(%esp), %ebx      # argv
 
-    # 调用 main(argc, argv)
+    # 保存 argc 和 argv (可能被 __libc_init 破坏)
+    pushl %ebx              # argv
+    pushl %eax              # argc
+
+    # 初始化 libc (serial SDK 等)
+    call __libc_init
+
+    # 恢复参数并调用 main(argc, argv)
+    popl %eax               # argc
+    popl %ebx               # argv
     pushl %ebx              # argv
     pushl %eax              # argc
     call main

@@ -1,9 +1,8 @@
+#include <xnix/abi/perm.h>
 #include <xnix/mm.h>
 #include <xnix/perm.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
-
-#define PERM_NODE_NAME_MAX 64
 
 /* 简单的 strtoul 实现 */
 static unsigned long simple_strtoul(const char *cp, char **endp, unsigned int base) {

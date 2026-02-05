@@ -34,6 +34,9 @@ void perm_profile_init(void) {
     perm_profile_set(app_profile, PERM_NODE_IPC_SEND, PERM_GRANT);
     perm_profile_set(app_profile, PERM_NODE_IPC_RECV, PERM_GRANT);
     perm_profile_set(app_profile, "xnix.ipc.endpoint.*", PERM_GRANT);
+
+    struct perm_profile *default_profile = perm_profile_create("default");
+    perm_profile_inherit(default_profile, app_profile);
 }
 
 /**

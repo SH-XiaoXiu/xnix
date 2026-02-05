@@ -75,7 +75,7 @@ foreach (APP_DIR ${APP_DIRS})
             ${CMAKE_SOURCE_DIR}/main/include
             ${CMAKE_BINARY_DIR}/include
     )
-    target_link_libraries(${APP_ELF} PRIVATE c)
+    target_link_libraries(${APP_ELF} PRIVATE c -Wl,--whole-archive serial -Wl,--no-whole-archive)
     if (TARGET pthread)
         target_link_libraries(${APP_ELF} PRIVATE pthread)
     endif ()

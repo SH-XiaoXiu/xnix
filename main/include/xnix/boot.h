@@ -69,10 +69,41 @@ int boot_get_module(uint32_t index, void **out_addr, uint32_t *out_size);
 const char *boot_get_module_cmdline(uint32_t index);
 
 /**
+ * 按名称查找启动模块
+ *
+ * 遍历所有模块的 cmdline,查找 name=<name> 匹配的模块
+ *
+ * @param name     模块名称
+ * @param out_addr 输出模块起始地址
+ * @param out_size 输出模块大小
+ * @return 0 成功,<0 失败
+ */
+int boot_find_module_by_name(const char *name, void **out_addr, uint32_t *out_size);
+
+/**
  * 获取 framebuffer 信息
  * @param info 输出参数
  * @return 0 成功(有 framebuffer),-1 无 framebuffer
  */
 int boot_get_framebuffer(struct boot_framebuffer_info *info);
+
+/* Forward declaration */
+struct spawn_handle;
+
+/**
+ * 收集启动资源并创建 handles
+ *
+ * 在 handle 系统初始化后调用,在启动 init 之前.
+ */
+void bootinfo_collect(void);
+
+/**
+ * 获取 boot handles 用于传递给 init
+ *
+ * @param out_handles 输出 handle 数组指针
+ * @param out_count   输出 handle 数量
+ * @return 0 成功, <0 失败
+ */
+int bootinfo_get_handles(struct spawn_handle **out_handles, uint32_t *out_count);
 
 #endif

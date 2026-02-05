@@ -135,10 +135,9 @@ static int32_t sys_exec(const uint32_t *args) {
 
     struct spawn_handle handles[ABI_EXEC_MAX_HANDLES];
     for (uint32_t i = 0; i < handle_count; i++) {
-        handles[i].src      = (handle_t)kargs->handles[i].src;
-        handles[i].dst_hint = (handle_t)kargs->handles[i].dst_hint;
-        strncpy(handles[i].name, kargs->handles[i].name, ABI_SPAWN_NAME_LEN);
-        handles[i].name[ABI_SPAWN_NAME_LEN - 1] = '\0';
+        handles[i].src = (handle_t)kargs->handles[i].src;
+        strncpy(handles[i].name, kargs->handles[i].name, sizeof(handles[i].name));
+        handles[i].name[sizeof(handles[i].name) - 1] = '\0';
     }
 
     int argc = (int)kargs->argc;
@@ -179,11 +178,12 @@ static int32_t sys_spawn(const uint32_t *args) {
 
     kargs.name[sizeof(kargs.name) - 1]                 = '\0';
     kargs.profile_name[sizeof(kargs.profile_name) - 1] = '\0';
+    kargs.module_name[sizeof(kargs.module_name) - 1]   = '\0';
 
-    /* 获取模块数据 */
+    /* 按名称查找模块 */
     void    *mod_addr = NULL;
     uint32_t mod_size = 0;
-    ret               = boot_get_module(kargs.module_index, &mod_addr, &mod_size);
+    ret               = boot_find_module_by_name(kargs.module_name, &mod_addr, &mod_size);
     if (ret < 0) {
         return -EINVAL;
     }

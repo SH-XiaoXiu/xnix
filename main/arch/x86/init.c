@@ -33,16 +33,13 @@ void arch_early_init(void) {
      * 注册控制台驱动
      * fb_console 和 vga_console 都注册,fb_console_init 会检测 framebuffer 是否可用
      * 如果有 framebuffer,fb_console 用于显示;否则回退到 VGA 文本模式
+     *
+     * 暂时禁用内核 serial console 来验证用户态 seriald
      */
     fb_console_register();
     vga_console_register();
     serial_console_register();
 
-    /*
-     * 中断控制器驱动在此注册 (PIC 作为默认)
-     * APIC 驱动在 hal_probe_features 解析 MP Table 后,
-     * 由 arch_init 决定是否切换
-     */
     pic_register();
     pit_register();
 }

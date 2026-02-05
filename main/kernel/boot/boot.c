@@ -123,6 +123,16 @@ const char *boot_get_module_cmdline(uint32_t index) {
     return (const char *)PHYS_TO_VIRT(cmdline_phys);
 }
 
+int boot_find_module_by_name(const char *name, void **out_addr, uint32_t *out_size) {
+    for (uint32_t i = 0; i < g_boot_module_count; i++) {
+        const char *cmdline = boot_get_module_cmdline(i);
+        if (cmdline && boot_cmdline_has_kv(cmdline, "name", name)) {
+            return boot_get_module(i, out_addr, out_size);
+        }
+    }
+    return -1;
+}
+
 int boot_get_framebuffer(struct boot_framebuffer_info *info) {
     if (!g_boot_fb_valid || !info) {
         return -1;

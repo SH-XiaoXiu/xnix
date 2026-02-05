@@ -10,13 +10,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>
+#include <xnix/abi/handle.h>
+#include <xnix/env.h>
 #include <xnix/errno.h>
 #include <xnix/ipc.h>
 #include <xnix/ipc/fs.h>
 #include <xnix/syscall.h>
 
-/* VFS 服务器 endpoint (默认值,可通过 vfs_client_init 修改)*/
-static uint32_t g_vfsd_ep = 2;
+/* VFS 服务器 endpoint */
+static uint32_t g_vfsd_ep = HANDLE_INVALID;
 
 /* 文件描述符表 */
 #define VFS_MAX_FD 32
@@ -37,6 +39,9 @@ static struct vfs_file fd_table[VFS_MAX_FD];
  * 初始化 VFS 客户端
  */
 void vfs_client_init(uint32_t vfsd_ep) {
+    if (vfsd_ep == HANDLE_INVALID) {
+        vfsd_ep = env_get_handle("vfs_ep");
+    }
     if (vfsd_ep != HANDLE_INVALID) {
         g_vfsd_ep = vfsd_ep;
     }
@@ -51,6 +56,9 @@ void vfs_client_init(uint32_t vfsd_ep) {
 int vfs_mount(const char *path, uint32_t fs_ep) {
     if (!path) {
         return -EINVAL;
+    }
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
     }
 
     struct ipc_message msg   = {0};
@@ -92,6 +100,9 @@ static int vfs_alloc_fd(void) {
 int vfs_open(const char *path, uint32_t flags) {
     if (!path) {
         return -EINVAL;
+    }
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
     }
 
     int fd = vfs_alloc_fd();
@@ -235,6 +246,9 @@ int vfs_mkdir(const char *path) {
     if (!path) {
         return -EINVAL;
     }
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
+    }
 
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
@@ -259,6 +273,9 @@ int vfs_delete(const char *path) {
     if (!path) {
         return -EINVAL;
     }
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
+    }
 
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
@@ -282,6 +299,9 @@ int vfs_delete(const char *path) {
 int vfs_stat(const char *path, struct vfs_stat *st) {
     if (!st || !path) {
         return -EINVAL;
+    }
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
     }
 
     struct ipc_message msg   = {0};
@@ -314,6 +334,9 @@ int vfs_stat(const char *path, struct vfs_stat *st) {
 int vfs_opendir(const char *path) {
     if (!path) {
         return -EINVAL;
+    }
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
     }
 
     int fd = vfs_alloc_fd();
@@ -399,6 +422,9 @@ int vfs_chdir(const char *path) {
     if (!path) {
         return -EINVAL;
     }
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
+    }
 
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
@@ -422,6 +448,9 @@ int vfs_chdir(const char *path) {
 int vfs_getcwd(char *buf, size_t size) {
     if (!buf || size == 0) {
         return -EINVAL;
+    }
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
     }
 
     struct ipc_message msg   = {0};
@@ -457,6 +486,10 @@ int vfs_getcwd(char *buf, size_t size) {
  * 复制当前进程的CWD到子进程(用于进程spawn后的CWD继承)
  */
 int vfs_copy_cwd_to_child(pid_t child_pid) {
+    if (g_vfsd_ep == HANDLE_INVALID) {
+        return -ENOENT;
+    }
+
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 

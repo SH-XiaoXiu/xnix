@@ -286,7 +286,7 @@ static int32_t sys_notification_wait(const uint32_t *args) {
 }
 
 /**
- * 注册 IPC 系统调用
+ * 注册 IPC 系统调用(新编号:100-119)
  */
 void sys_ipc_init(void) {
     syscall_register(SYS_ENDPOINT_CREATE, sys_endpoint_create, 1, "endpoint_create");
@@ -295,6 +295,7 @@ void sys_ipc_init(void) {
     syscall_register(SYS_IPC_CALL, sys_ipc_call, 4, "ipc_call");
     syscall_register(SYS_IPC_REPLY, sys_ipc_reply, 1, "ipc_reply");
     syscall_register(SYS_IPC_REPLY_TO, sys_ipc_reply_to, 2, "ipc_reply_to");
+    /* 通知系统调用移至 800-819 范围 */
     syscall_register(SYS_NOTIFICATION_CREATE, sys_notification_create, 0, "notification_create");
     syscall_register(SYS_NOTIFICATION_WAIT, sys_notification_wait, 1, "notification_wait");
 }
