@@ -11,11 +11,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <xnix/abi/framebuffer.h>
+#include <xnix/abi/handle.h>
+#include <xnix/env.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
-
-/* 继承的 handles */
-#define BOOT_FB_EP 0 /* Framebuffer endpoint */
 
 /* Framebuffer 状态 */
 static struct abi_fb_info fb_info;
@@ -245,16 +244,23 @@ int main(void) {
 
     fb_ready = 1;
 
+    /* 获取 endpoint handle (fbd provides fb_ep) */
+    handle_t fb_ep = env_get_handle("fb_ep");
+    if (fb_ep == HANDLE_INVALID) {
+        printf("[fbd] Failed to find fb_ep handle\n");
+        return 1;
+    }
+
     /* 启动 UDM 服务 */
     struct udm_server srv = {
-        .endpoint = BOOT_FB_EP,
+        .endpoint = fb_ep,
         .handler  = fb_handler,
         .name     = "fbd",
     };
 
     udm_server_init(&srv);
     svc_notify_ready("fbd");
-    printf("[fbd] Ready, serving on endpoint %u\n", BOOT_FB_EP);
+    printf("[fbd] Ready, serving on endpoint %u\n", fb_ep);
 
     udm_server_run(&srv);
 

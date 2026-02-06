@@ -8,6 +8,7 @@
 #include <d/server.h>
 #include <stdio.h>
 #include <vfs/vfs.h>
+#include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
@@ -21,14 +22,19 @@ static int vfs_handler(struct ipc_message *msg) {
 int main(void) {
     printf("[ramfsd] Starting RAM filesystem driver\n");
 
-    /* 使用 init 传递的 endpoint handle (ramfsd provides ramfs_ep) */
-    /* Init 传递的第一个 handle 是自己提供的 endpoint */
-    handle_t ep = 0; /* Slot 0: ramfs_ep (provides) */
+    /* 获取 endpoint handle (ramfsd provides ramfs_ep) */
+    handle_t ep = env_get_handle("ramfs_ep");
+    if (ep == HANDLE_INVALID) {
+        printf("[ramfsd] Failed to find ramfs_ep handle\n");
+        return 1;
+    }
     printf("[ramfsd] Using endpoint handle %u for 'ramfs_ep'\n", ep);
 
     /* serial_ep 由 init 传递 (requires serial_ep) */
-    handle_t serial_ep = 1; /* Slot 1: serial_ep (requires) */
-    printf("[ramfsd] Received 'serial_ep' handle: %u\n", serial_ep);
+    handle_t serial_ep = env_get_handle("serial_ep");
+    if (serial_ep != HANDLE_INVALID) {
+        printf("[ramfsd] Received 'serial_ep' handle: %u\n", serial_ep);
+    }
 
     ramfs_init(&g_ramfs);
 

@@ -508,11 +508,15 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* 创建 tty1 (serial) endpoint */
-    handle_t tty1_ep = sys_endpoint_create(ABI_TTY1_HANDLE_NAME);
+    /* 获取 tty1 (serial) endpoint(由 init 通过 provides 传递) */
+    handle_t tty1_ep = env_get_handle(ABI_TTY1_HANDLE_NAME);
     if (tty1_ep == HANDLE_INVALID) {
-        printf("[ttyd] ERROR: failed to create tty1 endpoint\n");
-        return 1;
+        /* 回退:自行创建(init 未传递 handle 时) */
+        tty1_ep = sys_endpoint_create(ABI_TTY1_HANDLE_NAME);
+        if (tty1_ep == HANDLE_INVALID) {
+            printf("[ttyd] ERROR: failed to get tty1 endpoint\n");
+            return 1;
+        }
     }
 
     /* 初始化 tty1 (serial 终端)
@@ -520,12 +524,22 @@ int main(int argc, char **argv) {
     tty_init_instance(&g_ttys[0], 1, tty1_ep, serial_ep, kbd_ep);
     g_tty_count = 1;
 
-    /* 如果 kbd 可用,创建 tty0 (VGA 终端) */
+    /* 如果 kbd 可用,获取 tty0 (VGA 终端) */
     if (kbd_ep != HANDLE_INVALID) {
-        handle_t tty0_ep = sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
+        handle_t tty0_ep = env_get_handle(ABI_TTY0_HANDLE_NAME);
+        if (tty0_ep == HANDLE_INVALID) {
+            tty0_ep = sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
+        }
         if (tty0_ep != HANDLE_INVALID) {
-            /* tty0 目前输出也走 serial(fbd 集成待后续实现) */
-            tty_init_instance(&g_ttys[1], 0, tty0_ep, serial_ep, kbd_ep);
+            /* tty0 使用 fb_ep 输出到 VGA,回退到 serial_ep */
+            handle_t fb_ep     = env_get_handle("fb_ep");
+            handle_t output_ep = (fb_ep != HANDLE_INVALID) ? fb_ep : serial_ep;
+            if (fb_ep != HANDLE_INVALID) {
+                printf("[ttyd] tty0 will use fb_ep for VGA output\n");
+            } else {
+                printf("[ttyd] WARNING: fb_ep not available, tty0 using serial fallback\n");
+            }
+            tty_init_instance(&g_ttys[1], 0, tty0_ep, output_ep, kbd_ep);
             g_tty_count = 2;
         }
     }

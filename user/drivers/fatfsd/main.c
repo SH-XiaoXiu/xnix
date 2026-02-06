@@ -13,10 +13,10 @@
 #include <stdio.h>
 #include <vfs/vfs.h>
 #include <vfs_client.h>
+#include <xnix/abi/handle.h>
+#include <xnix/env.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
-
-#define BOOT_VFS_EP 0
 
 static struct fatfs_ctx g_fatfs;
 
@@ -25,6 +25,13 @@ static int vfs_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
+    /* 获取 endpoint handle (fatfsd provides fatfs_ep) */
+    handle_t ep = env_get_handle("fatfs_ep");
+    if (ep == HANDLE_INVALID) {
+        printf("[fatfsd] Failed to find fatfs_ep handle\n");
+        return 1;
+    }
+
     /* 初始化 ATA 驱动 */
     if (ata_init() < 0) {
         printf("[fatfsd] ata init failed\n");
@@ -38,7 +45,7 @@ int main(void) {
     }
 
     struct udm_server srv = {
-        .endpoint = BOOT_VFS_EP,
+        .endpoint = ep,
         .handler  = vfs_handler,
         .name     = "fatfsd",
     };

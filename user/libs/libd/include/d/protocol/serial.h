@@ -24,6 +24,6 @@ enum udm_console_op {
 };
 
 /* WRITE 操作可用的最大字节数 */
-#define UDM_CONSOLE_WRITE_MAX 28 /* 7*4 bytes from data[1..7] */
+#define UDM_CONSOLE_WRITE_MAX 24 /* 6*4 bytes from data[1..6], data[7] = length */
 
 #endif /* D_PROTOCOL_SERIAL_H */

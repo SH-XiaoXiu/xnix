@@ -20,6 +20,7 @@
 #include <libs/serial/serial.h>
 #include <module_index.h>
 #include <stdio.h>
+#include <stdio_internal.h>
 #include <string.h>
 #include <unistd.h>
 #include <vfs_client.h>
@@ -194,20 +195,25 @@ int main(int argc, char **argv) {
             }
             early_puts("\n");
         }
-        loop_count++;
 
-        /* 检查是否可以切换到 IPC-based 输出 (seriald 就绪后) */
+        /* 检查是否可以切换到 IPC-based 输出 (ttyd 就绪后) */
         if (!serial_initialized && early_console_is_active()) {
-            int seriald_idx = svc_find_by_name(&g_mgr, "seriald");
-            if (seriald_idx >= 0 && g_mgr.runtime[seriald_idx].ready && serial_init() == 0) {
+            int ttyd_idx = svc_find_by_name(&g_mgr, "ttyd");
+            if (ttyd_idx >= 0 && g_mgr.runtime[ttyd_idx].ready) {
+                /* 更新 stdout/stderr 的 tty endpoint(启动时尚未初始化) */
+                handle_t tty_h = sys_handle_find("tty1");
+                if (tty_h != HANDLE_INVALID) {
+                    stdout->tty_ep = tty_h;
+                    stderr->tty_ep = tty_h;
+                }
+
+                serial_init();
                 early_console_disable();
                 serial_initialized = true;
                 ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ",
-                          " switched to IPC-based console (pid %d)\n", sys_getpid());
-
-                /* 测试消息证明 IPC console 工作 */
+                          "switched to IPC-based console (pid %d)\n", sys_getpid());
                 ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ",
-                          " system ready, waiting for services...\n");
+                          "system ready, waiting for services...\n");
             }
         }
 
@@ -228,7 +234,7 @@ int main(int argc, char **argv) {
             }
         }
         */
-
+        loop_count++;
         msleep(50);
     }
 

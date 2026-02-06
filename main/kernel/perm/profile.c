@@ -23,24 +23,18 @@ void perm_profile_init(void) {
     struct perm_profile *driver_profile = perm_profile_create("driver");
     perm_profile_set(driver_profile, "xnix.ipc.*", PERM_GRANT);
     perm_profile_set(driver_profile, PERM_NODE_HANDLE_GRANT, PERM_GRANT);
+    perm_profile_set(driver_profile, PERM_NODE_MM_MMAP, PERM_GRANT);
 
     struct perm_profile *io_driver_profile = perm_profile_create("io_driver");
     perm_profile_inherit(io_driver_profile, driver_profile);
     perm_profile_set(io_driver_profile, PERM_NODE_IO_PORT_ALL, PERM_GRANT);
     perm_profile_set(io_driver_profile, "xnix.irq.all", PERM_GRANT);
-    perm_profile_set(io_driver_profile, PERM_NODE_MM_MMAP, PERM_GRANT);
     perm_profile_set(io_driver_profile, "xnix.debug.console", PERM_GRANT);
 
-    struct perm_profile *app_profile = perm_profile_create("app");
-    perm_profile_set(app_profile, PERM_NODE_IPC_SEND, PERM_GRANT);
-    perm_profile_set(app_profile, PERM_NODE_IPC_RECV, PERM_GRANT);
-    perm_profile_set(app_profile, "xnix.ipc.endpoint.*", PERM_GRANT);
-
     struct perm_profile *default_profile = perm_profile_create("default");
-    perm_profile_inherit(default_profile, app_profile);
-
-    struct perm_profile *shell_profile = perm_profile_create("shell");
-    perm_profile_inherit(shell_profile, default_profile);
+    perm_profile_set(default_profile, PERM_NODE_IPC_SEND, PERM_GRANT);
+    perm_profile_set(default_profile, PERM_NODE_IPC_RECV, PERM_GRANT);
+    perm_profile_set(default_profile, "xnix.ipc.endpoint.*", PERM_GRANT);
 }
 
 /**

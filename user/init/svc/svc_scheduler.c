@@ -56,6 +56,21 @@ static void svc_propagate_failed_requires(struct svc_manager *mgr) {
 }
 
 static void svc_dump_waiting(struct svc_manager *mgr) {
+    /* 先检查是否有需要报告的服务 */
+    bool has_waiting = false;
+    for (int i = 0; i < mgr->count; i++) {
+        struct svc_runtime *rt = &mgr->runtime[i];
+        if (rt->state == SVC_STATE_PENDING || rt->state == SVC_STATE_WAITING ||
+            (rt->state == SVC_STATE_RUNNING && !rt->ready) || rt->state == SVC_STATE_FAILED) {
+            has_waiting = true;
+            break;
+        }
+    }
+
+    if (!has_waiting) {
+        return;
+    }
+
     ulog_tagf(stdout, TERM_COLOR_LIGHT_CYAN, "[INIT] ", "Services waiting:\n");
     for (int i = 0; i < mgr->count; i++) {
         struct svc_config  *cfg = &mgr->configs[i];

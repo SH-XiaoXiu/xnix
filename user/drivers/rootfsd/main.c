@@ -14,6 +14,7 @@
 #include <string.h>
 #include <vfs/vfs.h>
 #include <vfs_client.h>
+#include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
@@ -39,8 +40,12 @@ int main(void) {
     debug_puts("[rootfsd] DEBUG: main() entered\n");
     printf("[rootfsd] Starting root filesystem driver\n");
 
-    /* 使用 init 传递的 endpoint handle (rootfsd provides rootfs_ep) */
-    handle_t ep = 0; /* Slot 0: rootfs_ep (provides) */
+    /* 获取 endpoint handle (rootfsd provides rootfs_ep) */
+    handle_t ep = env_get_handle("rootfs_ep");
+    if (ep == HANDLE_INVALID) {
+        printf("[rootfsd] Failed to find rootfs_ep handle\n");
+        return 1;
+    }
     printf("[rootfsd] Using endpoint handle %u for 'rootfs_ep'\n", ep);
 
     /* 查找 rootfs module 的 physmem handle */
