@@ -68,7 +68,7 @@ handle_t notification_create(void) {
     notif->pending_bits = 0;
     notif->wait_queue   = NULL;
     notif->poll_queue   = NULL;
-    notif->refcount     = 0; /* handle_alloc 会增加引用计数 */
+    notif->refcount     = 1;
 
     /* 分配句柄: 默认给予读写和管理权限 */
     handle = handle_alloc(current, HANDLE_NOTIFICATION, notif, NULL);
@@ -134,24 +134,26 @@ void notification_signal_by_ptr(struct ipc_notification *notif, uint32_t bits) {
 
 void notification_signal(handle_t notif_handle, uint32_t bits) {
     struct process          *proc = process_current();
+    struct handle_entry      entry;
     struct ipc_notification *notif;
 
     if (!proc || bits == 0) {
         return;
     }
 
-    /* 查找 Notification */
-    notif = handle_resolve(proc, notif_handle, HANDLE_NOTIFICATION, PERM_ID_INVALID);
-    if (!notif) {
+    if (handle_acquire(proc, notif_handle, HANDLE_NOTIFICATION, &entry) < 0) {
         return;
     }
+    notif = entry.object;
 
     notification_signal_by_ptr(notif, bits);
+    handle_object_put(entry.type, entry.object);
 }
 
 uint32_t notification_wait(handle_t notif_handle) {
     struct process          *proc = process_current();
     struct thread           *current;
+    struct handle_entry      entry;
     struct ipc_notification *notif;
     uint32_t                 bits;
 
@@ -159,11 +161,10 @@ uint32_t notification_wait(handle_t notif_handle) {
         return 0;
     }
 
-    /* 查找 Notification */
-    notif = handle_resolve(proc, notif_handle, HANDLE_NOTIFICATION, PERM_ID_INVALID);
-    if (!notif) {
+    if (handle_acquire(proc, notif_handle, HANDLE_NOTIFICATION, &entry) < 0) {
         return 0;
     }
+    notif = entry.object;
 
     current = sched_current();
 
@@ -174,6 +175,7 @@ uint32_t notification_wait(handle_t notif_handle) {
         bits                = notif->pending_bits;
         notif->pending_bits = 0; /* 清除 bits (自动复位) */
         spin_unlock(&notif->lock);
+        handle_object_put(entry.type, entry.object);
         return bits;
     }
 
@@ -194,5 +196,6 @@ uint32_t notification_wait(handle_t notif_handle) {
     bits                   = current->notified_bits;
     current->notified_bits = 0; /* 复位 */
 
+    handle_object_put(entry.type, entry.object);
     return bits;
 }

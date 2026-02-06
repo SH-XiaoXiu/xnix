@@ -34,11 +34,39 @@ static int32_t sys_debug_put(const uint32_t *args) {
     early_putc(c);
     return 0;
 }
+
+/* SYS_DEBUG_SET_COLOR: ebx=fg, ecx=bg */
+static int32_t sys_debug_set_color(const uint32_t *args) {
+    struct process *proc = (struct process *)process_current();
+
+    if (!perm_check_name(proc, "xnix.debug.console")) {
+        return -EPERM;
+    }
+
+    early_console_set_color((enum early_console_color)(args[0] & 0x0F),
+                            (enum early_console_color)(args[1] & 0x0F));
+    return 0;
+}
+
+/* SYS_DEBUG_RESET_COLOR */
+static int32_t sys_debug_reset_color(const uint32_t *args) {
+    (void)args;
+    struct process *proc = (struct process *)process_current();
+
+    if (!perm_check_name(proc, "xnix.debug.console")) {
+        return -EPERM;
+    }
+
+    early_console_reset_color();
+    return 0;
+}
 #endif
 
 void sys_misc_init(void) {
     syscall_register(SYS_SLEEP, sys_sleep, 1, "sleep");
 #ifdef CONFIG_DEBUG_CONSOLE
     syscall_register(SYS_DEBUG_PUT, sys_debug_put, 1, "debug_put");
+    syscall_register(SYS_DEBUG_SET_COLOR, sys_debug_set_color, 2, "debug_set_color");
+    syscall_register(SYS_DEBUG_RESET_COLOR, sys_debug_reset_color, 0, "debug_reset_color");
 #endif
 }

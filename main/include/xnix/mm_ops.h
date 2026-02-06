@@ -54,7 +54,16 @@ struct mm_operations {
      * @return 物理地址,如果未映射则返回 0 (或特定错误码)
      */
     uintptr_t (*query)(void *as, uintptr_t vaddr);
+
+    int (*query_flags)(void *as, uintptr_t vaddr, uintptr_t *out_paddr, uint32_t *out_flags);
 };
+
+/* 虚拟地址有效映射 */
+#define MM_QUERY_PRESENT (1u << 0)
+/* 用户态可访问(U/S=1) */
+#define MM_QUERY_USER (1u << 1)
+/* 可写(R/W=1) */
+#define MM_QUERY_WRITE (1u << 2)
 
 /**
  * @brief 获取当前的内存操作集

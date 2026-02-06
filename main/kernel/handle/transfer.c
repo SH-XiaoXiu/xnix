@@ -1,14 +1,9 @@
 #include <arch/mmu.h>
 
-#include <ipc/endpoint.h>
 #include <xnix/handle.h>
-#include <xnix/physmem.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
-
-/* 前向声明:内部函数 */
-struct handle_entry *handle_get_entry(struct handle_table *table, handle_t h);
 
 /**
  * 将 Handle 传递给另一个进程
@@ -26,47 +21,21 @@ handle_t handle_transfer(struct process *src, handle_t src_h, struct process *ds
         return HANDLE_INVALID;
     }
 
-    /* 获取源表项 */
-    struct handle_entry *src_entry = handle_get_entry(src->handles, src_h);
-    if (!src_entry) {
+    struct handle_entry src_entry;
+    if (handle_acquire(src, src_h, HANDLE_NONE, &src_entry) < 0) {
         return HANDLE_INVALID;
     }
 
-    /* 增加对象引用计数 */
-    void         *object = src_entry->object;
-    handle_type_t type   = src_entry->type;
-
-    switch (type) {
-    case HANDLE_ENDPOINT:
-        endpoint_ref((struct ipc_endpoint *)object);
-        break;
-    case HANDLE_PHYSMEM:
-        physmem_get((struct physmem_region *)object);
-        break;
-    default:
-        break;
-    }
-
     /* 在目标进程分配 */
-    const char *dst_name = name ? name : src_entry->name;
-    handle_t    dst_h    = handle_alloc_at(dst, type, object, dst_name, dst_hint);
+    const char *dst_name = name ? name : src_entry.name;
+    handle_t    dst_h = handle_alloc_at(dst, src_entry.type, src_entry.object, dst_name, dst_hint);
 
     if (dst_h == HANDLE_INVALID) {
-        /* 分配失败,回滚引用计数 */
-        switch (type) {
-        case HANDLE_ENDPOINT:
-            endpoint_unref((struct ipc_endpoint *)object);
-            break;
-        case HANDLE_PHYSMEM:
-            physmem_put((struct physmem_region *)object);
-            break;
-        default:
-            break;
-        }
+        handle_object_put(src_entry.type, src_entry.object);
     }
 
     pr_debug("[HANDLE] transfer: %d:%d -> %d:%d type=%d name=%s\n", src->pid, src_h, dst->pid,
-             dst_h, type, dst_name);
+             dst_h, src_entry.type, dst_name);
 
     return dst_h;
 }

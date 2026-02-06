@@ -1,7 +1,40 @@
+#include <xnix/errno.h>
 #include <xnix/handle.h>
 #include <xnix/perm.h>
 #include <xnix/process_def.h>
 #include <xnix/string.h>
+
+int handle_acquire(struct process *proc, handle_t h, handle_type_t expected_type,
+                   struct handle_entry *out_entry) {
+    if (!proc || !proc->handles || !out_entry) {
+        return -EINVAL;
+    }
+
+    struct handle_table *table = proc->handles;
+    spin_lock(&table->lock);
+
+    if (h >= table->capacity) {
+        spin_unlock(&table->lock);
+        return -EINVAL;
+    }
+
+    struct handle_entry *entry = &table->entries[h];
+    if (entry->type == HANDLE_NONE) {
+        spin_unlock(&table->lock);
+        return -EINVAL;
+    }
+
+    if (expected_type != HANDLE_NONE && entry->type != expected_type) {
+        spin_unlock(&table->lock);
+        return -EINVAL;
+    }
+
+    memcpy(out_entry, entry, sizeof(*out_entry));
+    handle_object_get(out_entry->type, out_entry->object);
+
+    spin_unlock(&table->lock);
+    return 0;
+}
 
 /**
  * 解析 Handle 为内核对象(带类型和权限检查)

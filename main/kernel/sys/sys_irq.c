@@ -21,6 +21,7 @@ static int32_t sys_irq_bind(const uint32_t *args) {
     uint32_t                 bits         = args[2];
     struct process          *proc         = process_current();
     struct ipc_notification *notif        = NULL;
+    struct handle_entry      entry;
 
     if (!proc) {
         return -ESRCH;
@@ -29,6 +30,7 @@ static int32_t sys_irq_bind(const uint32_t *args) {
     /* 检查 IRQ 绑定权限 */
     char perm_name[32];
     snprintf(perm_name, sizeof(perm_name), "xnix.irq.%u", irq);
+    perm_register(perm_name);
     if (!perm_check_name(proc, perm_name)) {
         /* 如果没有特定 IRQ 权限,检查通用权限 */
         if (!perm_check_name(proc, "xnix.irq.all")) {
@@ -39,13 +41,17 @@ static int32_t sys_irq_bind(const uint32_t *args) {
     /* notification 可选 */
     if (notif_handle != HANDLE_INVALID) {
         /* Notification 通常不需要额外权限,只要拥有 handle */
-        notif = handle_resolve(proc, notif_handle, HANDLE_NOTIFICATION, PERM_ID_INVALID);
-        if (!notif) {
+        if (handle_acquire(proc, notif_handle, HANDLE_NOTIFICATION, &entry) < 0) {
             return -EINVAL; /* 或 EPERM */
         }
+        notif = entry.object;
     }
 
-    return irq_bind_notification(irq, notif, bits);
+    int ret = irq_bind_notification(irq, notif, bits);
+    if (notif_handle != HANDLE_INVALID) {
+        handle_object_put(entry.type, entry.object);
+    }
+    return ret;
 }
 
 /* SYS_IRQ_UNBIND: ebx=irq */

@@ -7,6 +7,7 @@
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
+#include <xnix/mm_ops.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/vmm.h>
@@ -542,6 +543,69 @@ paddr_t vmm_get_paddr(void *pd_phys, vaddr_t vaddr) {
     }
 
     return paddr;
+}
+
+int vmm_query_flags(void *pd_phys, vaddr_t vaddr, paddr_t *out_paddr, uint32_t *out_flags) {
+    if (!out_paddr || !out_flags) {
+        return -1;
+    }
+
+    *out_paddr = 0;
+    *out_flags = 0;
+
+    uint32_t pd_idx = PD_INDEX(vaddr);
+    uint32_t pt_idx = PT_INDEX(vaddr);
+
+    uint32_t current_cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(current_cr3));
+    bool is_current = ((uint32_t)pd_phys == current_cr3) || (pd_phys == NULL);
+
+    uint32_t irq_flags = 0;
+    if (!is_current) {
+        irq_flags = cpu_irq_save();
+    }
+
+    uint32_t *pd_virt;
+    if (is_current) {
+        pd_virt = (uint32_t *)0xFFFFF000;
+    } else {
+        pd_virt = (uint32_t *)map_temp_page(1, (paddr_t)pd_phys);
+    }
+
+    uint32_t pde = pd_virt[pd_idx];
+    if (pde & PDE_PRESENT) {
+        uint32_t  pt_phys = pde & PAGE_MASK;
+        uint32_t *pt_virt;
+        if (is_current) {
+            pt_virt = (uint32_t *)(0xFFC00000 + (pd_idx << 12));
+        } else {
+            pt_virt = (uint32_t *)map_temp_page(2, pt_phys);
+        }
+
+        uint32_t pte = pt_virt[pt_idx];
+        if (pte & PTE_PRESENT) {
+            *out_paddr = (paddr_t)((pte & PAGE_MASK) | (vaddr & 0xFFF));
+            *out_flags |= MM_QUERY_PRESENT;
+
+            if ((pde & PDE_USER) && (pte & PTE_USER)) {
+                *out_flags |= MM_QUERY_USER;
+            }
+            if ((pde & PDE_RW) && (pte & PTE_RW)) {
+                *out_flags |= MM_QUERY_WRITE;
+            }
+        }
+
+        if (!is_current) {
+            unmap_temp_page(2);
+        }
+    }
+
+    if (!is_current) {
+        unmap_temp_page(1);
+        cpu_irq_restore(irq_flags);
+    }
+
+    return (*out_flags & MM_QUERY_PRESENT) ? 0 : -1;
 }
 
 void vmm_switch_pd(void *pd_phys) {

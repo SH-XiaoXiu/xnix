@@ -12,6 +12,7 @@
 #include <xnix/irq.h>
 #include <xnix/sync.h>
 #include <xnix/thread_def.h>
+#include <xnix/usraccess.h>
 
 /**
  * IRQ 用户态绑定信息
@@ -147,43 +148,56 @@ int irq_user_read(uint8_t irq, uint8_t *buf, size_t size, bool block) {
     struct irq_user_binding *bind  = &irq_bindings[irq];
     size_t                   count = 0;
 
-    spin_lock(&bind->lock);
-
-    if (!bind->bound) {
-        spin_unlock(&bind->lock);
-        return -ENOENT;
+    if (size > CFG_IRQ_USER_BUF_SIZE) {
+        size = CFG_IRQ_USER_BUF_SIZE;
     }
 
-    while (count < size) {
-        /* 检查缓冲区是否有数据 */
-        if (bind->head != bind->tail) {
-            buf[count++] = bind->buffer[bind->tail];
-            bind->tail   = (bind->tail + 1) % CFG_IRQ_USER_BUF_SIZE;
-        } else if (count > 0) {
-            /* 已读到数据,返回 */
-            break;
-        } else if (!block) {
-            /* 非阻塞,无数据返回 */
+    for (;;) {
+        uint8_t tmp[64];
+        size_t  got = 0;
+
+        spin_lock(&bind->lock);
+
+        if (!bind->bound) {
             spin_unlock(&bind->lock);
-            return -EAGAIN;
-        } else {
-            /* 阻塞等待 */
+            return -ENOENT;
+        }
+
+        while (got < sizeof(tmp) && count + got < size && bind->head != bind->tail) {
+            tmp[got++] = bind->buffer[bind->tail];
+            bind->tail = (bind->tail + 1) % CFG_IRQ_USER_BUF_SIZE;
+        }
+
+        if (got == 0) {
+            if (count > 0) {
+                spin_unlock(&bind->lock);
+                break;
+            }
+            if (!block) {
+                spin_unlock(&bind->lock);
+                return -EAGAIN;
+            }
+
             bind->waiter = sched_current();
             spin_unlock(&bind->lock);
-
             sched_block(bind);
+            continue;
+        }
 
-            spin_lock(&bind->lock);
+        spin_unlock(&bind->lock);
 
-            /* 检查是否被解绑 */
-            if (!bind->bound) {
-                spin_unlock(&bind->lock);
-                return -ENOENT;
-            }
+        int ret = copy_to_user(buf + count, tmp, got);
+        if (ret < 0) {
+            return ret;
+        }
+
+        count += got;
+        block = false;
+
+        if (count >= size) {
+            break;
         }
     }
-
-    spin_unlock(&bind->lock);
 
     return (int)count;
 }

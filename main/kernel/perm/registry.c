@@ -63,6 +63,7 @@ void perm_registry_init(void) {
     perm_register(PERM_NODE_MM_MMAP);
     perm_register("xnix.irq.all");
     perm_register("xnix.debug.console");
+    perm_register("xnix.kernel.kmsg");
 }
 
 /**

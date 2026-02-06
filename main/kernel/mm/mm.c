@@ -86,12 +86,17 @@ int copy_from_user(void *dst, const void *user_src, size_t n) {
     if (!n) {
         return 0;
     }
+    uintptr_t start = (uintptr_t)user_src;
+    uintptr_t end   = start + n;
+    if (start >= KERNEL_VIRT_BASE || end < start || end > KERNEL_VIRT_BASE) {
+        return -EFAULT;
+    }
     if (!hal_has_feature(HAL_FEATURE_MMU)) {
         return -ENOSYS;
     }
 
     const struct mm_operations *mm = mm_get_ops();
-    if (!mm || !mm->query) {
+    if (!mm || !mm->query_flags) {
         return -ENOSYS;
     }
 
@@ -102,8 +107,10 @@ int copy_from_user(void *dst, const void *user_src, size_t n) {
     size_t copied = 0;
     while (copied < n) {
         uintptr_t uaddr = (uintptr_t)user_src + copied;
-        uintptr_t paddr = mm->query(pd, uaddr);
-        if (!paddr) {
+        uintptr_t paddr = 0;
+        uint32_t  flags = 0;
+        int       ret   = mm->query_flags(pd, uaddr, &paddr, &flags);
+        if (ret < 0 || !(flags & MM_QUERY_PRESENT) || !(flags & MM_QUERY_USER) || !paddr) {
             return -EFAULT;
         }
 
@@ -131,12 +138,17 @@ int copy_to_user(void *user_dst, const void *src, size_t n) {
     if (!n) {
         return 0;
     }
+    uintptr_t start = (uintptr_t)user_dst;
+    uintptr_t end   = start + n;
+    if (start >= KERNEL_VIRT_BASE || end < start || end > KERNEL_VIRT_BASE) {
+        return -EFAULT;
+    }
     if (!hal_has_feature(HAL_FEATURE_MMU)) {
         return -ENOSYS;
     }
 
     const struct mm_operations *mm = mm_get_ops();
-    if (!mm || !mm->query) {
+    if (!mm || !mm->query_flags) {
         return -ENOSYS;
     }
 
@@ -147,8 +159,11 @@ int copy_to_user(void *user_dst, const void *src, size_t n) {
     size_t copied = 0;
     while (copied < n) {
         uintptr_t uaddr = (uintptr_t)user_dst + copied;
-        uintptr_t paddr = mm->query(pd, uaddr);
-        if (!paddr) {
+        uintptr_t paddr = 0;
+        uint32_t  flags = 0;
+        int       ret   = mm->query_flags(pd, uaddr, &paddr, &flags);
+        if (ret < 0 || !(flags & MM_QUERY_PRESENT) || !(flags & MM_QUERY_USER) ||
+            !(flags & MM_QUERY_WRITE) || !paddr) {
             return -EFAULT;
         }
 

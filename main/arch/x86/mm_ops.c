@@ -1,5 +1,6 @@
 #include <arch/mmu.h>
 
+#include <xnix/errno.h>
 #include <xnix/mm_ops.h>
 #include <xnix/stdio.h>
 #include <xnix/vmm.h>
@@ -43,15 +44,36 @@ static uintptr_t x86_vmm_query(void *as, uintptr_t vaddr) {
     return (uintptr_t)vmm_get_paddr(as, vaddr);
 }
 
+static int x86_vmm_query_flags(void *as, uintptr_t vaddr, uintptr_t *out_paddr,
+                               uint32_t *out_flags) {
+    paddr_t  paddr = 0;
+    uint32_t flags = 0;
+    int      ret;
+
+    if (!out_paddr || !out_flags) {
+        return -EINVAL;
+    }
+
+    ret = vmm_query_flags(as, (vaddr_t)vaddr, &paddr, &flags);
+    if (ret < 0) {
+        return -EFAULT;
+    }
+
+    *out_paddr = (uintptr_t)paddr;
+    *out_flags = flags;
+    return 0;
+}
+
 static const struct mm_operations x86_vmm_ops = {
-    .name       = "x86_vmm",
-    .init       = x86_vmm_init,
-    .create_as  = x86_vmm_create_as,
-    .destroy_as = x86_vmm_destroy_as,
-    .switch_as  = x86_vmm_switch_as,
-    .map        = x86_vmm_map,
-    .unmap      = x86_vmm_unmap,
-    .query      = x86_vmm_query,
+    .name        = "x86_vmm",
+    .init        = x86_vmm_init,
+    .create_as   = x86_vmm_create_as,
+    .destroy_as  = x86_vmm_destroy_as,
+    .switch_as   = x86_vmm_switch_as,
+    .map         = x86_vmm_map,
+    .unmap       = x86_vmm_unmap,
+    .query       = x86_vmm_query,
+    .query_flags = x86_vmm_query_flags,
 };
 
 /* 注册函数 */

@@ -21,8 +21,8 @@
  * 存储 handle 与内核对象的映射关系,以及访问权限.
  */
 struct handle_entry {
-    handle_type_t type;                   /* 对象类型 */
-    void         *object;                 /* 内核对象指针 */
+    handle_type_t type;                  /* 对象类型 */
+    void         *object;                /* 内核对象指针 */
     char          name[HANDLE_NAME_MAX]; /* 可选名称(用于按名查找) */
 
     /* 缓存的权限 ID(用于加速 syscall 检查) */
@@ -108,6 +108,12 @@ handle_t handle_alloc_at(struct process *proc, handle_type_t type, void *object,
  * @param h    要释放的 handle
  */
 void handle_free(struct process *proc, handle_t h);
+
+int handle_acquire(struct process *proc, handle_t h, handle_type_t expected_type,
+                   struct handle_entry *out_entry);
+
+void handle_object_get(handle_type_t type, void *object);
+void handle_object_put(handle_type_t type, void *object);
 
 /* Handle 解析函数 */
 

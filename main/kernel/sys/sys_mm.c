@@ -14,6 +14,7 @@
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/syscall.h>
+#include <xnix/usraccess.h>
 #include <xnix/vmm.h>
 
 extern void *vmm_kmap(paddr_t paddr);
@@ -138,11 +139,18 @@ static int32_t sys_mmap_phys(const uint32_t *args) {
         return -EINVAL;
     }
 
-    /* 解析 handle,验证类型为 HANDLE_PHYSMEM */
-    struct physmem_region *region =
-        (struct physmem_region *)handle_resolve(proc, handle, HANDLE_PHYSMEM, PERM_ID_INVALID);
-    if (!region) {
+    if (!perm_check_name(proc, PERM_NODE_MM_MMAP)) {
+        return -EPERM;
+    }
+
+    struct handle_entry entry;
+    if (handle_acquire(proc, handle, HANDLE_PHYSMEM, &entry) < 0) {
         pr_warn("sys_mmap_phys: invalid handle %u", handle);
+        return -EINVAL;
+    }
+    struct physmem_region *region = entry.object;
+    if (!region) {
+        handle_object_put(entry.type, entry.object);
         return -EINVAL;
     }
 
@@ -153,17 +161,22 @@ static int32_t sys_mmap_phys(const uint32_t *args) {
     }
 
     /* 映射到用户空间 */
-    uint32_t user_addr = physmem_map_to_user(proc, region, offset, size, prot);
+    uint32_t user_addr = physmem_map_to_user(proc, region, offset, actual_size, prot);
     if (user_addr == 0) {
+        handle_object_put(entry.type, entry.object);
         return -ENOMEM;
     }
 
     /* 写入实际大小(如果提供了输出参数) */
     if (out_size) {
-        /* TODO: 应验证用户空间指针 */
-        *out_size = actual_size;
+        int ret = copy_to_user(out_size, &actual_size, sizeof(actual_size));
+        if (ret < 0) {
+            handle_object_put(entry.type, entry.object);
+            return ret;
+        }
     }
 
+    handle_object_put(entry.type, entry.object);
     return (int32_t)user_addr;
 }
 
@@ -198,33 +211,41 @@ static int32_t sys_physmem_info(const uint32_t *args) {
         return -EINVAL;
     }
 
-    struct physmem_region *region =
-        (struct physmem_region *)handle_resolve(proc, handle, HANDLE_PHYSMEM, PERM_ID_INVALID);
+    if (!perm_check_name(proc, PERM_NODE_MM_MMAP)) {
+        return -EPERM;
+    }
+
+    struct handle_entry entry;
+    if (handle_acquire(proc, handle, HANDLE_PHYSMEM, &entry) < 0) {
+        return -EINVAL;
+    }
+    struct physmem_region *region = entry.object;
     if (!region) {
+        handle_object_put(entry.type, entry.object);
         return -EINVAL;
     }
 
-    /* TODO: 验证用户空间指针 */
-
-    /* 写入信息 */
-    memset(info_ptr, 0, 32);
-    *(uint32_t *)(info_ptr + 0) = region->size;
-    *(uint32_t *)(info_ptr + 4) = (uint32_t)region->type;
+    uint8_t info[32];
+    memset(info, 0, sizeof(info));
+    *(uint32_t *)(info + 0) = region->size;
+    *(uint32_t *)(info + 4) = (uint32_t)region->type;
 
     if (region->type == PHYSMEM_TYPE_FB) {
-        *(uint32_t *)(info_ptr + 8)  = region->fb_info.width;
-        *(uint32_t *)(info_ptr + 12) = region->fb_info.height;
-        *(uint32_t *)(info_ptr + 16) = region->fb_info.pitch;
-        info_ptr[20]                 = region->fb_info.bpp;
-        info_ptr[21]                 = region->fb_info.red_pos;
-        info_ptr[22]                 = region->fb_info.red_size;
-        info_ptr[23]                 = region->fb_info.green_pos;
-        info_ptr[24]                 = region->fb_info.green_size;
-        info_ptr[25]                 = region->fb_info.blue_pos;
-        info_ptr[26]                 = region->fb_info.blue_size;
+        *(uint32_t *)(info + 8)  = region->fb_info.width;
+        *(uint32_t *)(info + 12) = region->fb_info.height;
+        *(uint32_t *)(info + 16) = region->fb_info.pitch;
+        info[20]                 = region->fb_info.bpp;
+        info[21]                 = region->fb_info.red_pos;
+        info[22]                 = region->fb_info.red_size;
+        info[23]                 = region->fb_info.green_pos;
+        info[24]                 = region->fb_info.green_size;
+        info[25]                 = region->fb_info.blue_pos;
+        info[26]                 = region->fb_info.blue_size;
     }
 
-    return 0;
+    int ret = copy_to_user(info_ptr, info, sizeof(info));
+    handle_object_put(entry.type, entry.object);
+    return ret;
 }
 
 /**

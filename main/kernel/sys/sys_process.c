@@ -83,6 +83,11 @@ static int32_t sys_kill(const uint32_t *args) {
 /* SYS_EXEC: ebx=abi_exec_image_args* */
 static int32_t sys_exec(const uint32_t *args) {
     struct abi_exec_image_args *user_args = (struct abi_exec_image_args *)(uintptr_t)args[0];
+    struct process             *proc      = process_get_current();
+
+    if (!perm_check_name(proc, PERM_NODE_PROCESS_EXEC)) {
+        return -EPERM;
+    }
 
     struct abi_exec_image_args *kargs = kmalloc(sizeof(*kargs));
     if (!kargs) {
@@ -128,6 +133,9 @@ static int32_t sys_exec(const uint32_t *args) {
           elf_bytes[3] == 'F')) {
         pr_err("exec: bad magic %02x %02x %02x %02x", elf_bytes[0], elf_bytes[1], elf_bytes[2],
                elf_bytes[3]);
+        free_pages(elf_paddr, page_count);
+        kfree(kargs);
+        return -EINVAL;
     }
 
     uint32_t handle_count = kargs->handle_count;
@@ -172,6 +180,11 @@ static int32_t sys_exec(const uint32_t *args) {
 static int32_t sys_spawn(const uint32_t *args) {
     struct abi_spawn_args *user_args = (struct abi_spawn_args *)(uintptr_t)args[0];
     struct abi_spawn_args  kargs;
+    struct process        *proc = process_get_current();
+
+    if (!perm_check_name(proc, PERM_NODE_PROCESS_SPAWN)) {
+        return -EPERM;
+    }
 
     int ret = copy_from_user(&kargs, user_args, sizeof(kargs));
     if (ret < 0) {

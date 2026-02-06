@@ -6,9 +6,12 @@
 #include <ipc/endpoint.h>
 #include <ipc/notification.h>
 #include <sys/syscall.h>
+#include <xnix/config.h>
 #include <xnix/errno.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
+#include <xnix/perm.h>
+#include <xnix/process.h>
 #include <xnix/string.h>
 #include <xnix/syscall.h>
 #include <xnix/usraccess.h>
@@ -26,6 +29,15 @@ static int ipc_msg_copy_in(struct ipc_message **out_kmsg, struct ipc_message *us
     int                ret = copy_from_user(&umsg, user_msg, sizeof(umsg));
     if (ret < 0) {
         return ret;
+    }
+
+    if (copy_buffer) {
+        if (umsg.buffer.size > CFG_IPC_MAX_BUF) {
+            return -E2BIG;
+        }
+        if (umsg.buffer.size && !umsg.buffer.data) {
+            return -EINVAL;
+        }
     }
 
     struct ipc_message *kmsg = kzalloc(sizeof(*kmsg));
@@ -120,6 +132,13 @@ static int ipc_msg_alloc_recv(struct ipc_message **out_kmsg, struct ipc_message 
     void  *user_buf_ptr  = umsg.buffer.data;
     size_t user_buf_size = umsg.buffer.size;
 
+    if (user_buf_size > CFG_IPC_MAX_BUF) {
+        return -E2BIG;
+    }
+    if (user_buf_size && !user_buf_ptr) {
+        return -EINVAL;
+    }
+
     struct ipc_message *kmsg = kzalloc(sizeof(*kmsg));
     if (!kmsg) {
         return -ENOMEM;
@@ -152,9 +171,17 @@ static int32_t sys_endpoint_create(const uint32_t *args) {
     const char *user_name = (const char *)(uintptr_t)args[0];
     char        kname[32] = {0};
 
+    struct process *proc = process_current();
+    if (!perm_check_name(proc, PERM_NODE_IPC_ENDPOINT_CREATE)) {
+        return -EPERM;
+    }
+
     /* 从用户空间复制名称(可选) */
     if (user_name) {
-        copy_from_user(kname, user_name, sizeof(kname) - 1);
+        int ret = copy_from_user(kname, user_name, sizeof(kname) - 1);
+        if (ret < 0) {
+            return ret;
+        }
         kname[sizeof(kname) - 1] = '\0';
     }
 
@@ -170,6 +197,11 @@ static int32_t sys_ipc_send(const uint32_t *args) {
     handle_t            ep       = (handle_t)args[0];
     struct ipc_message *user_msg = (struct ipc_message *)(uintptr_t)args[1];
     uint32_t            timeout  = args[2];
+
+    struct process *proc = process_current();
+    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+        return -EPERM;
+    }
 
     struct ipc_message *kmsg = NULL;
     int                 ret  = ipc_msg_copy_in(&kmsg, user_msg, true);
@@ -187,6 +219,11 @@ static int32_t sys_ipc_recv(const uint32_t *args) {
     handle_t            ep       = (handle_t)args[0];
     struct ipc_message *user_msg = (struct ipc_message *)(uintptr_t)args[1];
     uint32_t            timeout  = args[2];
+
+    struct process *proc = process_current();
+    if (!perm_check_name(proc, PERM_NODE_IPC_RECV)) {
+        return -EPERM;
+    }
 
     void               *user_buf_ptr  = NULL;
     size_t              user_buf_size = 0;
@@ -211,6 +248,11 @@ static int32_t sys_ipc_call(const uint32_t *args) {
     struct ipc_message *user_req   = (struct ipc_message *)(uintptr_t)args[1];
     struct ipc_message *user_reply = (struct ipc_message *)(uintptr_t)args[2];
     uint32_t            timeout    = args[3];
+
+    struct process *proc = process_current();
+    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+        return -EPERM;
+    }
 
     struct ipc_message *kreq = NULL;
     int                 ret  = ipc_msg_copy_in(&kreq, user_req, true);
@@ -242,6 +284,11 @@ static int32_t sys_ipc_call(const uint32_t *args) {
 static int32_t sys_ipc_reply(const uint32_t *args) {
     struct ipc_message *user_reply = (struct ipc_message *)(uintptr_t)args[0];
 
+    struct process *proc = process_current();
+    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+        return -EPERM;
+    }
+
     struct ipc_message *kreply = NULL;
     int                 ret    = ipc_msg_copy_in(&kreply, user_reply, true);
     if (ret < 0) {
@@ -257,6 +304,11 @@ static int32_t sys_ipc_reply(const uint32_t *args) {
 static int32_t sys_ipc_reply_to(const uint32_t *args) {
     tid_t               sender_tid = (tid_t)args[0];
     struct ipc_message *user_reply = (struct ipc_message *)(uintptr_t)args[1];
+
+    struct process *proc = process_current();
+    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+        return -EPERM;
+    }
 
     struct ipc_message *kreply = NULL;
     int                 ret    = ipc_msg_copy_in(&kreply, user_reply, true);

@@ -86,6 +86,7 @@ static int32_t sys_thread_create(const uint32_t *args) {
     uint32_t entry     = args[0];
     uint32_t user_arg  = args[1];
     uint32_t stack_top = args[2];
+    int      ret;
 
     if (!entry || !stack_top) {
         return -EINVAL;
@@ -101,16 +102,22 @@ static int32_t sys_thread_create(const uint32_t *args) {
 
     /* 验证用户地址已映射且可访问 */
     const struct mm_operations *mm = mm_get_ops();
-    if (!mm || !mm->query) {
+    if (!mm || !mm->query_flags) {
         return -ENOSYS;
     }
 
-    uintptr_t entry_paddr = mm->query(proc->page_dir_phys, (uintptr_t)entry);
-    if (!entry_paddr) {
+    uintptr_t entry_paddr = 0;
+    uint32_t  entry_flags = 0;
+    ret = mm->query_flags(proc->page_dir_phys, (uintptr_t)entry, &entry_paddr, &entry_flags);
+    if (ret < 0 || !(entry_flags & MM_QUERY_PRESENT) || !(entry_flags & MM_QUERY_USER)) {
         return -EFAULT; /* 入口地址未映射 */
     }
-    uintptr_t sp_paddr = mm->query(proc->page_dir_phys, (uintptr_t)stack_top - 4);
-    if (!sp_paddr) {
+
+    uintptr_t sp_paddr = 0;
+    uint32_t  sp_flags = 0;
+    ret = mm->query_flags(proc->page_dir_phys, (uintptr_t)stack_top - 4, &sp_paddr, &sp_flags);
+    if (ret < 0 || !(sp_flags & MM_QUERY_PRESENT) || !(sp_flags & MM_QUERY_USER) ||
+        !(sp_flags & MM_QUERY_WRITE)) {
         return -EFAULT; /* 栈地址未映射 */
     }
 

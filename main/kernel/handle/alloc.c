@@ -5,13 +5,9 @@
 #include <xnix/mm.h>
 #include <xnix/perm.h>
 #include <xnix/physmem.h>
-#include <xnix/process.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
-
-/* 前向声明 */
-static void handle_free_entry(struct handle_entry *entry);
 
 /**
  * 分配 Handle
@@ -165,30 +161,9 @@ void handle_free(struct process *proc, handle_t h) {
     if (h < table->capacity && table->entries[h].type != HANDLE_NONE) {
         pr_debug("[HANDLE] free: proc=%d handle=%d type=%d\n", proc->pid, h,
                  table->entries[h].type);
-        handle_free_entry(&table->entries[h]);
+        handle_object_put(table->entries[h].type, table->entries[h].object);
+        memset(&table->entries[h], 0, sizeof(struct handle_entry));
     }
 
     spin_unlock(&table->lock);
-}
-
-/**
- * 释放 Handle 表项资源
- */
-static void handle_free_entry(struct handle_entry *entry) {
-    /* 减少对象引用计数 */
-    if (entry->object) {
-        switch (entry->type) {
-        case HANDLE_ENDPOINT:
-            endpoint_unref((struct ipc_endpoint *)entry->object);
-            break;
-        case HANDLE_PHYSMEM:
-            physmem_put((struct physmem_region *)entry->object);
-            break;
-        default:
-            break;
-        }
-    }
-    entry->type    = HANDLE_NONE;
-    entry->object  = NULL;
-    entry->name[0] = '\0';
 }

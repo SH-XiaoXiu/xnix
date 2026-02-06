@@ -39,6 +39,8 @@ void vmm_unmap_page(void *pd_phys, vaddr_t vaddr);
 /* 返回 0 表示未映射 */
 paddr_t vmm_get_paddr(void *pd_phys, vaddr_t vaddr);
 
+int vmm_query_flags(void *pd_phys, vaddr_t vaddr, paddr_t *out_paddr, uint32_t *out_flags);
+
 /* 缺页异常处理 */
 struct irq_regs; /* 前向声明 */
 void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr);

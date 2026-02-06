@@ -9,6 +9,8 @@
 #ifndef XNIX_PHYSMEM_H
 #define XNIX_PHYSMEM_H
 
+#include <arch/mmu.h>
+
 #include <xnix/abi/handle.h>
 #include <xnix/types.h>
 

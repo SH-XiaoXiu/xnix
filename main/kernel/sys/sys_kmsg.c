@@ -8,10 +8,12 @@
 #include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/kmsg.h>
+#include <xnix/mm.h>
 #include <xnix/perm.h>
 #include <xnix/process.h>
 #include <xnix/stdio.h>
 #include <xnix/syscall.h>
+#include <xnix/usraccess.h>
 
 /**
  * SYS_KMSG_READ: 读取内核日志条目
@@ -24,8 +26,8 @@
  *       -ENOENT 无更多条目,-ENOSPC 缓冲区太小
  */
 static int32_t sys_kmsg_read(const uint32_t *args) {
-    uint32_t *seq_ptr = (uint32_t *)args[0];
-    char     *buf     = (char *)args[1];
+    uint32_t *seq_ptr = (uint32_t *)(uintptr_t)args[0];
+    char     *buf     = (char *)(uintptr_t)args[1];
     uint32_t  size    = args[2];
 
     if (!seq_ptr || !buf || size == 0) {
@@ -38,20 +40,45 @@ static int32_t sys_kmsg_read(const uint32_t *args) {
         return -EPERM;
     }
 
-    /* 读取用户态的 seq 值 */
-    uint32_t seq = *seq_ptr;
+    if (size > KMSG_MAX_LINE) {
+        size = KMSG_MAX_LINE;
+    }
 
-    int ret = kmsg_read(&seq, buf, size);
+    uint32_t seq = 0;
+    int      ret = copy_from_user(&seq, seq_ptr, sizeof(seq));
+    if (ret < 0) {
+        return ret;
+    }
+
+    char *kbuf = kmalloc(size);
+    if (!kbuf) {
+        return -ENOMEM;
+    }
+
+    ret = kmsg_read(&seq, kbuf, size);
     if (ret == -1) {
+        kfree(kbuf);
         return -ENOENT;
     }
     if (ret == -2) {
+        kfree(kbuf);
         return -ENOSPC;
     }
 
-    /* 写回更新后的序列号 */
-    *seq_ptr = seq;
-    return ret;
+    int bytes = ret;
+
+    int wret = copy_to_user(buf, kbuf, (size_t)bytes);
+    kfree(kbuf);
+    if (wret < 0) {
+        return wret;
+    }
+
+    ret = copy_to_user(seq_ptr, &seq, sizeof(seq));
+    if (ret < 0) {
+        return ret;
+    }
+
+    return bytes;
 }
 
 void sys_kmsg_init(void) {
