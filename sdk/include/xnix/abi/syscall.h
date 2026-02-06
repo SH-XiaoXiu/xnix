@@ -80,6 +80,9 @@
 #define SYS_NOTIFICATION_CREATE 800 /* 创建通知, 返回 handle */
 #define SYS_NOTIFICATION_WAIT   801 /* 等待通知: ebx=handle */
 
+/* 内核日志 (850-859) */
+#define SYS_KMSG_READ 850 /* 读取内核日志: ebx=seq_ptr, ecx=buf, edx=size */
+
 /* 杂项 (900-999) */
 #define SYS_SLEEP     900 /* 睡眠: ebx=ms */
 #define SYS_DEBUG_PUT 901 /* 调试输出(仅编译时启用): ebx=char */

@@ -7,6 +7,7 @@
 #include "path.h"
 #include "unistd.h"
 
+#include <d/protocol/tty.h>
 #include <d/protocol/vfs.h>
 #include <signal.h>
 #include <stdio.h>
@@ -15,28 +16,28 @@
 #include <xnix/abi/process.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
-#include <xnix/ipc/console.h>
 #include <xnix/syscall.h>
 
 #define MAX_LINE 256
 #define MAX_ARGS 16
 
-static handle_t g_kbd_ep = HANDLE_INVALID;
+static handle_t g_tty_ep = HANDLE_INVALID;
 static handle_t g_vfs_ep = HANDLE_INVALID;
 
 /**
- * 通过 IPC 通知 kbd 驱动设置前台进程
+ * 通过 TTY IPC 设置前台进程
  */
 static void shell_set_foreground(pid_t pid) {
-    if (g_kbd_ep == HANDLE_INVALID) {
+    if (g_tty_ep == HANDLE_INVALID) {
         return;
     }
     struct ipc_message msg;
     memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = CONSOLE_OP_SET_FOREGROUND;
-    msg.regs.data[1] = (uint32_t)pid;
+    msg.regs.data[0] = TTY_OP_IOCTL;
+    msg.regs.data[1] = TTY_IOCTL_SET_FOREGROUND;
+    msg.regs.data[2] = (uint32_t)pid;
 
-    sys_ipc_send(g_kbd_ep, &msg, 100);
+    sys_ipc_send(g_tty_ep, &msg, 100);
 }
 
 /* 内置命令 */
@@ -170,10 +171,9 @@ static void run_external(const char *path, int argc, char **argv, int background
             .name[sizeof(exec_args.handles[exec_args.handle_count].name) - 1] = '\0';
         exec_args.handle_count++;
     }
-    handle_t serial_ep = env_get_handle("serial");
-    if (serial_ep != HANDLE_INVALID && exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
-        exec_args.handles[exec_args.handle_count].src = serial_ep;
-        strncpy(exec_args.handles[exec_args.handle_count].name, "serial",
+    if (g_tty_ep != HANDLE_INVALID && exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
+        exec_args.handles[exec_args.handle_count].src = g_tty_ep;
+        strncpy(exec_args.handles[exec_args.handle_count].name, "tty1",
                 sizeof(exec_args.handles[exec_args.handle_count].name) - 1);
         exec_args.handles[exec_args.handle_count]
             .name[sizeof(exec_args.handles[exec_args.handle_count].name) - 1] = '\0';
@@ -439,15 +439,27 @@ int main(int argc, char **argv) {
 
     char line[MAX_LINE];
 
-    printf("[shell] starting\n");
-
-    stdout_debug_mirror_enable(1);
-
     /* 查找 handles */
-    g_kbd_ep = env_get_handle("kbd_ep");
+    g_tty_ep = env_get_handle("tty1");
     g_vfs_ep = env_get_handle("vfs_ep");
 
-    printf("[shell] kbd_ep=%d vfs_ep=%d\n", g_kbd_ep, g_vfs_ep);
+    /* 等待 ttyd 就绪:尝试发送到 tty 直到成功 */
+    if (g_tty_ep != HANDLE_INVALID) {
+        struct ipc_message msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.regs.data[0] = TTY_OP_IOCTL;
+        msg.regs.data[1] = TTY_IOCTL_GET_FOREGROUND;
+
+        for (int i = 0; i < 50; i++) {
+            int ret = sys_ipc_send(g_tty_ep, &msg, 50);
+            if (ret == 0) {
+                break;
+            }
+            msleep(50);
+        }
+    }
+
+    printf("[shell] tty_ep=%d vfs_ep=%d\n", g_tty_ep, g_vfs_ep);
 
     /* 初始化 VFS 客户端 */
     vfs_client_init(g_vfs_ep);

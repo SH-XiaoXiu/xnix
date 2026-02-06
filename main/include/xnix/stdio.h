@@ -1,8 +1,6 @@
 /**
  * @file stdio.h
  * @brief 内核标准输入输出接口
- * @author XiaoXiu
- * @date 2026-01-20
  */
 
 #ifndef XNIX_STDIO_H
@@ -49,6 +47,8 @@ void klog(int level, const char *fmt, ...);
 #define pr_debug(fmt, ...) \
     do {                   \
     } while (0)
+#endif
+
 /**
  * @brief 格式化输出到字符串
  * @param buf 目标缓冲区
@@ -59,15 +59,12 @@ void klog(int level, const char *fmt, ...);
  */
 int snprintf(char *buf, size_t size, const char *fmt, ...);
 
-#endif
-
 /**
  * @brief 格式化输出
  * @param fmt 格式字符串
  *
  * 支持的格式符:
  *   %s %c %d %i %u %x %p %%
- *   %K=黑 %R=红 %G=绿 %Y=黄 %B=蓝 %M=品红 %C=青 %W=白 %N=重置
  *
  * @param ... 可变参数
  */

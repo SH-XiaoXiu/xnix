@@ -1,6 +1,6 @@
 /**
  * @file early_console.h
- * @brief Early console output API
+ * @brief 早期控制台接口
  */
 
 #ifndef INIT_EARLY_CONSOLE_H
@@ -9,22 +9,22 @@
 #include <stdbool.h>
 
 /**
- * Disable early console (switch to IPC-based output)
+ * 禁用早期控制台(切换到基于IPC的输出)
  */
 void early_console_disable(void);
 
 /**
- * Check if early console is active
+ * 检查早期控制台是否处于活动状态
  */
 bool early_console_is_active(void);
 
 /**
- * Output a single character (via SYS_DEBUG_PUT)
+ * 输出单个字符(通过 SYS_DEBUG_PUT)
  */
 void early_putc(char c);
 
 /**
- * Output a string (via SYS_DEBUG_PUT)
+ * 输出字符串(通过 SYS_DEBUG_PUT)
  */
 void early_puts(const char *s);
 

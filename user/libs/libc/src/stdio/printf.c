@@ -1,90 +1,42 @@
 /**
  * @file printf.c
- * @brief 简易 printf 实现
+ * @brief 格式化输出实现
  *
- * stdout 使用行缓冲,减少 syscall 次数.
- * 使用 libserial SDK 通过 IPC 输出到 seriald (可选)
+ * 所有输出通过 FILE stream 到 ttyd.
  */
 
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdio_internal.h>
 #include <string.h>
-#include <xnix/abi/syscall.h>
 
-/* Weak references to libserial (optional linkage) */
-extern int serial_write(const char *buf, size_t len) __attribute__((weak));
-extern int serial_init(void) __attribute__((weak));
+/* 输出回调函数类型 */
+typedef void (*emit_fn)(char c, void *ctx);
 
-/*
- * stdout 缓冲区
- *
- * 行缓冲模式:遇到 \n 或缓冲区满时刷新
- */
-#define STDOUT_BUF_SIZE 256
+/* 缓冲区输出上下文 */
+struct buf_ctx {
+    char  *buf;
+    size_t size;
+    size_t pos;
+};
 
-static char stdout_buf[STDOUT_BUF_SIZE];
-static int  stdout_len            = 0;
-static int  g_stdout_debug_mirror = 0;
-
-void stdout_debug_mirror_enable(int enable) {
-    g_stdout_debug_mirror = enable ? 1 : 0;
-}
-
-/* 刷新 stdout 缓冲区 */
-static void stdout_flush(void) {
-    if (stdout_len > 0) {
-        /* Use IPC to seriald if libserial is linked */
-        if (serial_write != NULL) {
-            serial_write(stdout_buf, stdout_len);
-        }
-        if (g_stdout_debug_mirror) {
-            for (int i = 0; i < stdout_len; i++) {
-                int ret;
-                asm volatile("int $0x80"
-                             : "=a"(ret)
-                             : "a"(SYS_DEBUG_PUT), "b"((uint32_t)stdout_buf[i])
-                             : "memory");
-                (void)ret;
-            }
-        }
-        /* Otherwise output is silently discarded (pure microkernel design) */
-        stdout_len = 0;
+static void buf_emit(char c, void *ctx) {
+    struct buf_ctx *b = (struct buf_ctx *)ctx;
+    if (b->buf && b->pos < b->size - 1) {
+        b->buf[b->pos] = c;
     }
+    b->pos++;
 }
 
-/* 向 stdout 缓冲区写入一个字符 */
-static void stdout_putc(char c) {
-    stdout_buf[stdout_len++] = c;
-
-    /* 遇到换行或缓冲区满时刷新 */
-    if (c == '\n' || stdout_len >= STDOUT_BUF_SIZE - 1) {
-        stdout_flush();
-    }
+/* FILE 输出 */
+static void file_emit(char c, void *ctx) {
+    _file_putc((FILE *)ctx, c);
 }
 
-int putchar(int c) {
-    stdout_putc((char)c);
-    return c;
-}
-
-int puts(const char *s) {
-    while (*s) {
-        stdout_putc(*s++);
-    }
-    stdout_putc('\n');
-    return 0;
-}
-
-int fflush(void *stream) {
-    (void)stream; /* 目前只支持 stdout */
-    stdout_flush();
-    return 0;
-}
-
-/* 数字转字符串(内部函数) */
-static int print_num(char *buf, size_t size, unsigned int num, int base, int is_signed, int width,
-                     int pad_zero) {
+/* 数字格式化输出 */
+static int emit_num(emit_fn emit, void *ctx, unsigned int num, int base,
+                    int is_signed, int width, int pad_zero) {
     char         tmp[32];
     int          i        = 0;
     int          negative = 0;
@@ -109,50 +61,29 @@ static int print_num(char *buf, size_t size, unsigned int num, int base, int is_
         tmp[i++] = '-';
     }
 
-    /* 补齐宽度 */
     int len = i;
     int pad = (width > len) ? (width - len) : 0;
 
     int written = 0;
-    if (buf) {
-        /* 写入缓冲区 */
-        while (pad-- > 0 && written < (int)size - 1) {
-            buf[written++] = pad_zero ? '0' : ' ';
-        }
-        while (i-- > 0 && written < (int)size - 1) {
-            buf[written++] = tmp[i];
-        }
-        buf[written] = '\0';
-    } else {
-        /* 写入 stdout 缓冲区 */
-        while (pad-- > 0) {
-            stdout_putc(pad_zero ? '0' : ' ');
-            written++;
-        }
-        while (i-- > 0) {
-            stdout_putc(tmp[i]);
-            written++;
-        }
+    while (pad-- > 0) {
+        emit(pad_zero ? '0' : ' ', ctx);
+        written++;
+    }
+    while (i-- > 0) {
+        emit(tmp[i], ctx);
+        written++;
     }
 
     return written;
 }
 
-int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
-    int    written = 0;
-    char  *p       = buf;
-    size_t remain  = size;
+/* 核心格式化引擎 */
+static int do_printf(emit_fn emit, void *ctx, const char *fmt, va_list ap) {
+    int written = 0;
 
     while (*fmt) {
         if (*fmt != '%') {
-            if (buf) {
-                if (remain > 1) {
-                    *p++ = *fmt;
-                    remain--;
-                }
-            } else {
-                stdout_putc(*fmt);
-            }
+            emit(*fmt, ctx);
             written++;
             fmt++;
             continue;
@@ -178,57 +109,24 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
         case 'd':
         case 'i': {
             int val = va_arg(ap, int);
-            if (buf) {
-                int n = print_num(p, remain, (unsigned int)val, 10, 1, width, pad_zero);
-                p += n;
-                remain -= n;
-                written += n;
-            } else {
-                written += print_num(NULL, 0, (unsigned int)val, 10, 1, width, pad_zero);
-            }
+            written += emit_num(emit, ctx, (unsigned int)val, 10, 1, width, pad_zero);
             break;
         }
         case 'u': {
             unsigned int val = va_arg(ap, unsigned int);
-            if (buf) {
-                int n = print_num(p, remain, val, 10, 0, width, pad_zero);
-                p += n;
-                remain -= n;
-                written += n;
-            } else {
-                written += print_num(NULL, 0, val, 10, 0, width, pad_zero);
-            }
+            written += emit_num(emit, ctx, val, 10, 0, width, pad_zero);
             break;
         }
         case 'x': {
             unsigned int val = va_arg(ap, unsigned int);
-            if (buf) {
-                int n = print_num(p, remain, val, 16, 0, width, pad_zero);
-                p += n;
-                remain -= n;
-                written += n;
-            } else {
-                written += print_num(NULL, 0, val, 16, 0, width, pad_zero);
-            }
+            written += emit_num(emit, ctx, val, 16, 0, width, pad_zero);
             break;
         }
         case 'p': {
             unsigned int val = (unsigned int)(uintptr_t)va_arg(ap, void *);
-            if (buf) {
-                if (remain > 2) {
-                    *p++ = '0';
-                    *p++ = 'x';
-                    remain -= 2;
-                }
-                int n = print_num(p, remain, val, 16, 0, 8, 1);
-                p += n;
-                remain -= n;
-                written += 2 + n;
-            } else {
-                stdout_putc('0');
-                stdout_putc('x');
-                written += 2 + print_num(NULL, 0, val, 16, 0, 8, 1);
-            }
+            emit('0', ctx);
+            emit('x', ctx);
+            written += 2 + emit_num(emit, ctx, val, 16, 0, 8, 1);
             break;
         }
         case 's': {
@@ -237,14 +135,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
                 s = "(null)";
             }
             while (*s) {
-                if (buf) {
-                    if (remain > 1) {
-                        *p++ = *s;
-                        remain--;
-                    }
-                } else {
-                    stdout_putc(*s);
-                }
+                emit(*s, ctx);
                 written++;
                 s++;
             }
@@ -252,54 +143,39 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
         }
         case 'c': {
             char c = (char)va_arg(ap, int);
-            if (buf) {
-                if (remain > 1) {
-                    *p++ = c;
-                    remain--;
-                }
-            } else {
-                stdout_putc(c);
-            }
+            emit(c, ctx);
             written++;
             break;
         }
         case '%':
-            if (buf) {
-                if (remain > 1) {
-                    *p++ = '%';
-                    remain--;
-                }
-            } else {
-                stdout_putc('%');
-            }
+            emit('%', ctx);
             written++;
             break;
         default:
             /* 未知格式,原样输出 */
-            if (buf) {
-                if (remain > 1) {
-                    *p++ = '%';
-                    remain--;
-                }
-                if (remain > 1) {
-                    *p++ = *fmt;
-                    remain--;
-                }
-            } else {
-                stdout_putc('%');
-                stdout_putc(*fmt);
-            }
+            emit('%', ctx);
+            emit(*fmt, ctx);
             written += 2;
             break;
         }
         fmt++;
     }
 
-    if (buf && size > 0) {
-        *p = '\0';
-    }
-
     return written;
+}
+
+int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
+    struct buf_ctx ctx = {buf, size, 0};
+    int            n   = do_printf(buf_emit, &ctx, fmt, ap);
+    if (buf && size > 0) {
+        size_t end = ctx.pos < size ? ctx.pos : size - 1;
+        buf[end]   = '\0';
+    }
+    return n;
+}
+
+int vfprintf(FILE *f, const char *fmt, va_list ap) {
+    return do_printf(file_emit, f, fmt, ap);
 }
 
 int snprintf(char *buf, size_t size, const char *fmt, ...) {
@@ -310,10 +186,51 @@ int snprintf(char *buf, size_t size, const char *fmt, ...) {
     return ret;
 }
 
+int fprintf(FILE *f, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int ret = vfprintf(f, fmt, ap);
+    va_end(ap);
+    return ret;
+}
+
 int printf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    int ret = vsnprintf(NULL, 0, fmt, ap);
+    int ret = vfprintf(stdout, fmt, ap);
     va_end(ap);
     return ret;
+}
+
+int putchar(int c) {
+    _file_putc(stdout, (char)c);
+    return c;
+}
+
+int fputc(int c, FILE *f) {
+    return _file_putc(f, (char)c);
+}
+
+int puts(const char *s) {
+    while (*s) {
+        _file_putc(stdout, *s++);
+    }
+    _file_putc(stdout, '\n');
+    return 0;
+}
+
+int fputs(const char *s, FILE *f) {
+    while (*s) {
+        _file_putc(f, *s++);
+    }
+    return 0;
+}
+
+int fflush(FILE *stream) {
+    if (stream == NULL) {
+        _file_flush(stdout);
+        _file_flush(stderr);
+        return 0;
+    }
+    return _file_flush(stream);
 }

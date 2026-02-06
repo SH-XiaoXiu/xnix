@@ -123,7 +123,7 @@ set(SHARED_INCLUDES
 )
 
 # ─── 1. Kernel Core 源文件 ───
-set(KERNEL_REQUIRED_DIRS boot mm sched irq sys process hal exec udm)
+set(KERNEL_REQUIRED_DIRS boot mm sched irq sys process hal exec udm log)
 set(KERNEL_CORE_SOURCES "")
 
 list(APPEND KERNEL_CORE_SOURCES "${CMAKE_SOURCE_DIR}/main/kernel/xnix.c")

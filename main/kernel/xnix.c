@@ -14,10 +14,11 @@
 #include <xnix/abi/process.h>
 #include <xnix/boot.h>
 #include <xnix/config.h>
-#include <xnix/console.h>
 #include <xnix/driver.h>
+#include <xnix/early_console.h>
 #include <xnix/ipc.h>
 #include <xnix/irq.h>
+#include <xnix/kmsg.h>
 #include <xnix/mm.h>
 #include <xnix/perm.h>
 #include <xnix/process_def.h>
@@ -32,9 +33,9 @@ extern void input_init(void);
 
 static void boot_print_banner(void) {
     kprintf("\n");
-    kprintf("%C========================================%N\n");
-    kprintf("%C        Xnix Kernel Loaded!%N\n");
-    kprintf("%C========================================%N\n");
+    kprintf("========================================\n");
+    kprintf("        Xnix Kernel Loaded!\n");
+    kprintf("========================================\n");
     kprintf("Detected CPU: %s (%d cores)\n", g_hal_features.cpu_vendor, g_hal_features.cpu_count);
     kprintf("Features: [MMU:%s] [FPU:%s] [SMP:%s]\n",
             (g_hal_features.flags & HAL_FEATURE_MMU) ? "Yes" : "No",
@@ -51,8 +52,9 @@ static void boot_print_banner(void) {
  */
 static void boot_phase_early(uint32_t magic, struct multiboot_info *mb_info) {
     arch_early_init();
-    console_init();
-    console_clear();
+    kmsg_init();
+    early_console_init();
+    early_clear();
 
     boot_init(magic, mb_info);
 
@@ -118,7 +120,7 @@ static void boot_phase_smp(void) {
 }
 
 /**
- * Late - 定时器,异步输出
+ * Late - 定时器
  */
 static void boot_phase_late(void) {
     /* Boot 裁切:根据命令行选择定时器 */
@@ -128,11 +130,6 @@ static void boot_phase_late(void) {
     timer_set_callback(sched_tick);
     timer_init(CFG_SCHED_HZ);
     pr_ok("Timer (%d Hz)", CFG_SCHED_HZ);
-
-    /* 启动异步消费者线程并启用异步输出 */
-    console_start_consumers();
-    console_async_enable();
-    pr_ok("Async console output enabled");
 
     /* 收集启动资源并创建 handles */
     boot_handles_collect();

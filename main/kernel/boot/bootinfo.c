@@ -11,11 +11,8 @@
 
 #include <xnix/abi/handle.h>
 #include <xnix/boot.h>
-#include <xnix/handle.h>
 #include <xnix/physmem.h>
-#include <xnix/process.h>
 #include <xnix/stdio.h>
-#include <xnix/string.h>
 #include <xnix/types.h>
 
 #define MAX_BOOT_RESOURCES 32
@@ -46,7 +43,7 @@ void boot_handles_collect(void) {
     g_boot_resources.count = 0;
 
     uint32_t mod_count = boot_get_module_count();
-    pr_info("boot_handles: found %u multiboot modules", mod_count);
+    pr_info("boot: found %u multiboot modules", mod_count);
 
     for (uint32_t i = 0; i < mod_count; i++) {
         void    *addr = NULL;
@@ -71,13 +68,13 @@ void boot_handles_collect(void) {
             snprintf(res->name, sizeof(res->name), "module%u", i);
         }
 
-        pr_debug("boot_handles: module %u: addr=0x%08x, size=%u, name=%s", i, res->phys_addr,
+        pr_debug("boot: module %u: addr=0x%08x, size=%u, name=%s", i, res->phys_addr,
                  res->size, res->name);
 
         g_boot_resources.count++;
     }
 
-    pr_info("boot_handles: collected %u boot resources", g_boot_resources.count);
+    pr_info("boot: collected %u boot resources", g_boot_resources.count);
 }
 
 /**

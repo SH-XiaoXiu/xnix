@@ -58,6 +58,7 @@ extern void sys_input_init(void);
 extern void sys_mm_init(void);
 extern void sys_handle_init(void);
 extern void sys_perm_init(void);
+extern void sys_kmsg_init(void);
 
 /**
  * 初始化系统调用子系统
@@ -76,6 +77,7 @@ void syscall_init(void) {
     sys_misc_init();
     sys_handle_init();
     sys_perm_init();
+    sys_kmsg_init();
 
     pr_info("syscall: initialized %d syscalls", NR_SYSCALLS);
 }

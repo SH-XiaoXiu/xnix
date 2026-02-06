@@ -399,4 +399,16 @@ static inline int sys_proclist(struct proclist_args *args) {
 
 int sys_exec(struct abi_exec_args *args);
 
+/**
+ * 读取内核日志条目
+ *
+ * @param seq  输入/输出:当前序列号
+ * @param buf  输出缓冲区
+ * @param size 缓冲区大小
+ * @return 读取的字节数,负数为错误
+ */
+static inline int sys_kmsg_read(uint32_t *seq, char *buf, uint32_t size) {
+    return syscall3(SYS_KMSG_READ, (uint32_t)(uintptr_t)seq, (uint32_t)(uintptr_t)buf, size);
+}
+
 #endif /* _XNIX_SYSCALL_H */

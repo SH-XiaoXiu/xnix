@@ -554,7 +554,7 @@ void vmm_switch_pd(void *pd_phys) {
 /* 声明进程终止函数 */
 void process_terminate_current(int signal);
 
-extern void console_emergency_mode(void);
+extern void early_console_emergency(void);
 
 /* 声明外部函数以获取当前进程信息 */
 extern void       *process_get_current(void);
@@ -564,7 +564,7 @@ extern void       *process_get_page_dir(void *proc);
 
 void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr) {
     /* 进入紧急模式,确保同步输出 */
-    console_emergency_mode();
+    early_console_emergency();
 
     uint32_t err_code  = frame->err_code;
     bool     from_user = (frame->cs & 0x03) == 3;
@@ -601,7 +601,7 @@ void vmm_page_fault(struct irq_regs *frame, vaddr_t vaddr) {
         pte = ((uint32_t *)(0xFFC00000 + (pd_idx << 12)))[pt_idx];
     }
 
-    kprintf("%R[PAGE FAULT]%N vaddr=0x%x EIP=0x%x err=0x%x (%s)\n", vaddr, frame->eip, err_code,
+    kprintf("[PAGE FAULT] vaddr=0x%x EIP=0x%x err=0x%x (%s)\n", vaddr, frame->eip, err_code,
             reason);
     kprintf("  Process: %s (PID %d)\n", proc_name, proc_pid);
     kprintf("  CR3=0x%x PDE[%u]=0x%x PTE[%u]=0x%x\n", cr3, pd_idx, pde, pt_idx, pte);

@@ -4,12 +4,14 @@
  */
 
 #include <stdio.h>
-
-/* 从 console.c 提供的 IPC 封装 */
-extern int console_getc(void);
+#include <stdio_internal.h>
 
 int getchar(void) {
-    return console_getc();
+    return _file_getc(stdin);
+}
+
+int fgetc(FILE *f) {
+    return _file_getc(f);
 }
 
 char *gets_s(char *buf, size_t size) {
@@ -42,13 +44,13 @@ char *gets_s(char *buf, size_t size) {
                 putchar('\b');
                 putchar(' ');
                 putchar('\b');
-                fflush(NULL);
+                fflush(stdout);
             }
         } else if (c >= 32 && c < 127) {
             /* 可打印字符 */
             buf[pos++] = (char)c;
             putchar(c);
-            fflush(NULL);
+            fflush(stdout);
         }
         /* 忽略其他控制字符 */
     }

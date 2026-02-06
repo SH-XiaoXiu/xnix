@@ -1,13 +1,11 @@
 /**
  * @file stderr.c
  * @brief 内核错误处理机制 (Panic/Assert)
- * @author XiaoXiu
- * @date 2026-01-25
  */
 
 #include <asm/cpu.h>
-#include <xnix/console.h>
 #include <xnix/debug.h>
+#include <xnix/early_console.h>
 #include <xnix/stdio.h>
 
 static void dump_stack(void) {
@@ -37,11 +35,9 @@ void panic(const char *fmt, ...) {
     /* 立即关中断,防止干扰 */
     cpu_irq_disable();
 
-    /* 进入紧急模式,直接输出到串口 */
-    console_emergency_mode();
+    /* 进入紧急模式,绕过所有锁,直接写硬件 */
+    early_console_emergency();
 
-    /* 红色分割线 */
-    console_set_color(KCOLOR_RED);
     kputs("\n\n");
     kputs("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
     kputs("!!               KERNEL PANIC                  !!\n");
