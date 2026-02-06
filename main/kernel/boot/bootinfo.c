@@ -5,6 +5,8 @@
  * 收集启动时的硬件资源信息,创建 boot handles 传给 init
  */
 
+#include "boot_internal.h"
+
 #include <arch/mmu.h>
 
 #include <xnix/abi/handle.h>
@@ -40,11 +42,11 @@ static struct {
  *
  * 在 boot_phase_late() 调用,仅记录物理地址和大小
  */
-void bootinfo_collect(void) {
+void boot_handles_collect(void) {
     g_boot_resources.count = 0;
 
     uint32_t mod_count = boot_get_module_count();
-    pr_info("bootinfo: found %u multiboot modules", mod_count);
+    pr_info("boot_handles: found %u multiboot modules", mod_count);
 
     for (uint32_t i = 0; i < mod_count; i++) {
         void    *addr = NULL;
@@ -65,43 +67,17 @@ void bootinfo_collect(void) {
 
         /* 从模块 cmdline 的 name= 参数获取名称,回退到索引 */
         const char *cmdline = boot_get_module_cmdline(i);
-        bool        named   = false;
-        if (cmdline) {
-            /* 查找 "name=" 参数 */
-            const char *p = cmdline;
-            while (*p) {
-                while (*p == ' ') {
-                    p++;
-                }
-                if (!strncmp(p, "name=", 5)) {
-                    const char *val = p + 5;
-                    size_t      len = 0;
-                    while (val[len] && val[len] != ' ') {
-                        len++;
-                    }
-                    if (len > 0 && len < sizeof(res->name)) {
-                        memcpy(res->name, val, len);
-                        res->name[len] = '\0';
-                        named          = true;
-                    }
-                    break;
-                }
-                while (*p && *p != ' ') {
-                    p++;
-                }
-            }
-        }
-        if (!named) {
+        if (!boot_kv_get_value(cmdline, "name", res->name, sizeof(res->name))) {
             snprintf(res->name, sizeof(res->name), "module%u", i);
         }
 
-        pr_debug("bootinfo: module %u: addr=0x%08x, size=%u, name=%s", i, res->phys_addr, res->size,
-                 res->name);
+        pr_debug("boot_handles: module %u: addr=0x%08x, size=%u, name=%s", i, res->phys_addr,
+                 res->size, res->name);
 
         g_boot_resources.count++;
     }
 
-    pr_info("bootinfo: collected %u boot resources", g_boot_resources.count);
+    pr_info("boot_handles: collected %u boot resources", g_boot_resources.count);
 }
 
 /**
@@ -116,7 +92,7 @@ void bootinfo_collect(void) {
  * @param proc init 进程
  * @return 0 成功, <0 失败
  */
-int bootinfo_create_handles_for_init(struct process *proc) {
+int boot_handles_create_for_init(struct process *proc) {
     if (!proc) {
         return -1;
     }
@@ -124,7 +100,7 @@ int bootinfo_create_handles_for_init(struct process *proc) {
     /* 创建 framebuffer handle */
     handle_t fb_handle = physmem_create_fb_handle_for_proc(proc, "fb_mem");
     if (fb_handle != HANDLE_INVALID) {
-        pr_info("bootinfo: created fb_mem handle %u for init", fb_handle);
+        pr_info("boot_handles: created fb_mem handle %u for init", fb_handle);
     }
 
     /* 为每个 Multiboot 模块创建 physmem handle */
@@ -135,34 +111,11 @@ int bootinfo_create_handles_for_init(struct process *proc) {
         char handle_name[32];
         snprintf(handle_name, sizeof(handle_name), "module_%s", res->name);
 
-        handle_t h =
-            physmem_create_handle_for_proc(proc, res->phys_addr, res->size, handle_name);
+        handle_t h = physmem_create_handle_for_proc(proc, res->phys_addr, res->size, handle_name);
         if (h != HANDLE_INVALID) {
-            pr_info("bootinfo: created %s handle %u (%u bytes)", handle_name, h, res->size);
+            pr_info("boot_handles: created %s handle %u (%u bytes)", handle_name, h, res->size);
         }
     }
-
-    return 0;
-}
-
-/**
- * 获取 boot handles (兼容旧接口)
- *
- * 当前实现返回空列表,实际 handles 通过 bootinfo_create_handles_for_init 创建.
- *
- * @param out_handles 输出 handle 数组
- * @param out_count   输出 handle 数量
- * @return 0 成功
- */
-int bootinfo_get_handles(struct spawn_handle **out_handles, uint32_t *out_count) {
-    if (!out_handles || !out_count) {
-        return -1;
-    }
-
-    static struct spawn_handle spawn_handles[MAX_BOOT_RESOURCES];
-
-    *out_handles = spawn_handles;
-    *out_count   = 0;
 
     return 0;
 }

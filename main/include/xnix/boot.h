@@ -5,6 +5,31 @@
 #include <xnix/types.h>
 
 /**
+ * 保存启动命令行指针
+ *
+ * 由 boot_init() 在 early 阶段调用,供后续阶段查询启动参数.
+ */
+void boot_cmdline_set(const char *cmdline);
+
+/**
+ * 获取启动命令行中的 key=value
+ *
+ * @param key 键名(不含 '=')
+ * @return 指向内部静态缓冲区的 value;未找到返回 NULL
+ */
+const char *boot_cmdline_get(const char *key);
+
+/**
+ * 判断启动命令行是否包含 key=value
+ */
+bool boot_cmdline_has_kv(const char *key, const char *value);
+
+/**
+ * 从启动命令行读取无符号整数参数
+ */
+bool boot_cmdline_get_u32(const char *key, uint32_t *out);
+
+/**
  * Framebuffer 信息
  */
 struct boot_framebuffer_info {
@@ -38,16 +63,6 @@ struct boot_framebuffer_info {
 void boot_init(uint32_t magic, const struct multiboot_info *mb_info);
 
 /**
- * 返回启动时选择的 init module 索引(默认 0)
- *
- * 默认实现会尝试从 cmdline 读取 xnix.initmod=N 并写入该值.
- * 若替换了 boot_init(),也可以自行维护该返回值.
- */
-uint32_t boot_get_initmod_index(void);
-
-uint32_t boot_get_serialmod_index(void);
-
-/**
  * 获取启动模块数量
  */
 uint32_t boot_get_module_count(void);
@@ -69,6 +84,14 @@ int boot_get_module(uint32_t index, void **out_addr, uint32_t *out_size);
 const char *boot_get_module_cmdline(uint32_t index);
 
 /**
+ * 按名称获取启动模块的命令行参数
+ *
+ * @param name 模块 name= 值
+ * @return 命令行字符串指针,无则返回 NULL
+ */
+const char *boot_get_module_cmdline_by_name(const char *name);
+
+/**
  * 按名称查找启动模块
  *
  * 遍历所有模块的 cmdline,查找 name=<name> 匹配的模块
@@ -87,24 +110,12 @@ int boot_find_module_by_name(const char *name, void **out_addr, uint32_t *out_si
  */
 int boot_get_framebuffer(struct boot_framebuffer_info *info);
 
-/* Forward declaration */
-struct spawn_handle;
-
 /**
- * 收集启动资源并创建 handles
+ * 收集启动资源
  *
  * 在 handle 系统初始化后调用,在启动 init 之前.
  */
-void bootinfo_collect(void);
-
-/**
- * 获取 boot handles 用于传递给 init
- *
- * @param out_handles 输出 handle 数组指针
- * @param out_count   输出 handle 数量
- * @return 0 成功, <0 失败
- */
-int bootinfo_get_handles(struct spawn_handle **out_handles, uint32_t *out_count);
+void boot_handles_collect(void);
 
 /**
  * 为 init 进程直接创建 boot handles
@@ -116,6 +127,6 @@ int bootinfo_get_handles(struct spawn_handle **out_handles, uint32_t *out_count)
  * @return 0 成功, <0 失败
  */
 struct process;
-int bootinfo_create_handles_for_init(struct process *proc);
+int boot_handles_create_for_init(struct process *proc);
 
 #endif

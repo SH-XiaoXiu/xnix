@@ -230,7 +230,7 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
     /* 对于 init 进程(由内核进程创建),直接创建 boot handles */
     /* 注意: process_get_current() 返回 kernel_process 而非 NULL */
     if (creator && creator->pid == 0) {
-        bootinfo_create_handles_for_init(proc);
+        boot_handles_create_for_init(proc);
     }
 
     /* 加载 ELF */

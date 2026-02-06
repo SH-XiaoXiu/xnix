@@ -84,7 +84,7 @@ add_custom_target(rootfs DEPENDS ${ROOTFS_IMG})
 # grub.cfg 生成
 # ============================================
 set(GRUB_CFG_CONTENT "set timeout=0\nset default=0\nmenuentry \"Xnix\" {\n")
-string(APPEND GRUB_CFG_CONTENT "  multiboot /boot/xnix.elf xnix.initmod=0\n")
+string(APPEND GRUB_CFG_CONTENT "  multiboot /boot/xnix.elf\n")
 string(APPEND GRUB_CFG_CONTENT "  module /sbin/init.elf name=init\n")
 
 foreach (SVC ${CORE_SERVICES})

@@ -22,6 +22,7 @@
 #include <xnix/perm.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
+#include <xnix/string.h>
 #include <xnix/thread_def.h>
 
 #include "xnix/debug.h"
@@ -82,7 +83,7 @@ static void boot_phase_core(void) {
     boot_print_banner();
 
     /* Boot 裁切:根据命令行选择 IRQ 控制器 */
-    const char *irqchip_prefer = boot_get_cmdline_value("xnix.irqchip");
+    const char *irqchip_prefer = boot_cmdline_get("xnix.irqchip");
     irqchip_select_and_init(irqchip_prefer);
 
     irq_init();
@@ -121,7 +122,7 @@ static void boot_phase_smp(void) {
  */
 static void boot_phase_late(void) {
     /* Boot 裁切:根据命令行选择定时器 */
-    const char *timer_prefer = boot_get_cmdline_value("xnix.timer");
+    const char *timer_prefer = boot_cmdline_get("xnix.timer");
     timer_drv_select_best(timer_prefer);
 
     timer_set_callback(sched_tick);
@@ -134,7 +135,7 @@ static void boot_phase_late(void) {
     pr_ok("Async console output enabled");
 
     /* 收集启动资源并创建 handles */
-    bootinfo_collect();
+    boot_handles_collect();
 }
 
 /**
@@ -146,30 +147,22 @@ static void boot_phase_late(void) {
  * seriald,ramfsd,fatfsd 等服务的启动由 init 进程负责(通过 sys_spawn)
  */
 static void boot_start_services(void) {
-    uint32_t mods_count = boot_get_module_count();
-    if (mods_count == 0) {
-        pr_warn("No modules found");
-        return;
-    }
-
-    /* 获取 init 模块 */
-    uint32_t init_mod_index = boot_get_initmod_index();
-    if (init_mod_index >= mods_count) {
-        pr_warn("Boot: xnix.initmod=%u out of range, defaulting to 0", init_mod_index);
-        init_mod_index = 0;
+    const char *init_name = boot_cmdline_get("xnix.init");
+    if (!init_name || !init_name[0]) {
+        init_name = "init";
     }
 
     void    *mod_addr = NULL;
     uint32_t mod_size = 0;
-    if (boot_get_module(init_mod_index, &mod_addr, &mod_size) < 0) {
-        pr_err("Failed to get init module");
+    if (boot_find_module_by_name(init_name, &mod_addr, &mod_size) < 0) {
+        pr_err("Failed to find init module: %s", init_name);
         return;
     }
 
-    pr_info("Loading init module (%u bytes)", mod_size);
+    pr_info("Loading init module '%s' (%u bytes)", init_name, mod_size);
 
     /* 解析 init module 的 cmdline 为 argc/argv */
-    const char *init_cmdline = boot_get_module_cmdline(init_mod_index);
+    const char *init_cmdline = boot_get_module_cmdline_by_name(init_name);
     int         init_argc    = 0;
     char        init_argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN];
 
@@ -192,17 +185,10 @@ static void boot_start_services(void) {
                 init_argv[init_argc][i++] = *p++;
             }
             init_argv[init_argc][i] = '\0';
-            init_argc++;
+            if (strncmp(init_argv[init_argc], "name=", 5) != 0) {
+                init_argc++;
+            }
         }
-    }
-
-    /* 获取 boot handles 传递给 init */
-    struct spawn_handle *boot_handles      = NULL;
-    uint32_t             boot_handle_count = 0;
-    if (bootinfo_get_handles(&boot_handles, &boot_handle_count) < 0) {
-        pr_warn("Failed to get boot handles, init will start without handles");
-    } else {
-        pr_info("Passing %u boot handles to init", boot_handle_count);
     }
 
     pid_t                init_pid     = PID_INVALID;
@@ -211,12 +197,10 @@ static void boot_start_services(void) {
         pr_warn("Init profile not found, spawning init without profile");
     }
     if (init_argc > 0) {
-        init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, boot_handles,
-                                                     boot_handle_count, init_profile, init_argc,
-                                                     init_argv);
+        init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, NULL, 0,
+                                                     init_profile, init_argc, init_argv);
     } else {
-        init_pid = process_spawn_module_ex("init", mod_addr, mod_size, boot_handles,
-                                           boot_handle_count, init_profile);
+        init_pid = process_spawn_module_ex("init", mod_addr, mod_size, NULL, 0, init_profile);
     }
 
     if (init_pid == PID_INVALID) {
