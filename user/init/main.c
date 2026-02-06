@@ -99,8 +99,10 @@ int main(int argc, char **argv) {
     int init_notify_ep = sys_endpoint_create("init_notify");
     if (init_notify_ep < 0) {
         early_puts("[INIT] failed to create init_notify endpoint\n");
+        g_mgr.init_notify_ep = HANDLE_INVALID;
     } else {
         early_puts("[INIT] init_notify endpoint created\n");
+        g_mgr.init_notify_ep = (handle_t)init_notify_ep;
     }
 
     early_puts("[INIT] entering main loop\n");

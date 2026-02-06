@@ -443,22 +443,6 @@ int main(int argc, char **argv) {
     g_tty_ep = env_get_handle("tty1");
     g_vfs_ep = env_get_handle("vfs_ep");
 
-    /* 等待 ttyd 就绪:尝试发送到 tty 直到成功 */
-    if (g_tty_ep != HANDLE_INVALID) {
-        struct ipc_message msg;
-        memset(&msg, 0, sizeof(msg));
-        msg.regs.data[0] = TTY_OP_IOCTL;
-        msg.regs.data[1] = TTY_IOCTL_GET_FOREGROUND;
-
-        for (int i = 0; i < 50; i++) {
-            int ret = sys_ipc_send(g_tty_ep, &msg, 50);
-            if (ret == 0) {
-                break;
-            }
-            msleep(50);
-        }
-    }
-
     printf("[shell] tty_ep=%d vfs_ep=%d\n", g_tty_ep, g_vfs_ep);
 
     /* 初始化 VFS 客户端 */

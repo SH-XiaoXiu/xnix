@@ -198,6 +198,9 @@ struct svc_manager {
     int                   handle_def_count;
     int                   count;
 
+    /* init_notify endpoint (动态注入到每个服务) */
+    handle_t init_notify_ep;
+
     /* Permission profiles */
     struct svc_profile profiles[SVC_MAX_PROFILES];
     int                profile_count;

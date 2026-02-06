@@ -57,7 +57,7 @@ static int32_t sys_handle_find(const uint32_t *args) {
     if (name) {
         int ret = copy_from_user(name_buf, name, sizeof(name_buf));
         if (ret < 0) {
-            kprintf("[handle_find] copy_from_user failed for '%s': %d\n", proc->name, ret);
+            pr_warn("copy_from_user failed for '%s': %d\n", proc->name, ret);
             return ret;
         }
         name_buf[HANDLE_NAME_MAX - 1] = '\0';
@@ -67,7 +67,6 @@ static int32_t sys_handle_find(const uint32_t *args) {
 
     handle_t h = handle_find(proc, name_buf);
     if (h == HANDLE_INVALID) {
-        kprintf("[handle_find] '%s' not found in '%s'\n", name_buf, proc->name);
         return -ENOENT;
     }
 

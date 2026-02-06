@@ -684,6 +684,15 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
                      cfg->handles[i].name);
         }
 
+        /* 注入 init_notify handle */
+        if (mgr->init_notify_ep != HANDLE_INVALID &&
+            exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
+            int n                    = (int)exec_args.handle_count;
+            exec_args.handles[n].src = mgr->init_notify_ep;
+            snprintf(exec_args.handles[n].name, sizeof(exec_args.handles[n].name), "init_notify");
+            exec_args.handle_count++;
+        }
+
         pid = sys_exec(&exec_args);
     } else {
         /* 从 Multiboot module 加载 */
@@ -716,6 +725,15 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
             args.handles[i].src = cfg->handles[i].src_handle;
             snprintf(args.handles[i].name, sizeof(args.handles[i].name), "%s",
                      cfg->handles[i].name);
+        }
+
+        /* 注入 init_notify handle */
+        if (mgr->init_notify_ep != HANDLE_INVALID &&
+            args.handle_count < ABI_SPAWN_MAX_HANDLES) {
+            int n                = (int)args.handle_count;
+            args.handles[n].src  = mgr->init_notify_ep;
+            snprintf(args.handles[n].name, sizeof(args.handles[n].name), "init_notify");
+            args.handle_count++;
         }
 
         pid = sys_spawn(&args);
