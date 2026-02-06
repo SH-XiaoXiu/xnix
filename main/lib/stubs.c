@@ -54,12 +54,6 @@ __attribute__((weak)) int ipc_reply(struct ipc_message *reply) {
     return -ENOSYS;
 }
 
-__attribute__((weak)) int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
-    (void)ep_handle;
-    (void)msg;
-    return -ENOSYS;
-}
-
 __attribute__((weak)) handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
     (void)set;
     (void)timeout_ms;

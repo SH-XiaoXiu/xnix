@@ -25,7 +25,6 @@
 #define SYS_IPC_CALL        103 /* RPC 调用: ebx=handle, ecx=msg* */
 #define SYS_IPC_REPLY       104 /* RPC 回复: ecx=msg* */
 #define SYS_IPC_REPLY_TO    105 /* 延迟回复: ebx=sender_tid, ecx=msg* */
-#define SYS_IPC_SEND_ASYNC  106
 
 /* 内存管理 (200-219) */
 #define SYS_SBRK 200 /* 堆管理: ebx=increment, 返回旧堆顶或 -1 */
@@ -81,6 +80,7 @@
 /* 通知/信号 (800-819) */
 #define SYS_NOTIFICATION_CREATE 800 /* 创建通知, 返回 handle */
 #define SYS_NOTIFICATION_WAIT   801 /* 等待通知: ebx=handle */
+#define SYS_NOTIFICATION_SIGNAL 802 /* 发送通知: ebx=handle, ecx=bits */
 
 /* 内核日志 (850-859) */
 #define SYS_KMSG_READ 850 /* 读取内核日志: ebx=seq_ptr, ecx=buf, edx=size */

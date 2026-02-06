@@ -183,6 +183,17 @@ static inline uint32_t sys_notification_wait(uint32_t handle) {
     return (uint32_t)syscall1(SYS_NOTIFICATION_WAIT, handle);
 }
 
+/**
+ * 发送 Notification 信号
+ *
+ * @param handle Notification handle
+ * @param bits   要设置的位
+ * @return 0 成功
+ */
+static inline int sys_notification_signal(uint32_t handle, uint32_t bits) {
+    return syscall2(SYS_NOTIFICATION_SIGNAL, handle, bits);
+}
+
 /*
  * IPC 相关系统调用
  */
@@ -193,10 +204,6 @@ struct ipc_message;
  */
 static inline int sys_ipc_send(uint32_t ep, struct ipc_message *msg, uint32_t timeout_ms) {
     return syscall3(SYS_IPC_SEND, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
-}
-
-static inline int sys_ipc_send_async(uint32_t ep, struct ipc_message *msg) {
-    return syscall2(SYS_IPC_SEND_ASYNC, ep, (uint32_t)(uintptr_t)msg);
 }
 
 /**

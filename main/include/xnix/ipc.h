@@ -107,18 +107,6 @@ int ipc_reply(struct ipc_message *reply);
  */
 int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply);
 
-/*
- * 异步 IPC
- */
-/**
- * 异步发送(消息入队,立即返回)
- *
- * @param ep_handle 目标 Endpoint
- * @param msg       消息内容
- * @return 0 成功, 负数失败
- */
-int ipc_send_async(handle_t ep_handle, struct ipc_message *msg);
-
 /**
  * 等待多个对象(Endpoint 或 Notification)
  */

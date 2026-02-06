@@ -22,9 +22,6 @@
 /** 消息中最多句柄数 */
 #define ABI_IPC_MSG_HANDLES_MAX 4
 
-/** 异步消息队列大小 */
-#define ABI_IPC_ASYNC_QUEUE_SIZE 64
-
 /*
  * IPC 消息结构
  */

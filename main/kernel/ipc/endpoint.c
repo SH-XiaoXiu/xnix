@@ -6,9 +6,7 @@
 #include <arch/cpu.h>
 
 #include <ipc/endpoint.h>
-#include <ipc/msg_pool.h>
 #include <ipc/notification.h>
-#include <xnix/config.h>
 #include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
@@ -55,24 +53,6 @@ void endpoint_unref(void *ptr) {
     ep->refcount--;
     if (ep->refcount == 0) {
         cpu_irq_restore(flags);
-
-        spin_lock(&ep->lock);
-#if CFG_IPC_MSG_POOL
-        struct ipc_kmsg *km = ep->async_head;
-        ep->async_head      = NULL;
-        ep->async_tail      = NULL;
-        ep->async_len       = 0;
-#endif
-        spin_unlock(&ep->lock);
-
-#if CFG_IPC_MSG_POOL
-        while (km) {
-            struct ipc_kmsg *next = km->next;
-            ipc_kmsg_put(km);
-            km = next;
-        }
-#endif
-
         kfree(ep);
         return;
     }
@@ -99,15 +79,6 @@ handle_t endpoint_create(const char *name) {
     ep->recv_queue = NULL;
     ep->poll_queue = NULL;
     ep->refcount   = 1; /* Handle 持有引用 */
-
-#if CFG_IPC_MSG_POOL
-    ep->async_head = NULL;
-    ep->async_tail = NULL;
-    ep->async_len  = 0;
-#else
-    ep->async_head = 0;
-    ep->async_tail = 0;
-#endif
 
     /* 分配句柄(传递名称用于权限注册) */
     handle = handle_alloc(current, HANDLE_ENDPOINT, ep, name);
@@ -331,42 +302,6 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
 
     spin_lock(&ep->lock);
 
-    /* 优先检查异步消息队列 */
-#if CFG_IPC_MSG_POOL
-    if (ep->async_head) {
-        struct ipc_kmsg *km = ep->async_head;
-        ep->async_head      = km->next;
-        if (!ep->async_head) {
-            ep->async_tail = NULL;
-        }
-        if (ep->async_len) {
-            ep->async_len--;
-        }
-        spin_unlock(&ep->lock);
-
-        memcpy(&msg->regs, &km->regs, sizeof(struct ipc_msg_regs));
-        ipc_kmsg_put(km);
-        current->ipc_peer = TID_INVALID;
-        msg->sender_tid   = TID_INVALID; /* 异步消息无发送者 */
-        pr_debug("[IPC] recv async: receiver=%d\n", current->tid);
-        handle_object_put(entry.type, entry.object);
-        return IPC_OK;
-    }
-#else
-    if (ep->async_head != ep->async_tail) {
-        /* 有缓存的异步消息,直接取出 */
-        memcpy(&msg->regs, &ep->async_queue[ep->async_head].regs, sizeof(struct ipc_msg_regs));
-        ep->async_head = (ep->async_head + 1) % CFG_IPC_ASYNC_QUEUE_SIZE;
-        spin_unlock(&ep->lock);
-
-        current->ipc_peer = TID_INVALID; /* 异步消息无需回复 */
-        msg->sender_tid   = TID_INVALID; /* 异步消息无发送者 */
-        pr_debug("[IPC] recv async: receiver=%d\n", current->tid);
-        handle_object_put(entry.type, entry.object);
-        return IPC_OK;
-    }
-#endif
-
     /* 检查发送队列(同步发送者) */
     if (ep->send_queue) {
         sender            = ep->send_queue;
@@ -426,127 +361,11 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
     return IPC_OK;
 }
 
-int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
-    struct process      *proc = process_current();
-    struct thread       *current;
-    struct ipc_endpoint *ep;
-    struct thread       *receiver;
-    struct handle_entry  entry;
-
-    if (!proc) {
-        return IPC_ERR_INVALID;
-    }
-
-    if (handle_acquire(proc, ep_handle, HANDLE_ENDPOINT, &entry) < 0) {
-        return IPC_ERR_INVALID;
-    }
-
-    ep = entry.object;
-    if (entry.perm_send == PERM_ID_INVALID || !perm_check(proc, entry.perm_send)) {
-        handle_object_put(entry.type, entry.object);
-        return IPC_ERR_INVALID;
-    }
-
-    current = sched_current();
-
-    spin_lock(&ep->lock);
-
-    /* 检查是否有等待接收的线程 */
-    if (ep->recv_queue) {
-        receiver            = ep->recv_queue;
-        ep->recv_queue      = receiver->wait_next;
-        receiver->wait_next = NULL;
-        spin_unlock(&ep->lock);
-        endpoint_unref(ep);
-
-        /* 拷贝消息: Current -> Receiver */
-        ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
-
-        /* 异步发送不需要 Reply, 也不阻塞发送者 */
-        receiver->ipc_peer = TID_INVALID; /* 标记为无 Reply */
-
-        /* 唤醒接收者 */
-        sched_wakeup_thread(receiver);
-
-        pr_debug("[IPC] async -> recv: sender=%d receiver=%d\n", current->tid, receiver->tid);
-
-        handle_object_put(entry.type, entry.object);
-        return IPC_OK;
-    }
-
-    /* 没有接收者,尝试入队 */
-#if CFG_IPC_MSG_POOL
-    if (ep->async_len >= CFG_IPC_ASYNC_QUEUE_SIZE) {
-        spin_unlock(&ep->lock);
-        handle_object_put(entry.type, entry.object);
-        return IPC_ERR_TIMEOUT;
-    }
-
-    struct ipc_kmsg *km = ipc_kmsg_alloc();
-    if (!km) {
-        spin_unlock(&ep->lock);
-        handle_object_put(entry.type, entry.object);
-        return IPC_ERR_NOMEM;
-    }
-
-    memcpy(&km->regs, &msg->regs, sizeof(struct ipc_msg_regs));
-    km->next = NULL;
-
-    if (ep->async_tail) {
-        ep->async_tail->next = km;
-    } else {
-        ep->async_head = km;
-    }
-    ep->async_tail = km;
-    ep->async_len++;
-
-    /* 唤醒 poll 等待者 */
-    endpoint_poll_wakeup(ep);
-
-    spin_unlock(&ep->lock);
-    pr_debug("[IPC] async enqueue: sender=%d\n", current->tid);
-    handle_object_put(entry.type, entry.object);
-    return IPC_OK;
-#else
-    uint32_t next_tail = (ep->async_tail + 1) % CFG_IPC_ASYNC_QUEUE_SIZE;
-    if (next_tail == ep->async_head) {
-        /* 队列满 */
-        spin_unlock(&ep->lock);
-        handle_object_put(entry.type, entry.object);
-        return IPC_ERR_TIMEOUT;
-    }
-
-    /* 拷贝消息到队列 */
-    memcpy(&ep->async_queue[ep->async_tail].regs, &msg->regs, sizeof(struct ipc_msg_regs));
-    ep->async_tail = next_tail;
-
-    /* 唤醒 poll 等待者 */
-    endpoint_poll_wakeup(ep);
-
-    spin_unlock(&ep->lock);
-    pr_debug("[IPC] async enqueue: sender=%d\n", current->tid);
-    handle_object_put(entry.type, entry.object);
-    return IPC_OK;
-#endif
-}
-
 /**
  * 检查 endpoint 是否有待接收消息(不加锁版本,调用者持锁)
  */
 static bool endpoint_has_message_locked(struct ipc_endpoint *ep) {
-    if (ep->send_queue) {
-        return true;
-    }
-#if CFG_IPC_MSG_POOL
-    if (ep->async_head) {
-        return true;
-    }
-#else
-    if (ep->async_head != ep->async_tail) {
-        return true;
-    }
-#endif
-    return false;
+    return ep->send_queue != NULL;
 }
 
 /**
@@ -816,6 +635,5 @@ int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply) {
 }
 
 void ipc_init(void) {
-    ipc_kmsg_pool_init();
     /* Handle 系统负责资源释放,不需要注册类型回调 */
 }

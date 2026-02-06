@@ -46,5 +46,5 @@ int svc_notify_ready(const char *name) {
         memcpy(&msg.regs.data[2], name_buf, sizeof(name_buf));
     }
 
-    return sys_ipc_send_async((uint32_t)init_ep, &msg);
+    return sys_ipc_send((uint32_t)init_ep, &msg, 1000);
 }

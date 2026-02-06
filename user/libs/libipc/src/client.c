@@ -49,31 +49,6 @@ int ipc_send_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout
     return IPC_OK;
 }
 
-int ipc_send_async(handle_t ep, const struct abi_ipc_message *msg) {
-    if (ep == HANDLE_INVALID || !msg) {
-        return IPC_ERR_INVALID;
-    }
-
-    int ret = sys_ipc_send_async(ep, (struct ipc_message *)(void *)msg);
-    if (ret < 0) {
-        return IPC_ERR_SEND;
-    }
-
-    return IPC_OK;
-}
-
-int ipc_send_async_simple(handle_t ep, uint32_t opcode, uint32_t arg) {
-    if (ep == HANDLE_INVALID) {
-        return IPC_ERR_INVALID;
-    }
-
-    struct abi_ipc_message msg = {0};
-    msg.regs.data[0]           = opcode;
-    msg.regs.data[1]           = arg;
-
-    return ipc_send_async(ep, &msg);
-}
-
 void ipc_builder_init(struct ipc_builder *builder, uint32_t opcode) {
     if (!builder) {
         return;
@@ -140,15 +115,3 @@ int ipc_builder_send(struct ipc_builder *builder, handle_t ep, uint32_t timeout)
     return IPC_OK;
 }
 
-int ipc_builder_send_async(struct ipc_builder *builder, handle_t ep) {
-    if (!builder || ep == HANDLE_INVALID) {
-        return IPC_ERR_INVALID;
-    }
-
-    int ret = sys_ipc_send_async(ep, (struct ipc_message *)&builder->msg);
-    if (ret < 0) {
-        return IPC_ERR_SEND;
-    }
-
-    return IPC_OK;
-}

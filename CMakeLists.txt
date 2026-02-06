@@ -93,9 +93,6 @@ endif ()
 set(CFG_IPC_MSG_REGS 8 CACHE STRING "Number of short message registers")
 set(CFG_IPC_MSG_HANDLES_MAX 4 CACHE STRING "Max handles per message")
 set(CFG_HANDLE_TABLE_SIZE 1024 CACHE STRING "Handle table initial size")
-option(CFG_IPC_MSG_POOL "Enable IPC global message pool for async buffering" ON)
-set(CFG_IPC_ASYNC_QUEUE_SIZE 64 CACHE STRING "Endpoint async queue size (when msg_pool is OFF)")
-set(CFG_IPC_KMSG_GROW_CHUNK 128 CACHE STRING "IPC kmsg pool grow chunk (when msg_pool is ON)")
 set(CFG_IPC_MAX_BUF 65536 CACHE STRING "Max IPC user buffer size (bytes)")
 
 # ============================================
