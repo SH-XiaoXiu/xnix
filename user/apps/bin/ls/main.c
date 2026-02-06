@@ -31,7 +31,7 @@ static int             entry_count = 0;
  */
 static char to_lower(char c) {
     if (c >= 'A' && c <= 'Z') {
-        return c + ('a' - 'A');
+        return (char)(c + ('a' - 'A'));
     }
     return c;
 }

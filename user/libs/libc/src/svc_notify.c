@@ -4,6 +4,7 @@
  */
 
 #include <string.h>
+#include <xnix/abi/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
@@ -28,8 +29,8 @@ int svc_notify_ready(const char *name) {
     }
 
     /* 查找 init_notify endpoint */
-    int init_ep = sys_handle_find("init_notify");
-    if (init_ep < 0) {
+    handle_t init_ep = sys_handle_find("init_notify");
+    if (init_ep == HANDLE_INVALID) {
         return IPC_ERR_INVALID;
     }
 

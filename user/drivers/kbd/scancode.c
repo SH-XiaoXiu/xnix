@@ -132,14 +132,14 @@ int scancode_to_char(uint8_t scancode) {
 
     /* Caps Lock 只影响字母 */
     if (caps_lock && c >= 'a' && c <= 'z') {
-        c = c - 'a' + 'A';
+        c = (char)(c - 'a' + 'A');
     } else if (caps_lock && c >= 'A' && c <= 'Z') {
-        c = c - 'A' + 'a';
+        c = (char)(c - 'A' + 'a');
     }
 
     /* Ctrl 组合键 */
     if (ctrl_held && c >= 'a' && c <= 'z') {
-        c = c - 'a' + 1; /* Ctrl+A = 1, Ctrl+C = 3, etc. */
+        c = (char)(c - 'a' + 1); /* Ctrl+A = 1, Ctrl+C = 3, etc. */
     }
 
     return c ? c : -1;

@@ -61,8 +61,8 @@ static int alloc_handle(struct fatfs_ctx *ctx) {
 }
 
 /* 释放句柄 */
-static void free_handle(struct fatfs_ctx *ctx, int h) {
-    if (h >= 0 && h < FATFS_MAX_HANDLES) {
+static void free_handle(struct fatfs_ctx *ctx, uint32_t h) {
+    if (h < FATFS_MAX_HANDLES) {
         ctx->handles[h].in_use = 0;
     }
 }

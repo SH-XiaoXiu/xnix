@@ -24,6 +24,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <vfs_client.h>
+#include <xnix/abi/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
 #include <xnix/ulog.h>
@@ -35,7 +36,7 @@ static struct svc_manager g_mgr;
 static const char *g_user_config_path = USER_CONFIG_DEFAULT;
 
 static void drain_ready_notifications(int init_notify_ep) {
-    if (init_notify_ep < 0) {
+    if (init_notify_ep == HANDLE_INVALID) {
         return;
     }
 
@@ -128,8 +129,8 @@ int main(int argc, char **argv) {
     }
 
     /* 初始化 VFS 客户端(vfs_ep 在 core_services.conf 中定义为 endpoint handle) */
-    int vfs_ep = sys_handle_find("vfs_ep");
-    if (vfs_ep >= 0) {
+    handle_t vfs_ep = sys_handle_find("vfs_ep");
+    if (vfs_ep != HANDLE_INVALID) {
         vfs_client_init((uint32_t)vfs_ep);
     } else {
         early_set_color(10, 0);
@@ -142,8 +143,8 @@ int main(int argc, char **argv) {
     }
 
     /* 创建 init_notify endpoint 用于接收服务就绪通知 */
-    int init_notify_ep = sys_endpoint_create("init_notify");
-    if (init_notify_ep < 0) {
+    handle_t init_notify_ep = sys_endpoint_create("init_notify");
+    if (init_notify_ep == HANDLE_INVALID) {
         early_set_color(10, 0);
         early_puts("[INIT] ");
         early_reset_color();

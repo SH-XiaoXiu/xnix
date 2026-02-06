@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/syscall.h>
 
@@ -45,7 +46,7 @@ uint32_t env_get_handle(const char *name) {
     }
 
     /* 缓存未命中,调用系统调用查找 */
-    int h = sys_handle_find(name);
+    handle_t h = sys_handle_find(name);
     if (h < 0) {
         return HANDLE_INVALID;
     }

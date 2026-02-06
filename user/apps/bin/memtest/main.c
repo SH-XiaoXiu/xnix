@@ -14,8 +14,8 @@
 #include <string.h>
 #include <xnix/syscall.h>
 
-#define ALLOC_SIZE (16 * 1024) /* 每次分配 16KB */
-#define MAX_ALLOCS 64          /* 最多分配 64 次 = 1MB */
+#define ALLOC_SIZE (16UL * 1024UL) /* 每次分配 16KB */
+#define MAX_ALLOCS 64              /* 最多分配 64 次 = 1MB */
 
 static int simple_atoi(const char *s) {
     int n = 0;

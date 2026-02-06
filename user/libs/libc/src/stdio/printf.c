@@ -51,8 +51,8 @@ static int emit_num(emit_fn emit, void *ctx, unsigned int num, int base, int is_
         tmp[i++] = '0';
     } else {
         while (n) {
-            int d    = n % base;
-            tmp[i++] = (d < 10) ? ('0' + d) : ('a' + d - 10);
+            int d    = (int)(n % base);
+            tmp[i++] = (char)((d < 10) ? ('0' + d) : ('a' + d - 10));
             n /= base;
         }
     }

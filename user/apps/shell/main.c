@@ -190,20 +190,23 @@ static void run_external(const char *path, int argc, char **argv, int background
     if (pid < 0) {
         const char *err_msg;
         switch (pid) {
+        case -1:
+            err_msg = "permission denied (EPERM)";
+            break;
         case -2:
-            err_msg = "file not found";
+            err_msg = "file not found (ENOENT)";
             break;
         case -12:
-            err_msg = "out of memory";
+            err_msg = "out of memory (ENOMEM)";
             break;
         case -22:
-            err_msg = "invalid executable";
+            err_msg = "invalid executable (EINVAL)";
             break;
         default:
             err_msg = "unknown error";
             break;
         }
-        printf("%s: %s\n", argv[0], err_msg);
+        printf("%s: %s (code %d)\n", argv[0], err_msg, pid);
         return;
     }
 

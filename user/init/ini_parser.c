@@ -112,7 +112,7 @@ int ini_parse_buffer(const char *buf, size_t len, ini_handler_t handler, void *c
     size_t line_pos = 0;
 
     for (size_t i = 0; i <= len; i++) {
-        char c = (i < len) ? buf[i] : '\n';
+        char c = (i < len) ? (char)buf[i] : '\n';
 
         if (c == '\n' || c == '\0') {
             line[line_pos] = '\0';
