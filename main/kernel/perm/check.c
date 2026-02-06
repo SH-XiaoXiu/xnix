@@ -1,5 +1,6 @@
 #include <xnix/perm.h>
 #include <xnix/process_def.h>
+#include <xnix/stdio.h>
 
 /**
  * 检查进程是否拥有权限(热路径)
@@ -43,7 +44,11 @@ bool perm_check(struct process *proc, perm_id_t perm_id) {
     /* 快速位图检查 */
     uint32_t word = ps->grant_bitmap[perm_id / 32];
     uint32_t bit  = 1u << (perm_id % 32);
-    return (word & bit) != 0;
+    if ((word & bit) == 0) {
+        pr_debug("[PERM] denied: proc=%d perm=%d\n", proc->pid, perm_id);
+        return false;
+    }
+    return true;
 }
 
 /**

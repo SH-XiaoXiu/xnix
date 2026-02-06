@@ -15,6 +15,7 @@
 
 #include <asm/mmu.h>
 #include <xnix/mm.h>
+#include <xnix/stdio.h>
 #include <xnix/string.h>
 
 /* header 8 字节,保证返回地址 8 字节对齐 */
@@ -47,7 +48,9 @@ void *kmalloc(size_t size) {
     hdr->pages                 = pages;
     hdr->reserved              = 0;
 
-    return (char *)virt + sizeof(struct kmalloc_header);
+    void *ptr = (char *)virt + sizeof(struct kmalloc_header);
+    pr_debug("[MM] kmalloc: size=%zu pages=%d -> %p\n", size, pages, ptr);
+    return ptr;
 }
 
 void *kzalloc(size_t size) {
@@ -68,6 +71,7 @@ void kfree(void *ptr) {
 
     /* 转换虚拟地址为物理地址 */
     paddr_t phys = VIRT_TO_PHYS((uint32_t)hdr);
+    pr_debug("[MM] kfree: %p pages=%d\n", ptr, hdr->pages);
     free_pages((void *)phys, hdr->pages);
 }
 

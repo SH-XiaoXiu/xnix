@@ -335,6 +335,7 @@ int sched_migrate(struct thread *t, cpu_id_t target_cpu) {
 
         /* 通知目标 CPU */
         if (target_cpu != cpu_current_id() && cpu_is_online(target_cpu)) {
+            pr_debug("[SCHED] migrate: tid=%d -> cpu%d (READY)\n", t->tid, target_cpu);
             spin_unlock_irqrestore(&sched_lock, flags);
             smp_send_ipi(target_cpu, IPI_VECTOR_RESCHED);
             return 0;
@@ -349,6 +350,8 @@ int sched_migrate(struct thread *t, cpu_id_t target_cpu) {
         /* 发送 IPI 到线程当前运行的 CPU,触发调度 */
         cpu_id_t source_cpu = t->running_on;
         if (source_cpu != CPU_ID_INVALID && source_cpu != cpu_current_id()) {
+            pr_debug("[SCHED] migrate: tid=%d -> cpu%d (RUNNING on cpu%d)\n", t->tid, target_cpu,
+                     source_cpu);
             spin_unlock_irqrestore(&sched_lock, flags);
             smp_send_ipi(source_cpu, IPI_VECTOR_RESCHED);
             return 0;
@@ -421,6 +424,8 @@ static void balance_load(void) {
         /* 从队尾取(最近加入的,cache 局部性差) */
         struct thread *t = rq->tail;
         if (t && t != rq->current && CPUS_TEST(t->cpus_workable, idlest)) {
+            pr_debug("[SCHED] balance: tid=%d cpu%d(%d) -> cpu%d(%d)\n", t->tid, busiest, max_load,
+                     idlest, min_load);
             sched_migrate(t, idlest);
         }
     }

@@ -79,6 +79,8 @@ handle_t handle_alloc(struct process *proc, handle_type_t type, void *object, co
     }
 
     spin_unlock(&table->lock);
+    pr_debug("[HANDLE] alloc: proc=%d type=%d name=%s -> %d\n", proc->pid, type,
+             name ? name : "null", h);
     return h;
 }
 
@@ -144,6 +146,8 @@ handle_t handle_alloc_at(struct process *proc, handle_type_t type, void *object,
     }
 
     spin_unlock(&table->lock);
+    pr_debug("[HANDLE] alloc_at: proc=%d type=%d name=%s hint=%d -> %d\n", proc->pid, type,
+             name ? name : "null", hint, hint);
     return hint;
 }
 
@@ -159,6 +163,8 @@ void handle_free(struct process *proc, handle_t h) {
     spin_lock(&table->lock);
 
     if (h < table->capacity && table->entries[h].type != HANDLE_NONE) {
+        pr_debug("[HANDLE] free: proc=%d handle=%d type=%d\n", proc->pid, h,
+                 table->entries[h].type);
         handle_free_entry(&table->entries[h]);
     }
 

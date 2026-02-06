@@ -110,24 +110,4 @@ void timer_drv_select_best(const char *prefer);
  */
 struct timer_driver_ext *timer_drv_get_current(void);
 
-/*
- * 命令行参数辅助函数
- */
-
-/**
- * 保存命令行指针供后续查询
- * 由 boot_init() 调用
- */
-void boot_save_cmdline(const char *cmdline);
-
-/**
- * 从启动命令行获取字符串值
- *
- * @param key 参数名(如 "xnix.irqchip")
- * @return 参数值,不存在返回 NULL
- *
- * 注意:返回的字符串指向静态缓冲区,不可修改
- */
-const char *boot_get_cmdline_value(const char *key);
-
 #endif /* XNIX_DRIVER_H */

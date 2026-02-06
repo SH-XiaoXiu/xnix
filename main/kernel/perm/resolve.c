@@ -166,6 +166,7 @@ static void expand_wildcard(struct perm_state *state, const char *wildcard, perm
     for (perm_id_t id = 0; id < count; id++) {
         const char *name = perm_get_name(id);
         if (name && strncmp(name, prefix, prefix_len) == 0) {
+            pr_debug("[PERM] wildcard match: %s -> %s\n", wildcard, name);
             set_bitmap(state, id, value);
         }
     }
@@ -181,8 +182,10 @@ static void set_bitmap(struct perm_state *state, perm_id_t id, perm_value_t valu
 
     if (value == PERM_GRANT) {
         state->grant_bitmap[id / 32] |= (1u << (id % 32));
+        pr_debug("[PERM] grant: %d\n", id);
     } else if (value == PERM_DENY) {
         state->grant_bitmap[id / 32] &= ~(1u << (id % 32));
+        pr_debug("[PERM] deny: %d\n", id);
     }
     /* PERM_UNDEFINED: 不做操作(继承自父级) */
 }

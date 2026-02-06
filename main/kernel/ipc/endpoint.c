@@ -15,6 +15,7 @@
 #include <xnix/perm.h>
 #include <xnix/process.h>
 #include <xnix/process_def.h>
+#include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
 #include <xnix/thread.h>
@@ -102,6 +103,7 @@ handle_t endpoint_create(const char *name) {
         return HANDLE_INVALID;
     }
 
+    pr_debug("[IPC] endpoint_create: name=%s handle=%d\n", name ? name : "null", handle);
     return handle;
 }
 
@@ -185,12 +187,15 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
         receiver->ipc_reply_msg->sender_tid = current->tid; /* 填充 sender_tid */
         sched_wakeup_thread(receiver);
 
+        pr_debug("[IPC] send -> recv: sender=%d receiver=%d\n", current->tid, receiver->tid);
+
         /* 保存发送和回复缓冲区 */
         current->ipc_req_msg   = msg;
         current->ipc_reply_msg = reply_buf;
 
         /* 阻塞等待回复 */
         if (!sched_block_timeout(current, timeout_ms)) {
+            pr_debug("[IPC] send reply timeout: sender=%d\n", current->tid);
             return IPC_ERR_TIMEOUT;
         }
         return IPC_OK;
@@ -202,6 +207,8 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
     endpoint_poll_wakeup(ep);
     spin_unlock(&ep->lock);
 
+    pr_debug("[IPC] send enqueue: sender=%d ep=%p\n", current->tid, ep);
+
     /* 保存状态 */
     current->ipc_req_msg   = msg;
     current->ipc_reply_msg = reply_buf;
@@ -209,6 +216,7 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
     /* 阻塞等待接收者 */
     if (!sched_block_timeout(current, timeout_ms)) {
         /* 超时,从发送队列中移除自己 */
+        pr_debug("[IPC] send wait receiver timeout: sender=%d\n", current->tid);
         spin_lock(&ep->lock);
         struct thread **pp = &ep->send_queue;
         while (*pp) {
@@ -324,6 +332,7 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
         ipc_kmsg_put(km);
         current->ipc_peer = TID_INVALID;
         msg->sender_tid   = TID_INVALID; /* 异步消息无发送者 */
+        pr_debug("[IPC] recv async: receiver=%d\n", current->tid);
         return IPC_OK;
     }
 #else
@@ -335,6 +344,7 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
 
         current->ipc_peer = TID_INVALID; /* 异步消息无需回复 */
         msg->sender_tid   = TID_INVALID; /* 异步消息无发送者 */
+        pr_debug("[IPC] recv async: receiver=%d\n", current->tid);
         return IPC_OK;
     }
 #endif
@@ -353,6 +363,8 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
         current->ipc_peer = sender->tid;
         msg->sender_tid   = sender->tid; /* 填充 sender_tid 用于延迟回复 */
 
+        pr_debug("[IPC] recv <- send: receiver=%d sender=%d\n", current->tid, sender->tid);
+
         /* 注意 不要唤醒 Sender!!!!!!!!!!!!!!!!!!!!!! Sender 继续阻塞等待 Reply */
         /* 只从 send_queue 移除了 Sender, 但它依然在 blocked_list 中 (wait_chan=Sender) */
         return IPC_OK;
@@ -363,12 +375,15 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
     ep->recv_queue     = current;
     spin_unlock(&ep->lock);
 
+    pr_debug("[IPC] recv enqueue: receiver=%d ep=%p\n", current->tid, ep);
+
     /* 保存接收 buffer 指针到 ipc_reply_msg(复用字段) */
     current->ipc_reply_msg = msg;
 
     /* 阻塞等待发送者 */
     if (!sched_block_timeout(current, timeout_ms)) {
         /* 超时,从接收队列中移除自己 */
+        pr_debug("[IPC] recv timeout: receiver=%d\n", current->tid);
         spin_lock(&ep->lock);
         struct thread **pp = &ep->recv_queue;
         while (*pp) {
@@ -433,6 +448,8 @@ int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
         /* 唤醒接收者 */
         sched_wakeup_thread(receiver);
 
+        pr_debug("[IPC] async -> recv: sender=%d receiver=%d\n", current->tid, receiver->tid);
+
         return IPC_OK;
     }
 
@@ -464,6 +481,7 @@ int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
     endpoint_poll_wakeup(ep);
 
     spin_unlock(&ep->lock);
+    pr_debug("[IPC] async enqueue: sender=%d\n", current->tid);
     return IPC_OK;
 #else
     uint32_t next_tail = (ep->async_tail + 1) % IPC_ASYNC_QUEUE_SIZE;
@@ -481,6 +499,7 @@ int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
     endpoint_poll_wakeup(ep);
 
     spin_unlock(&ep->lock);
+    pr_debug("[IPC] async enqueue: sender=%d\n", current->tid);
     return IPC_OK;
 #endif
 }
@@ -599,6 +618,7 @@ handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
             spin_lock(&ep->lock);
             if (endpoint_has_message_locked(ep)) {
                 spin_unlock(&ep->lock);
+                pr_debug("[IPC] wait_any ready: tid=%d handle=%d\n", current->tid, handle);
                 return handle; /* 已就绪,直接返回 */
             }
             spin_unlock(&ep->lock);
@@ -615,6 +635,7 @@ handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
             spin_lock(&notif->lock);
             if (notification_has_signal_locked(notif)) {
                 spin_unlock(&notif->lock);
+                pr_debug("[IPC] wait_any ready: tid=%d handle=%d\n", current->tid, handle);
                 return handle; /* 已就绪,直接返回 */
             }
             spin_unlock(&notif->lock);
@@ -651,6 +672,7 @@ handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
     }
 
     /* 阻塞等待 */
+    pr_debug("[IPC] wait_any block: tid=%d count=%d\n", current->tid, set->count);
     if (!sched_block_timeout(current, timeout_ms)) {
         result = HANDLE_INVALID; /* 超时 */
     } else {
@@ -658,6 +680,7 @@ handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
         for (uint32_t i = 0; i < valid_count; i++) {
             if (entries[i].triggered) {
                 result = entries[i].handle;
+                pr_debug("[IPC] wait_any wakeup: tid=%d handle=%d\n", current->tid, result);
                 break;
             }
         }
@@ -711,6 +734,8 @@ int ipc_reply(struct ipc_message *reply) {
     /* 唤醒发送者 */
     sched_wakeup_thread(sender);
 
+    pr_debug("[IPC] reply: sender=%d receiver=%d\n", current->tid, sender->tid);
+
     return IPC_OK;
 }
 
@@ -744,6 +769,8 @@ int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply) {
 
     /* 唤醒发送者 */
     sched_wakeup_thread(sender);
+
+    pr_debug("[IPC] reply_to: sender=%d receiver=%d\n", current->tid, sender->tid);
 
     return IPC_OK;
 }

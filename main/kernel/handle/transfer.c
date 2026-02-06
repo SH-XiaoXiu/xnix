@@ -4,6 +4,7 @@
 #include <xnix/handle.h>
 #include <xnix/physmem.h>
 #include <xnix/process_def.h>
+#include <xnix/stdio.h>
 #include <xnix/string.h>
 
 /* 前向声明:内部函数 */
@@ -63,6 +64,9 @@ handle_t handle_transfer(struct process *src, handle_t src_h, struct process *ds
             break;
         }
     }
+
+    pr_debug("[HANDLE] transfer: %d:%d -> %d:%d type=%d name=%s\n", src->pid, src_h, dst->pid,
+             dst_h, type, dst_name);
 
     return dst_h;
 }

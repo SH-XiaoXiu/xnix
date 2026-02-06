@@ -88,8 +88,8 @@ void process_terminate_current(int signal) {
         panic("Init process terminated by signal %d!", signal);
     }
 
-    pr_info("Process %d '%s' terminated (signal %d)", proc->pid, proc->name ? proc->name : "?",
-            signal);
+    pr_debug("[PROC] terminate: pid=%d name=%s signal=%d\n", proc->pid,
+             proc->name ? proc->name : "?", signal);
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = -signal;
@@ -116,8 +116,8 @@ void process_exit(struct process *proc, int exit_code) {
         return;
     }
 
-    kprintf("[exit] Process '%s' (pid=%d) exiting with code %d\n", proc->name, proc->pid,
-            exit_code);
+    pr_debug("[PROC] exit: pid=%d name=%s code=%d\n", proc->pid, proc->name ? proc->name : "?",
+             exit_code);
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = exit_code;
@@ -181,6 +181,8 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
             found->next_sibling = NULL;
             process_unref(found);
             current->wait_chan = NULL;
+            pr_debug("[PROC] waitpid: parent=%d reaped child=%d status=%d\n", current->pid, ret_pid,
+                     found->exit_code);
             return ret_pid;
         }
 
@@ -195,6 +197,7 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
         }
 
         /* 阻塞等待子进程退出 */
+        pr_debug("[PROC] waitpid: parent=%d waiting...\n", current->pid);
         sched_block(current->wait_chan);
     }
 }
@@ -219,6 +222,8 @@ int process_kill(pid_t pid, int sig) {
     uint32_t flags = cpu_irq_save();
     proc->pending_signals |= sigmask(sig);
     cpu_irq_restore(flags);
+
+    pr_debug("[PROC] kill: target=%d sig=%d from=%d\n", pid, sig, process_get_current()->pid);
 
     /* 唤醒进程的主线程处理信号 */
     struct thread *t = proc->threads;

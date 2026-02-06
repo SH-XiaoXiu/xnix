@@ -147,7 +147,9 @@ void *alloc_page(void) {
             bitmap_set(i);
             now_free_pages--;
             spin_unlock_irqrestore(&page_lock, flags);
-            return (void *)(memory_start + i * PAGE_SIZE);
+            void *p = (void *)(memory_start + i * PAGE_SIZE);
+            pr_debug("[MM] alloc_page: pfn=%d addr=%p\n", i, p);
+            return p;
         }
     }
 
@@ -163,7 +165,9 @@ void *alloc_page_high(void) {
             bitmap_set(i);
             now_free_pages--;
             spin_unlock_irqrestore(&page_lock, flags);
-            return (void *)(memory_start + i * PAGE_SIZE);
+            void *p = (void *)(memory_start + i * PAGE_SIZE);
+            pr_debug("[MM] alloc_page_high: pfn=%d addr=%p\n", i, p);
+            return p;
         }
     }
 
@@ -195,7 +199,9 @@ void *alloc_pages(uint32_t count) {
                 }
                 now_free_pages -= count;
                 spin_unlock_irqrestore(&page_lock, flags);
-                return (void *)(memory_start + start_pfn * PAGE_SIZE);
+                void *p = (void *)(memory_start + start_pfn * PAGE_SIZE);
+                pr_debug("[MM] alloc_pages: count=%d pfn=%d addr=%p\n", count, start_pfn, p);
+                return p;
             }
         } else {
             consecutive = 0;
@@ -233,6 +239,7 @@ void free_page(void *page) {
     bitmap_clear(pfn);
     now_free_pages++;
     spin_unlock_irqrestore(&page_lock, flags);
+    pr_debug("[MM] free_page: pfn=%d addr=%p\n", pfn, page);
 }
 
 void free_pages(void *page, uint32_t count) {
