@@ -68,12 +68,13 @@ foreach (DEMO_DIR ${DEMO_DIRS})
     target_compile_options(${DEMO_ELF} PRIVATE ${USER_C_FLAGS})
     target_include_directories(${DEMO_ELF} PRIVATE
             ${CMAKE_SOURCE_DIR}/user/libs/libc/include
+            ${CMAKE_SOURCE_DIR}/user/libs/libipc/include
             ${CMAKE_SOURCE_DIR}/user/libs/libpthread/include
             ${CMAKE_SOURCE_DIR}/user/libs/libudm/include
             ${CMAKE_SOURCE_DIR}/main/include
             ${CMAKE_BINARY_DIR}/include
     )
-    target_link_libraries(${DEMO_ELF} PRIVATE c serial)
+    target_link_libraries(${DEMO_ELF} PRIVATE c serial ipc)
     if (TARGET pthread)
         target_link_libraries(${DEMO_ELF} PRIVATE pthread)
     endif ()

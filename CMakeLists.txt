@@ -96,6 +96,7 @@ set(CFG_HANDLE_TABLE_SIZE 1024 CACHE STRING "Handle table initial size")
 option(CFG_IPC_MSG_POOL "Enable IPC global message pool for async buffering" ON)
 set(CFG_IPC_ASYNC_QUEUE_SIZE 64 CACHE STRING "Endpoint async queue size (when msg_pool is OFF)")
 set(CFG_IPC_KMSG_GROW_CHUNK 128 CACHE STRING "IPC kmsg pool grow chunk (when msg_pool is ON)")
+set(CFG_IPC_MAX_BUF 65536 CACHE STRING "Max IPC user buffer size (bytes)")
 
 # ============================================
 # IRQ 配置
@@ -118,7 +119,7 @@ set(CFG_KMSG_MAX_LINE 256 CACHE STRING "Kernel log max line length")
 # 调试配置
 # ============================================
 option(CFG_DEBUG "Enable kernel debug logging" OFF)
-option(CONFIG_DEBUG_CONSOLE "Enable SYS_DEBUG_PUT syscall for early debugging" ON)
+option(CONFIG_DEBUG_CONSOLE "Enable SYS_DEBUG_WRITE syscall for early debugging" ON)
 
 # ============================================
 # 打包配置
@@ -169,7 +170,7 @@ file(GLOB_RECURSE PERM_C "${CMAKE_SOURCE_DIR}/main/kernel/perm/*.c")
 list(APPEND KERNEL_CORE_SOURCES ${PERM_C})
 
 # Handle System
-file(GLOB_RECURSE HANDLE_C "${CMAKE_SOURCE_DIR}/main/kernel/handle/*.c")
+file(GLOB_RECURSE HANDLE_C CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/main/kernel/handle/*.c")
 list(APPEND KERNEL_CORE_SOURCES ${HANDLE_C})
 
 if (CFG_ENABLE_INPUT)
