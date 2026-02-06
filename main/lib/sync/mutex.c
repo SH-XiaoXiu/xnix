@@ -11,8 +11,8 @@
  *   3. 释放时唤醒一个等待者
  */
 
-#include <sync/sync_def.h>
 #include <xnix/mm.h>
+#include <xnix/sync_def.h>
 #include <xnix/thread.h>
 
 mutex_t *mutex_create(void) {

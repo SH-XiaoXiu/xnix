@@ -10,8 +10,8 @@
 
 #include <asm/irq_defs.h>
 #include <asm/syscall.h>
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
+#include <xnix/process_def.h>
+#include <xnix/thread_def.h>
 
 /**
  * x86 系统调用处理函数(由 isr.s 调用)

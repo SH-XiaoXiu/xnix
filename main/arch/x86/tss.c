@@ -8,8 +8,8 @@
  */
 
 #include <arch/smp.h>
-#include <arch/x86/tss.h>
 
+#include <asm/tss.h>
 #include <xnix/config.h>
 #include <xnix/percpu.h>
 #include <xnix/string.h>

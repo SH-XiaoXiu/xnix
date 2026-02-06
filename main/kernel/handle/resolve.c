@@ -1,6 +1,6 @@
-#include <kernel/process/process.h>
 #include <xnix/handle.h>
 #include <xnix/perm.h>
+#include <xnix/process_def.h>
 #include <xnix/string.h>
 
 /**

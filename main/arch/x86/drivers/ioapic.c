@@ -10,8 +10,8 @@
 
 #include <asm/apic.h>
 #include <asm/smp_defs.h>
-#include <kernel/irq/irq.h>
 #include <xnix/driver.h>
+#include <xnix/irq.h>
 #include <xnix/stdio.h>
 #include <xnix/vmm.h>
 

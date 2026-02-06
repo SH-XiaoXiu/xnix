@@ -5,20 +5,20 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/ipc/endpoint.h>
-#include <kernel/ipc/msg_pool.h>
-#include <kernel/ipc/notification.h>
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
+#include <ipc/endpoint.h>
+#include <ipc/msg_pool.h>
+#include <ipc/notification.h>
 #include <xnix/config.h>
 #include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/perm.h>
 #include <xnix/process.h>
+#include <xnix/process_def.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
 #include <xnix/thread.h>
+#include <xnix/thread_def.h>
 
 /*
  * 前向声明

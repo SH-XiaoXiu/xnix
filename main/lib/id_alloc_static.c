@@ -8,11 +8,11 @@
  * 当 CFG_TID_DYNAMIC=ON 时,kernel/sched/tid.c 中的强符号会覆盖这些实现.
  */
 
-#include <kernel/sched/tid.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/sync.h>
+#include <xnix/tid.h>
 
 /*
  * 静态 TID 分配器

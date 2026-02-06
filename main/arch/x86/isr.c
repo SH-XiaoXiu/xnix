@@ -7,10 +7,10 @@
 #include <asm/apic.h>
 #include <asm/irq.h>
 #include <asm/irq_defs.h>
-#include <kernel/irq/irq.h>
-#include <kernel/sched/sched.h>
 #include <xnix/debug.h>
+#include <xnix/irq.h>
 #include <xnix/stdio.h>
+#include <xnix/thread_def.h>
 #include <xnix/types.h>
 #include <xnix/vmm.h>
 

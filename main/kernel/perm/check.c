@@ -1,5 +1,5 @@
-#include <kernel/process/process.h>
 #include <xnix/perm.h>
+#include <xnix/process_def.h>
 
 /**
  * 检查进程是否拥有权限(热路径)

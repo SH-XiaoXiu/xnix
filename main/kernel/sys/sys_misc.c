@@ -3,7 +3,7 @@
  * @brief 杂项系统调用(编号:900-999)
  */
 
-#include <kernel/sys/syscall.h>
+#include <sys/syscall.h>
 #include <xnix/console.h>
 #include <xnix/errno.h>
 #include <xnix/stdio.h>

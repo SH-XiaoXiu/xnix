@@ -3,15 +3,17 @@
  * @brief 进程生命周期(退出,等待,信号)
  */
 
+#include "process_internal.h"
+
 #include <arch/cpu.h>
 
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
 #include <xnix/debug.h>
 #include <xnix/errno.h>
+#include <xnix/process_def.h>
 #include <xnix/signal.h>
 #include <xnix/stdio.h>
 #include <xnix/thread.h>
+#include <xnix/thread_def.h>
 
 /**
  * 终止进程的所有其他线程
@@ -114,7 +116,8 @@ void process_exit(struct process *proc, int exit_code) {
         return;
     }
 
-    kprintf("[exit] Process '%s' (pid=%d) exiting with code %d\n", proc->name, proc->pid, exit_code);
+    kprintf("[exit] Process '%s' (pid=%d) exiting with code %d\n", proc->name, proc->pid,
+            exit_code);
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = exit_code;

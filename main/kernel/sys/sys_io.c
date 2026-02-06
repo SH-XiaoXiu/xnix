@@ -5,7 +5,7 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/sys/syscall.h>
+#include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/perm.h>
 #include <xnix/process.h>

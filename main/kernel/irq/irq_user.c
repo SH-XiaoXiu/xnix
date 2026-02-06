@@ -6,12 +6,12 @@
  */
 
 #include <asm/irq.h>
-#include <kernel/ipc/notification.h>
-#include <kernel/irq/irq.h>
-#include <kernel/sched/sched.h>
+#include <ipc/notification.h>
 #include <xnix/config.h>
 #include <xnix/errno.h>
+#include <xnix/irq.h>
 #include <xnix/sync.h>
+#include <xnix/thread_def.h>
 
 /**
  * IRQ 用户态绑定信息

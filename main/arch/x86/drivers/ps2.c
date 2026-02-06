@@ -7,7 +7,7 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/irq/irq.h>
+#include <xnix/irq.h>
 #include <xnix/stdio.h>
 
 #define PS2_DATA_PORT   0x60

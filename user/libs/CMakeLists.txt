@@ -23,6 +23,17 @@ if (NOT XNIX_BUILD_LIBS)
     return()
 endif ()
 
+# ============================================
+# crt0 启动代码 (Object Library)
+# ============================================
+# 所有用户态程序的启动代码
+# 使用 .S (大写) 以启用 C 预处理器来处理 #include 指令
+add_library(crt0 OBJECT ${CMAKE_CURRENT_SOURCE_DIR}/libc/src/crt0.S)
+target_compile_options(crt0 PRIVATE ${USER_C_FLAGS})
+target_include_directories(crt0 PRIVATE ${CMAKE_SOURCE_DIR}/sdk/include)
+
+message(STATUS "Created crt0 object library from libc/src/crt0.s")
+
 # 自动发现所有库子目录
 file(GLOB LIB_DIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/*)
 

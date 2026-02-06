@@ -10,8 +10,8 @@
 
 #include <drivers/timer.h>
 
-#include <kernel/irq/irq.h>
 #include <xnix/driver.h>
+#include <xnix/irq.h>
 
 #define PIT_CHANNEL0      0x40
 #define PIT_CHANNEL2_DATA 0x42

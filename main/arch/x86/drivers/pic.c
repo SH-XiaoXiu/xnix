@@ -8,8 +8,8 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/irq/irq.h>
 #include <xnix/driver.h>
+#include <xnix/irq.h>
 
 #define PIC1_CMD  0x20
 #define PIC1_DATA 0x21

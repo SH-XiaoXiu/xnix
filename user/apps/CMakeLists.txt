@@ -63,7 +63,7 @@ foreach (APP_DIR ${APP_DIRS})
 
     # 创建可执行文件
     add_executable(${APP_ELF}
-            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.S
+            $<TARGET_OBJECTS:crt0>
             ${APP_SOURCES}
     )
 

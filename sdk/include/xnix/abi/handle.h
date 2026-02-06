@@ -20,6 +20,11 @@ typedef uint32_t handle_t;
 #define HANDLE_INVALID ((handle_t) - 1)
 
 /**
+ * @brief Handle 名称最大长度(包含 '\0')
+ */
+#define HANDLE_NAME_MAX 16
+
+/**
  * @brief Handle 对象类型枚举
  */
 typedef enum {
@@ -39,8 +44,8 @@ typedef enum {
  * 传递给子进程.
  */
 struct spawn_handle {
-    handle_t src;      /* 父进程中的 handle */
-    char     name[16]; /* 子进程中的 handle 名称 */
+    handle_t src;                 /* 父进程中的 handle */
+    char     name[HANDLE_NAME_MAX]; /* 子进程中的 handle 名称 */
 };
 
 #endif /* XNIX_ABI_HANDLE_H */

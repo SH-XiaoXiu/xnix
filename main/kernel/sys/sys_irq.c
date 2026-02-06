@@ -3,11 +3,11 @@
  * @brief IRQ 绑定系统调用
  */
 
-#include <kernel/ipc/notification.h>
-#include <kernel/irq/irq.h>
-#include <kernel/sys/syscall.h>
+#include <ipc/notification.h>
+#include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/handle.h>
+#include <xnix/irq.h>
 #include <xnix/perm.h>
 #include <xnix/process.h>
 #include <xnix/stdio.h>

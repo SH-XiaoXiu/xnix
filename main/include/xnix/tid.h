@@ -1,10 +1,12 @@
 /**
  * @file tid.h
  * @brief TID 资源管理接口
+ *
+ * 此文件位于共享层,供 kernel 和 lib 等组件使用.
  */
 
-#ifndef KERNEL_SCHED_TID_H
-#define KERNEL_SCHED_TID_H
+#ifndef XNIX_TID_H
+#define XNIX_TID_H
 
 #include <xnix/types.h>
 

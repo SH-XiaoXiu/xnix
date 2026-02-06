@@ -3,14 +3,16 @@
  * @brief 线程阻塞和唤醒机制实现
  */
 
+#include "sched_internal.h"
+
 #include <arch/smp.h>
 
 #include <drivers/timer.h>
 
 #include <asm/irq.h>
-#include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/sync.h>
+#include <xnix/thread_def.h>
 
 /* 阻塞线程链表(等待唤醒) */
 static struct thread *blocked_list = NULL;

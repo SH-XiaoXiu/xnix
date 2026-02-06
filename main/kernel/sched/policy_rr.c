@@ -8,7 +8,9 @@
  * - FIFO 队列,公平轮转
  */
 
-#include <kernel/sched/sched.h>
+#include "sched_internal.h"
+
+#include <xnix/thread_def.h>
 
 /* 时间片长度(tick 数) */
 #define RR_TIMESLICE 10

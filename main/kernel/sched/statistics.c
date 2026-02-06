@@ -3,7 +3,9 @@
  * @brief 调度器统计信息
  */
 
-#include <kernel/sched/sched.h>
+#include "sched_internal.h"
+
+#include <xnix/thread_def.h>
 
 /* 系统统计变量 */
 static uint64_t global_ticks = 0; /* 全局 tick 计数 */

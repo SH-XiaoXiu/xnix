@@ -11,8 +11,8 @@
  *   - count=N: 限制并发数(连接池,缓冲区槽位)
  */
 
-#include <sync/sync_def.h>
 #include <xnix/mm.h>
+#include <xnix/sync_def.h>
 #include <xnix/thread.h>
 
 semaphore_t *semaphore_create(int count) {

@@ -3,18 +3,20 @@
  * @brief 进程加载和启动
  */
 
+#include "process_internal.h"
+
 #include <arch/cpu.h>
 
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
 #include <xnix/boot.h>
 #include <xnix/debug.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
 #include <xnix/perm.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
+#include <xnix/thread_def.h>
 
 /* 声明 vmm_kmap/kunmap */
 extern void *vmm_kmap(paddr_t paddr);

@@ -21,9 +21,9 @@
  * 存储 handle 与内核对象的映射关系,以及访问权限.
  */
 struct handle_entry {
-    handle_type_t type;     /* 对象类型 */
-    void         *object;   /* 内核对象指针 */
-    char          name[16]; /* 可选名称(用于按名查找) */
+    handle_type_t type;                   /* 对象类型 */
+    void         *object;                 /* 内核对象指针 */
+    char          name[HANDLE_NAME_MAX]; /* 可选名称(用于按名查找) */
 
     /* 缓存的权限 ID(用于加速 syscall 检查) */
     perm_id_t perm_send; /* 用于 HANDLE_ENDPOINT: 发送权限 */

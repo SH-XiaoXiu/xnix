@@ -9,9 +9,9 @@
  * - 进程退出时自动清理所有锁资源
  */
 
-#include <kernel/process/process.h>
-#include <kernel/sys/syscall.h>
+#include <sys/syscall.h>
 #include <xnix/errno.h>
+#include <xnix/process_def.h>
 #include <xnix/sync.h>
 #include <xnix/syscall.h>
 

@@ -2,11 +2,12 @@
  * @file sync_def.h
  * @brief 同步原语完整定义
  *
- * 公共 API 见 <xnix/sync.h>
+ * 此文件位于共享层,供 lib/sync/ 和其他需要访问同步对象完整定义的组件使用.
+ * 公共 opaque API 见 <xnix/sync.h>
  */
 
-#ifndef KERNEL_LIB_SYNC_DEF_H
-#define KERNEL_LIB_SYNC_DEF_H
+#ifndef XNIX_SYNC_DEF_H
+#define XNIX_SYNC_DEF_H
 
 #include <xnix/sync.h>
 

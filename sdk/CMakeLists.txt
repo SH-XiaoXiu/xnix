@@ -3,7 +3,6 @@
 # 该 SDK 提供了内核与用户空间之间的稳定接口。
 # 组件包括：
 #   - 公共 ABI 头文件（系统调用、句柄、IPC 等）
-#   - 运行时启动代码 (crt0.s)
 #   - 系统调用包装库 (libxnix.a)
 
 cmake_minimum_required(VERSION 3.16)
@@ -35,10 +34,6 @@ target_include_directories(xnix_sdk INTERFACE
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix
         DESTINATION include
         FILES_MATCHING PATTERN "*.h")
-
-# 安装启动代码
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/lib/crt0.S
-        DESTINATION lib)
 
 # 导出目标供其他项目使用
 export(TARGETS xnix_sdk

@@ -9,13 +9,13 @@
  * - join 使用 wait_chan 机制阻塞等待,退出时唤醒 joiner
  */
 
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
-#include <kernel/sys/syscall.h>
+#include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
+#include <xnix/process_def.h>
 #include <xnix/syscall.h>
+#include <xnix/thread_def.h>
 #include <xnix/usraccess.h>
 
 extern void enter_user_mode(uint32_t eip, uint32_t esp);

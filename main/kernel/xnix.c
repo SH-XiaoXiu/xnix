@@ -9,20 +9,20 @@
 #include <drivers/timer.h>
 
 #include <asm/multiboot.h>
-#include <kernel/io/ioport.h>
-#include <kernel/irq/irq.h>
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
-#include <kernel/sys/syscall.h>
+#include <io/ioport.h>
+#include <sys/syscall.h>
 #include <xnix/abi/process.h>
 #include <xnix/boot.h>
 #include <xnix/config.h>
 #include <xnix/console.h>
 #include <xnix/driver.h>
 #include <xnix/ipc.h>
+#include <xnix/irq.h>
 #include <xnix/mm.h>
 #include <xnix/perm.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
+#include <xnix/thread_def.h>
 
 #include "xnix/debug.h"
 

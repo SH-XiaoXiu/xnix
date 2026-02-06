@@ -1,12 +1,12 @@
 #include <arch/cpu.h>
-#include <arch/x86/gdt.h>
-#include <arch/x86/tss.h>
 
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
+#include <asm/gdt.h>
+#include <asm/tss.h>
 #include <xnix/mm_ops.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h> /* pr_info */
-#include <xnix/vmm.h>   /* vmm_get_kernel_pd, vmm_switch_pd */
+#include <xnix/thread_def.h>
+#include <xnix/vmm.h> /* vmm_get_kernel_pd, vmm_switch_pd */
 
 void arch_thread_switch(struct thread *next) {
     const struct mm_operations *mm = mm_get_ops();

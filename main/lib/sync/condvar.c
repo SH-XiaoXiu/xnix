@@ -14,8 +14,8 @@
  *   如果先 unlock 再 sleep,可能在这之间错过 signal
  */
 
-#include <sync/sync_def.h>
 #include <xnix/mm.h>
+#include <xnix/sync_def.h>
 #include <xnix/thread.h>
 
 condvar_t *condvar_create(void) {

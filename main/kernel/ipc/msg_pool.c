@@ -1,4 +1,4 @@
-#include <kernel/ipc/msg_pool.h>
+#include <ipc/msg_pool.h>
 #include <xnix/config.h>
 #include <xnix/mm.h>
 #include <xnix/stdio.h>

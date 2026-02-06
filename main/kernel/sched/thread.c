@@ -3,17 +3,19 @@
  * @brief 线程生命周期管理实现
  */
 
+#include "sched_internal.h"
+
 #include <arch/cpu.h>
 
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
-#include <kernel/sched/tid.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
+#include <xnix/thread_def.h>
+#include <xnix/tid.h>
 
 /* 待清理的已退出线程(切换后释放) */
 static DEFINE_PER_CPU(struct thread *, zombie_thread);

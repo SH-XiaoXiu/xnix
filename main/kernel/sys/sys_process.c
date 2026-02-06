@@ -5,9 +5,9 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
-#include <kernel/sys/syscall.h>
+#include <process/process_internal.h>
+#include <sched/sched_internal.h>
+#include <sys/syscall.h>
 #include <xnix/abi/process.h>
 #include <xnix/boot.h>
 #include <xnix/errno.h>
@@ -16,10 +16,12 @@
 #include <xnix/percpu.h>
 #include <xnix/perm.h>
 #include <xnix/process.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
 #include <xnix/syscall.h>
+#include <xnix/thread_def.h>
 #include <xnix/usraccess.h>
 
 extern void thread_exit(int code);

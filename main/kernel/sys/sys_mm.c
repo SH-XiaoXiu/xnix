@@ -3,14 +3,14 @@
  * @brief 内存管理系统调用
  */
 
-#include <kernel/process/process.h>
-#include <kernel/sys/syscall.h>
+#include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
 #include <xnix/perm.h>
 #include <xnix/physmem.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/syscall.h>
@@ -190,8 +190,8 @@ static int32_t sys_mmap_phys(const uint32_t *args) {
  * - [27-31] reserved
  */
 static int32_t sys_physmem_info(const uint32_t *args) {
-    handle_t  handle   = (handle_t)args[0];
-    uint8_t  *info_ptr = (uint8_t *)(uintptr_t)args[1];
+    handle_t handle   = (handle_t)args[0];
+    uint8_t *info_ptr = (uint8_t *)(uintptr_t)args[1];
 
     struct process *proc = process_get_current();
     if (!proc || !info_ptr) {
@@ -215,13 +215,13 @@ static int32_t sys_physmem_info(const uint32_t *args) {
         *(uint32_t *)(info_ptr + 8)  = region->fb_info.width;
         *(uint32_t *)(info_ptr + 12) = region->fb_info.height;
         *(uint32_t *)(info_ptr + 16) = region->fb_info.pitch;
-        info_ptr[20]                  = region->fb_info.bpp;
-        info_ptr[21]                  = region->fb_info.red_pos;
-        info_ptr[22]                  = region->fb_info.red_size;
-        info_ptr[23]                  = region->fb_info.green_pos;
-        info_ptr[24]                  = region->fb_info.green_size;
-        info_ptr[25]                  = region->fb_info.blue_pos;
-        info_ptr[26]                  = region->fb_info.blue_size;
+        info_ptr[20]                 = region->fb_info.bpp;
+        info_ptr[21]                 = region->fb_info.red_pos;
+        info_ptr[22]                 = region->fb_info.red_size;
+        info_ptr[23]                 = region->fb_info.green_pos;
+        info_ptr[24]                 = region->fb_info.green_size;
+        info_ptr[25]                 = region->fb_info.blue_pos;
+        info_ptr[26]                 = region->fb_info.blue_size;
     }
 
     return 0;

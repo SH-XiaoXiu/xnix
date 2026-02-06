@@ -64,7 +64,7 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
     endif ()
 
     add_executable(${DRIVER_ELF}
-            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.S
+            $<TARGET_OBJECTS:crt0>
             ${DRIVER_SOURCES}
             ${SERVER_EXTRA_SOURCES}
     )

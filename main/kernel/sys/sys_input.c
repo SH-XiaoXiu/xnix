@@ -6,7 +6,7 @@
  * 此文件保留为空桩,未来可能完全移除.
  */
 
-#include <kernel/sys/syscall.h>
+#include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/syscall.h>
 #include <xnix/types.h>

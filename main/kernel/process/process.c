@@ -3,18 +3,20 @@
  * @brief 进程核心管理实现
  */
 
+#include "process_internal.h"
+
 #include <arch/cpu.h>
 
-#include <kernel/process/process.h>
-#include <kernel/sched/sched.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
 #include <xnix/perm.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
+#include <xnix/thread_def.h>
 
 /* 全局进程链表 */
 struct process *process_list = NULL;

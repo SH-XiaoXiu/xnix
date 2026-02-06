@@ -3,13 +3,13 @@
  * @brief 物理内存区域 (HANDLE_PHYSMEM) 实现
  */
 
-#include <kernel/process/process.h>
 #include <xnix/abi/framebuffer.h>
 #include <xnix/boot.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
 #include <xnix/physmem.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/vmm.h>

@@ -3,10 +3,10 @@
  * @brief ELF32 加载器实现
  */
 
-#include <kernel/process/process.h>
 #include <xnix/errno.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/vmm.h>

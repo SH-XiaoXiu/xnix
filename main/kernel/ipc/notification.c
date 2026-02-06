@@ -5,15 +5,15 @@
 
 #include <arch/cpu.h>
 
-#include <kernel/ipc/endpoint.h>
-#include <kernel/ipc/notification.h>
-#include <kernel/sched/sched.h>
+#include <ipc/endpoint.h>
+#include <ipc/notification.h>
 #include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
 #include <xnix/process.h>
 #include <xnix/stdio.h>
 #include <xnix/sync.h>
+#include <xnix/thread_def.h>
 
 /*
  * Notification 对象管理

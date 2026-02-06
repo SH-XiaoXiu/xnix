@@ -1,13 +1,16 @@
 /**
- * @file process.h
- * @brief 进程完整定义
+ * @file process_def.h
+ * @brief 进程完整定义和跨子系统进程 API
  *
  * 进程是资源容器,包含地址空间,能力表,线程列表等.
- * 公共 API 见 <xnix/process.h>
+ * 此文件位于共享层,供 arch,lib,kernel 等所有组件使用.
+ *
+ * 公共 opaque API 见 <xnix/process.h>
+ * 进程管理私有 API 见 <process/process_internal.h> (仅 kernel/process/ 和 kernel/sys/)
  */
 
-#ifndef KERNEL_PROCESS_H
-#define KERNEL_PROCESS_H
+#ifndef XNIX_PROCESS_DEF_H
+#define XNIX_PROCESS_DEF_H
 
 #include <xnix/abi/process.h>
 #include <xnix/handle.h>
@@ -220,13 +223,5 @@ int process_kill(pid_t pid, int sig);
  * 在返回用户态前调用
  */
 void process_check_signals(void);
-
-/* 内部变量(跨文件共享) */
-extern struct process *process_list;
-extern spinlock_t      process_list_lock;
-extern struct process  kernel_process;
-
-/* 内部函数 */
-void free_pid(pid_t pid);
 
 #endif

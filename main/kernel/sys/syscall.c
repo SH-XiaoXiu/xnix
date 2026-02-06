@@ -5,7 +5,7 @@
 
 #include <arch/syscall.h>
 
-#include <kernel/sys/syscall.h>
+#include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>

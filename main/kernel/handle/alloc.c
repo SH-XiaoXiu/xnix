@@ -1,11 +1,12 @@
 #include <arch/mmu.h>
-#include <kernel/ipc/endpoint.h>
-#include <kernel/process/process.h>
+
+#include <ipc/endpoint.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/perm.h>
 #include <xnix/physmem.h>
 #include <xnix/process.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 

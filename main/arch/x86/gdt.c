@@ -16,9 +16,8 @@
  *   ...
  */
 
-#include <arch/x86/gdt.h>
-#include <arch/x86/tss.h>
-
+#include <asm/gdt.h>
+#include <asm/tss.h>
 #include <xnix/config.h>
 #include <xnix/types.h>
 

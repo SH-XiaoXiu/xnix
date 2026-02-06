@@ -3,19 +3,21 @@
  * @brief 调度器核心实现
  */
 
+#include "sched_internal.h"
+
 #include <arch/cpu.h>
 #include <arch/smp.h>
 
 #include <asm/irq.h>
-#include <kernel/irq/irq.h>
-#include <kernel/sched/sched.h>
-#include <kernel/sched/tid.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/errno.h>
 #include <xnix/handle.h>
+#include <xnix/irq.h>
 #include <xnix/stdio.h>
 #include <xnix/sync.h>
+#include <xnix/thread_def.h>
+#include <xnix/tid.h>
 
 /* 上下文切换函数(汇编实现) */
 extern void context_switch(struct thread_context *old, struct thread_context *new);

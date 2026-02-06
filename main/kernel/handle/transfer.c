@@ -1,8 +1,9 @@
 #include <arch/mmu.h>
-#include <kernel/ipc/endpoint.h>
-#include <kernel/process/process.h>
+
+#include <ipc/endpoint.h>
 #include <xnix/handle.h>
 #include <xnix/physmem.h>
+#include <xnix/process_def.h>
 #include <xnix/string.h>
 
 /* 前向声明:内部函数 */

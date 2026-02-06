@@ -63,7 +63,7 @@ foreach (BIN_DIR ${BIN_DIRS})
 
     # 创建可执行文件
     add_executable(bin_${BIN_ELF}
-            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.S
+            $<TARGET_OBJECTS:crt0>
             ${BIN_SOURCES}
     )
 

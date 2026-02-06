@@ -6,7 +6,7 @@
  */
 
 #include <asm/irq.h>
-#include <kernel/irq/irq.h>
+#include <xnix/irq.h>
 
 static const struct irqchip_ops *current_chip               = NULL;
 static irq_handler_t             irq_handlers[ARCH_NR_IRQS] = {0};

@@ -1,6 +1,6 @@
 #include <arch/cpu.h>
 
-#include <kernel/io/ioport.h>
+#include <io/ioport.h>
 #include <xnix/mm.h>
 
 void ioport_init(void) {

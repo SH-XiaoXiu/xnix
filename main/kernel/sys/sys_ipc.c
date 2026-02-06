@@ -3,9 +3,9 @@
  * @brief IPC 相关系统调用
  */
 
-#include <kernel/ipc/endpoint.h>
-#include <kernel/ipc/notification.h>
-#include <kernel/sys/syscall.h>
+#include <ipc/endpoint.h>
+#include <ipc/notification.h>
+#include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>

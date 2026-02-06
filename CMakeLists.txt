@@ -111,46 +111,61 @@ configure_file(
 )
 
 # ============================================
-# 内核源文件
+# 内核源文件（分组为 4 个 object library）
 # ============================================
-set(KERNEL_REQUIRED_DIRS boot mm sched irq sys process hal exec udm)
-set(KERNEL_SOURCES "")
 
-list(APPEND KERNEL_SOURCES "${CMAKE_SOURCE_DIR}/main/kernel/xnix.c")
+# ─── 共享 include 路径 ───
+set(SHARED_INCLUDES
+        ${CMAKE_SOURCE_DIR}/sdk/include      # <xnix/abi/xxx.h>
+        ${CMAKE_SOURCE_DIR}/main/include     # <xnix/xxx.h> <arch/xxx.h> <drivers/xxx.h>
+        ${ARCH_DIR}/include                  # <asm/xxx.h>
+        ${CMAKE_BINARY_DIR}/include          # <xnix/config.h>
+)
+
+# ─── 1. Kernel Core 源文件 ───
+set(KERNEL_REQUIRED_DIRS boot mm sched irq sys process hal exec udm)
+set(KERNEL_CORE_SOURCES "")
+
+list(APPEND KERNEL_CORE_SOURCES "${CMAKE_SOURCE_DIR}/main/kernel/xnix.c")
 
 foreach (SUBDIR ${KERNEL_REQUIRED_DIRS})
     file(GLOB_RECURSE SUBDIR_C "${CMAKE_SOURCE_DIR}/main/kernel/${SUBDIR}/*.c")
-    list(APPEND KERNEL_SOURCES ${SUBDIR_C})
+    list(APPEND KERNEL_CORE_SOURCES ${SUBDIR_C})
 endforeach ()
 
 # 可选子系统
 if (CFG_ENABLE_IPC)
     file(GLOB_RECURSE IPC_C "${CMAKE_SOURCE_DIR}/main/kernel/ipc/*.c")
-    list(APPEND KERNEL_SOURCES ${IPC_C})
+    list(APPEND KERNEL_CORE_SOURCES ${IPC_C})
 endif ()
 
 if (CFG_ENABLE_VFS)
     file(GLOB_RECURSE VFS_C "${CMAKE_SOURCE_DIR}/main/kernel/vfs/*.c")
-    list(APPEND KERNEL_SOURCES ${VFS_C})
+    list(APPEND KERNEL_CORE_SOURCES ${VFS_C})
 endif ()
 
 # Permission System
 file(GLOB_RECURSE PERM_C "${CMAKE_SOURCE_DIR}/main/kernel/perm/*.c")
-list(APPEND KERNEL_SOURCES ${PERM_C})
+list(APPEND KERNEL_CORE_SOURCES ${PERM_C})
 
 # Handle System
 file(GLOB_RECURSE HANDLE_C "${CMAKE_SOURCE_DIR}/main/kernel/handle/*.c")
-list(APPEND KERNEL_SOURCES ${HANDLE_C})
+list(APPEND KERNEL_CORE_SOURCES ${HANDLE_C})
 
 if (CFG_ENABLE_INPUT)
     file(GLOB_RECURSE INPUT_C "${CMAKE_SOURCE_DIR}/main/kernel/io/input.c")
-    list(APPEND KERNEL_SOURCES ${INPUT_C})
+    list(APPEND KERNEL_CORE_SOURCES ${INPUT_C})
 endif ()
 
 file(GLOB_RECURSE IOPORT_C "${CMAKE_SOURCE_DIR}/main/kernel/io/ioport.c")
-list(APPEND KERNEL_SOURCES ${IOPORT_C})
+list(APPEND KERNEL_CORE_SOURCES ${IOPORT_C})
 
-# 库文件
+if (NOT CFG_TID_DYNAMIC)
+    list(FILTER KERNEL_CORE_SOURCES EXCLUDE REGEX ".*/tid\\.c$")
+endif ()
+
+# ─── 2. Lib 源文件 ───
+set(LIB_SOURCES "")
 file(GLOB_RECURSE LIB_C "${CMAKE_SOURCE_DIR}/main/lib/*.c")
 list(FILTER LIB_C EXCLUDE REGEX ".*_static\\.c$")
 list(FILTER LIB_C EXCLUDE REGEX ".*_dynamic\\.c$")
@@ -165,34 +180,56 @@ if (NOT CFG_TID_DYNAMIC)
     list(APPEND LIB_C "${CMAKE_SOURCE_DIR}/main/lib/id_alloc_static.c")
 endif ()
 
-# 驱动和架构代码
-file(GLOB_RECURSE DRIVERS_C "${CMAKE_SOURCE_DIR}/main/drivers/*.c")
+set(LIB_SOURCES ${LIB_C})
+
+# ─── 3. Drivers 源文件 ───
+file(GLOB_RECURSE DRIVER_SOURCES "${CMAKE_SOURCE_DIR}/main/drivers/*.c")
+
+# ─── 4. Arch 源文件 ───
+set(ARCH_SOURCES "")
 file(GLOB_RECURSE ARCH_C "${ARCH_DIR}/*.c")
 file(GLOB_RECURSE ARCH_ASM_LOWER "${ARCH_DIR}/*.s")
 file(GLOB_RECURSE ARCH_ASM_UPPER "${ARCH_DIR}/*.S")
-
-if (NOT CFG_TID_DYNAMIC)
-    list(FILTER KERNEL_SOURCES EXCLUDE REGEX ".*/tid\\.c$")
-endif ()
-
-list(APPEND KERNEL_SOURCES ${LIB_C} ${DRIVERS_C} ${ARCH_C} ${ARCH_ASM_LOWER} ${ARCH_ASM_UPPER})
+list(APPEND ARCH_SOURCES ${ARCH_C} ${ARCH_ASM_LOWER} ${ARCH_ASM_UPPER})
 
 # ============================================
-# 内核目标
+# 内核目标（拆分为 4 个 object library + 1 个可执行文件）
 # ============================================
-add_executable(xnix.elf ${KERNEL_SOURCES})
 
-target_include_directories(xnix.elf PRIVATE
-        ${CMAKE_SOURCE_DIR}/sdk/include          # SDK ABI headers
-        ${CMAKE_SOURCE_DIR}/main/include
-        ${CMAKE_SOURCE_DIR}/main/include/arch
-        ${CMAKE_SOURCE_DIR}/main
-        ${CMAKE_SOURCE_DIR}/main/lib
-        ${CMAKE_BINARY_DIR}/include
-        ${ARCH_DIR}/include
+# ─── arch object library ───
+add_library(arch OBJECT ${ARCH_SOURCES})
+target_include_directories(arch PRIVATE ${SHARED_INCLUDES})
+# arch 不能 include <kernel/...> 或内部头文件
+
+# ─── lib object library ───
+add_library(klib OBJECT ${LIB_SOURCES})
+target_include_directories(klib PRIVATE ${SHARED_INCLUDES})
+# lib 不能 include <kernel/...>
+
+# ─── drivers object library ───
+add_library(kdrivers OBJECT ${DRIVER_SOURCES})
+target_include_directories(kdrivers PRIVATE
+        ${SHARED_INCLUDES}
+)
+# drivers 需要基础类型定义(asm/types.h),但不依赖其他架构特定功能
+
+# ─── kernel object library ───
+add_library(kcore OBJECT ${KERNEL_CORE_SOURCES})
+target_include_directories(kcore PRIVATE
+        ${SHARED_INCLUDES}
+        ${CMAKE_SOURCE_DIR}/main/kernel      # <sched/sched_internal.h> 等内部头文件
+)
+# 只有 kernel 能访问 main/kernel/ 下的内部头文件
+
+# ─── 链接为可执行文件 ───
+add_executable(xnix.elf
+        $<TARGET_OBJECTS:arch>
+        $<TARGET_OBJECTS:klib>
+        $<TARGET_OBJECTS:kdrivers>
+        $<TARGET_OBJECTS:kcore>
 )
 
-# CLion 索引
+# CLion 索引（为了 IDE 导航方便，包含所有头文件）
 file(GLOB_RECURSE ALL_HEADERS "${CMAKE_SOURCE_DIR}/main/*.h")
 target_sources(xnix.elf PRIVATE ${ALL_HEADERS})
 

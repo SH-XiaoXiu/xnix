@@ -1,6 +1,6 @@
 # 使用 libipc 封装，提供 serial_init/write/putchar/set_color API
 add_executable(seriald.elf
-        ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.S
+        $<TARGET_OBJECTS:crt0>
     main.c
     serial.c
 )

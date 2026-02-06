@@ -9,8 +9,8 @@
 #include <arch/cpu.h>
 
 #include <asm/irq_defs.h>
-#include <kernel/irq/irq.h>
 #include <xnix/console.h>
+#include <xnix/irq.h>
 #include <xnix/sync.h>
 #include <xnix/thread.h>
 

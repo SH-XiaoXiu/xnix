@@ -1,15 +1,14 @@
 #include <arch/cpu.h>
 
-#include <kernel/sys/syscall.h>
+#include <sys/syscall.h>
 #include <xnix/abi/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/handle.h>
 #include <xnix/process.h>
+#include <xnix/process_def.h>
+#include <xnix/stdio.h>
 #include <xnix/syscall.h>
 #include <xnix/usraccess.h>
-
-#include "kernel/process/process.h"
-#include "xnix/stdio.h"
 
 /* SYS_HANDLE_CLOSE: ebx=handle */
 static int32_t sys_handle_close(const uint32_t *args) {
@@ -21,7 +20,7 @@ static int32_t sys_handle_close(const uint32_t *args) {
 }
 
 /* SYS_HANDLE_DUPLICATE: ebx=src_handle, ecx=dst_hint, edx=name */
-/* 注意：系统调用参数为 uint32_t name 指针需要进行类型转换。 */
+/* 注意:系统调用参数为 uint32_t name 指针需要进行类型转换. */
 static int32_t sys_handle_duplicate(const uint32_t *args) {
     handle_t        src_h    = (handle_t)args[0];
     handle_t        dst_hint = (handle_t)args[1];
@@ -29,7 +28,7 @@ static int32_t sys_handle_duplicate(const uint32_t *args) {
     struct process *proc     = (struct process *)process_current();
 
     /* 简单的自我复制 */
-    char        name_buf[16];
+    char        name_buf[HANDLE_NAME_MAX];
     const char *final_name = NULL;
 
     if (name) {
@@ -37,8 +36,8 @@ static int32_t sys_handle_duplicate(const uint32_t *args) {
         if (ret < 0) {
             return ret;
         }
-        name_buf[15] = '\0';
-        final_name   = name_buf;
+        name_buf[HANDLE_NAME_MAX - 1] = '\0';
+        final_name                     = name_buf;
     }
 
     handle_t dst_h = handle_transfer(proc, src_h, proc, final_name, dst_hint);
@@ -54,14 +53,14 @@ static int32_t sys_handle_find(const uint32_t *args) {
     const char     *name = (const char *)(uintptr_t)args[0];
     struct process *proc = (struct process *)process_current();
 
-    char name_buf[16];
+    char name_buf[HANDLE_NAME_MAX];
     if (name) {
         int ret = copy_from_user(name_buf, name, sizeof(name_buf));
         if (ret < 0) {
             kprintf("[handle_find] copy_from_user failed for '%s': %d\n", proc->name, ret);
             return ret;
         }
-        name_buf[15] = '\0';
+        name_buf[HANDLE_NAME_MAX - 1] = '\0';
     } else {
         return -EINVAL;
     }

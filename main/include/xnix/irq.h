@@ -1,17 +1,20 @@
 /**
  * @file irq.h
- * @brief 中断请求 (IRQ)
+ * @brief 中断请求 (IRQ) 子系统 API
  * @author XiaoXiu
  * @date 2026-01-22
  *
  * IRQ 子系统负责:
- * 管理中断处理函数表
- * 分发中断到具体 handler
- * 提供中断控制器硬件抽象层
+ * - 管理中断处理函数表
+ * - 分发中断到具体 handler
+ * - 提供中断控制器硬件抽象层
+ * - 用户态 IRQ 绑定 (Notification)
+ *
+ * 此文件位于共享层,供 arch,kernel 等组件使用.
  */
 
-#ifndef KERNEL_IRQ_H
-#define KERNEL_IRQ_H
+#ifndef XNIX_IRQ_H
+#define XNIX_IRQ_H
 
 #include <xnix/types.h>
 

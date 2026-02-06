@@ -3,13 +3,15 @@
  * @brief TID 资源管理实现
  */
 
-#include <kernel/sched/sched.h>
-#include <kernel/sched/tid.h>
+#include "sched_internal.h"
+
 #include <xnix/config.h>
 #include <xnix/debug.h>
 #include <xnix/mm.h>
 #include <xnix/string.h>
 #include <xnix/sync.h>
+#include <xnix/thread_def.h>
+#include <xnix/tid.h>
 
 /* TID Bitmap */
 static uint32_t  *tid_bitmap   = NULL;
