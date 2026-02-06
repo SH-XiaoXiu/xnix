@@ -3,7 +3,6 @@
  * @brief Xnix Shell
  */
 
-#include "acolor.h"
 #include "path.h"
 #include "unistd.h"
 
@@ -16,7 +15,9 @@
 #include <xnix/abi/process.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
+#include <xnix/svc.h>
 #include <xnix/syscall.h>
+#include <xnix/termcolor.h>
 
 #define MAX_LINE 256
 #define MAX_ARGS 16
@@ -263,8 +264,10 @@ static void execute_command(char *line) {
     if (path_find(argv[0], path, sizeof(path))) {
         run_external(path, argc, argv, background);
     } else {
-        printf(ACOLOR_BWHITE "Command not found: %s\n", argv[0]);
-        printf(ACOLOR_BWHITE "Type 'help' for available commands.%s\n", ACOLOR_RESET);
+        termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
+        printf("Command not found: %s\n", argv[0]);
+        printf("Type 'help' for available commands.\n");
+        termcolor_reset(stdout);
     }
 }
 
@@ -452,20 +455,28 @@ int main(int argc, char **argv) {
     path_init();
 
     printf("[shell] init done, entering main loop\n");
+    svc_notify_ready("shell");
 
     printf("\n");
     printf("Xnix Shell\n");
-    printf(ACOLOR_BWHITE "Type 'help' for available commands.%s\n", ACOLOR_RESET);
+    termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
+    printf("Type 'help' for available commands.\n");
+    termcolor_reset(stdout);
     printf("\n");
 
     while (1) {
         char cwd[256];
         if (vfs_getcwd(cwd, sizeof(cwd)) >= 0) {
-            printf(ACOLOR_BWHITE "%s> ", cwd);
+            termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
+            printf("%s> ", cwd);
+            fflush(stdout);
+            termcolor_reset(stdout);
         } else {
-            printf(ACOLOR_BWHITE "> ");
+            termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
+            printf("> ");
+            fflush(stdout);
+            termcolor_reset(stdout);
         }
-        printf(ACOLOR_RESET);
         fflush(NULL);
 
         if (gets_s(line, sizeof(line)) == NULL) {

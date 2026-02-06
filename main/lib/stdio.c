@@ -266,7 +266,18 @@ void klog(int level, const char *fmt, ...) {
     };
 
     if (level >= LOG_ERR && level <= LOG_OK) {
+        static const uint8_t level_fg[] = {
+            EARLY_COLOR_LIGHT_GREY,  /* LOG_NONE */
+            EARLY_COLOR_LIGHT_RED,   /* LOG_ERR */
+            EARLY_COLOR_LIGHT_BROWN, /* LOG_WARN */
+            EARLY_COLOR_WHITE,       /* LOG_INFO */
+            EARLY_COLOR_LIGHT_CYAN,  /* LOG_DBG */
+            EARLY_COLOR_LIGHT_GREEN, /* LOG_OK */
+        };
+
+        early_console_set_color((enum early_console_color)level_fg[level], EARLY_COLOR_BLACK);
         kputs(level_prefix[level]);
+        early_console_reset_color();
     }
 
     kputs(kmsg_text);

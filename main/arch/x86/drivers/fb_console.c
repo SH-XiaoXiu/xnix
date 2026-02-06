@@ -37,16 +37,71 @@ static int      cols     = 0;
 static int      rows     = 0;
 static uint32_t fg_color = 0;
 static uint32_t bg_color = 0;
+static uint8_t  cur_fg   = EARLY_COLOR_LIGHT_GREY;
+static uint8_t  cur_bg   = EARLY_COLOR_BLACK;
 
 /* 早期启动缓冲区(在 framebuffer 映射前保存日志) */
 #define EARLY_BUFFER_SIZE 4096
-static char     early_buffer[EARLY_BUFFER_SIZE];
-static uint32_t early_buffer_pos    = 0;
-static bool     early_buffer_active = true;
+struct fb_early_cell {
+    char    c;
+    uint8_t fg;
+    uint8_t bg;
+};
+static struct fb_early_cell early_buffer[EARLY_BUFFER_SIZE];
+static uint32_t             early_buffer_pos    = 0;
+static bool                 early_buffer_active = true;
 
 /* UTF-8 解码状态 */
 static uint32_t utf8_state     = 0;
 static uint32_t utf8_codepoint = 0;
+
+static uint32_t fb_console_color_to_rgb(uint8_t color) {
+    switch (color & 0x0F) {
+    case EARLY_COLOR_BLACK:
+        return fb_rgb(0x00, 0x00, 0x00);
+    case EARLY_COLOR_BLUE:
+        return fb_rgb(0x00, 0x00, 0xAA);
+    case EARLY_COLOR_GREEN:
+        return fb_rgb(0x00, 0xAA, 0x00);
+    case EARLY_COLOR_CYAN:
+        return fb_rgb(0x00, 0xAA, 0xAA);
+    case EARLY_COLOR_RED:
+        return fb_rgb(0xAA, 0x00, 0x00);
+    case EARLY_COLOR_MAGENTA:
+        return fb_rgb(0xAA, 0x00, 0xAA);
+    case EARLY_COLOR_BROWN:
+        return fb_rgb(0xAA, 0x55, 0x00);
+    case EARLY_COLOR_LIGHT_GREY:
+        return fb_rgb(0xAA, 0xAA, 0xAA);
+    case EARLY_COLOR_DARK_GREY:
+        return fb_rgb(0x55, 0x55, 0x55);
+    case EARLY_COLOR_LIGHT_BLUE:
+        return fb_rgb(0x55, 0x55, 0xFF);
+    case EARLY_COLOR_LIGHT_GREEN:
+        return fb_rgb(0x55, 0xFF, 0x55);
+    case EARLY_COLOR_LIGHT_CYAN:
+        return fb_rgb(0x55, 0xFF, 0xFF);
+    case EARLY_COLOR_LIGHT_RED:
+        return fb_rgb(0xFF, 0x55, 0x55);
+    case EARLY_COLOR_LIGHT_MAGENTA:
+        return fb_rgb(0xFF, 0x55, 0xFF);
+    case EARLY_COLOR_LIGHT_BROWN:
+        return fb_rgb(0xFF, 0xFF, 0x55);
+    case EARLY_COLOR_WHITE:
+        return fb_rgb(0xFF, 0xFF, 0xFF);
+    default:
+        return fb_rgb(0xAA, 0xAA, 0xAA);
+    }
+}
+
+static void fb_console_apply_color(uint8_t fg, uint8_t bg) {
+    cur_fg = fg & 0x0F;
+    cur_bg = bg & 0x0F;
+    if (fb_available()) {
+        fg_color = fb_console_color_to_rgb(cur_fg);
+        bg_color = fb_console_color_to_rgb(cur_bg);
+    }
+}
 
 /**
  * 渲染一个字形
@@ -159,15 +214,21 @@ static void fb_console_late_init(void) {
     cols = fb_get_width() / CHAR_WIDTH;
     rows = fb_get_height() / CHAR_HEIGHT;
 
-    fg_color = fb_rgb(0xAA, 0xAA, 0xAA); /* 浅灰 */
-    bg_color = fb_rgb(0x00, 0x00, 0x00); /* 黑 */
+    fb_console_apply_color(EARLY_COLOR_LIGHT_GREY, EARLY_COLOR_BLACK);
 
     fb_clear(bg_color);
 
     /* 回放早期缓冲区 */
     if (early_buffer_active && early_buffer_pos > 0) {
+        uint8_t last_fg = cur_fg;
+        uint8_t last_bg = cur_bg;
         for (uint32_t i = 0; i < early_buffer_pos; i++) {
-            fb_console_putc_internal(early_buffer[i]);
+            if (early_buffer[i].fg != last_fg || early_buffer[i].bg != last_bg) {
+                fb_console_apply_color(early_buffer[i].fg, early_buffer[i].bg);
+                last_fg = early_buffer[i].fg;
+                last_bg = early_buffer[i].bg;
+            }
+            fb_console_putc_internal(early_buffer[i].c);
         }
     }
     early_buffer_active = false;
@@ -180,7 +241,11 @@ static void fb_console_init(void) {
 static void fb_console_putc(char c) {
     if (!fb_available()) {
         if (early_buffer_active && early_buffer_pos < EARLY_BUFFER_SIZE) {
-            early_buffer[early_buffer_pos++] = c;
+            early_buffer[early_buffer_pos++] = (struct fb_early_cell){
+                .c  = c,
+                .fg = cur_fg,
+                .bg = cur_bg,
+            };
         }
         return;
     }
@@ -188,11 +253,11 @@ static void fb_console_putc(char c) {
 }
 
 static void fb_console_puts(const char *s) {
-    if (!fb_available()) {
+    if (!s) {
         return;
     }
     while (*s) {
-        fb_console_putc_internal(*s++);
+        fb_console_putc(*s++);
     }
 }
 
@@ -205,12 +270,22 @@ static void fb_console_clear(void) {
     cursor_y = 0;
 }
 
+static void fb_console_set_color(uint8_t fg, uint8_t bg) {
+    fb_console_apply_color(fg, bg);
+}
+
+static void fb_console_reset_color(void) {
+    fb_console_apply_color(EARLY_COLOR_LIGHT_GREY, EARLY_COLOR_BLACK);
+}
+
 static struct early_console_backend fb_backend = {
-    .name  = "fb",
-    .init  = fb_console_init,
-    .putc  = fb_console_putc,
-    .puts  = fb_console_puts,
-    .clear = fb_console_clear,
+    .name        = "fb",
+    .init        = fb_console_init,
+    .putc        = fb_console_putc,
+    .puts        = fb_console_puts,
+    .clear       = fb_console_clear,
+    .set_color   = fb_console_set_color,
+    .reset_color = fb_console_reset_color,
 };
 
 void fb_console_register(void) {

@@ -11,6 +11,7 @@
 #include <asm/irq_defs.h>
 #include <xnix/early_console.h>
 #include <xnix/irq.h>
+#include <xnix/stdio.h>
 #include <xnix/sync.h>
 
 /* 串口输出锁,保护多核同时输出 */
@@ -55,6 +56,65 @@ static void serial_puts_sync(const char *s) {
     spin_unlock_irqrestore(&serial_lock, flags);
 }
 
+static int serial_vga_color_to_ansi_fg(uint8_t color) {
+    static const int map[16] = {
+        30, /* black */
+        34, /* blue */
+        32, /* green */
+        36, /* cyan */
+        31, /* red */
+        35, /* magenta */
+        33, /* brown/yellow */
+        37, /* light grey */
+        90, /* dark grey */
+        94, /* light blue */
+        92, /* light green */
+        96, /* light cyan */
+        91, /* light red */
+        95, /* light magenta */
+        93, /* light brown/yellow */
+        97, /* white */
+    };
+    return map[color & 0x0F];
+}
+
+static int serial_vga_color_to_ansi_bg(uint8_t color) {
+    static const int map[16] = {
+        40,  /* black */
+        44,  /* blue */
+        42,  /* green */
+        46,  /* cyan */
+        41,  /* red */
+        45,  /* magenta */
+        43,  /* brown/yellow */
+        47,  /* light grey */
+        100, /* dark grey */
+        104, /* light blue */
+        102, /* light green */
+        106, /* light cyan */
+        101, /* light red */
+        105, /* light magenta */
+        103, /* light brown/yellow */
+        107, /* white */
+    };
+    return map[color & 0x0F];
+}
+
+static void serial_set_color(uint8_t fg, uint8_t bg) {
+    char seq[32];
+    int  fg_code = serial_vga_color_to_ansi_fg(fg);
+    (void)bg;
+
+    int n = snprintf(seq, sizeof(seq), "\x1b[%dm", fg_code);
+    if (n > 0) {
+        serial_puts_sync(seq);
+    }
+}
+
+static void serial_reset_color(void) {
+    serial_puts_sync("\x1b[0m");
+}
+
 #define IRQ_SERIAL 4
 
 static void serial_irq_handler(struct irq_regs *frame) {
@@ -78,10 +138,12 @@ static void serial_init(void) {
 }
 
 static struct early_console_backend serial_backend = {
-    .name = "serial",
-    .init = serial_init,
-    .putc = serial_putc_sync,
-    .puts = serial_puts_sync,
+    .name        = "serial",
+    .init        = serial_init,
+    .putc        = serial_putc_sync,
+    .puts        = serial_puts_sync,
+    .set_color   = serial_set_color,
+    .reset_color = serial_reset_color,
 };
 
 void serial_console_register(void) {

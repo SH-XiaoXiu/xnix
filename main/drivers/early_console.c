@@ -107,6 +107,52 @@ void early_puts(const char *s) {
     spin_unlock_irqrestore(&early_hw_lock, flags);
 }
 
+void early_console_set_color(enum early_console_color fg, enum early_console_color bg) {
+    if (!ec_active && !ec_emergency) {
+        return;
+    }
+
+    if (ec_emergency) {
+        for (struct early_console_backend *be = ec_list; be; be = be->next) {
+            if (be->set_color) {
+                be->set_color((uint8_t)fg, (uint8_t)bg);
+            }
+        }
+        return;
+    }
+
+    uint32_t flags = spin_lock_irqsave(&early_hw_lock);
+    for (struct early_console_backend *be = ec_list; be; be = be->next) {
+        if (be->set_color) {
+            be->set_color((uint8_t)fg, (uint8_t)bg);
+        }
+    }
+    spin_unlock_irqrestore(&early_hw_lock, flags);
+}
+
+void early_console_reset_color(void) {
+    if (!ec_active && !ec_emergency) {
+        return;
+    }
+
+    if (ec_emergency) {
+        for (struct early_console_backend *be = ec_list; be; be = be->next) {
+            if (be->reset_color) {
+                be->reset_color();
+            }
+        }
+        return;
+    }
+
+    uint32_t flags = spin_lock_irqsave(&early_hw_lock);
+    for (struct early_console_backend *be = ec_list; be; be = be->next) {
+        if (be->reset_color) {
+            be->reset_color();
+        }
+    }
+    spin_unlock_irqrestore(&early_hw_lock, flags);
+}
+
 void early_clear(void) {
     if (!ec_active && !ec_emergency) {
         return;

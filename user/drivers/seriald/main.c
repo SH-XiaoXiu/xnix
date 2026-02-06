@@ -12,6 +12,7 @@
 #include <libs/serial/serial.h> /* 消息类型定义 */
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <xnix/abi/ipc.h>
 #include <xnix/env.h>
@@ -22,27 +23,127 @@
 /* 保护串口硬件访问的互斥锁 */
 static pthread_mutex_t serial_lock;
 
+static void serial_write_bytes(const char *buf, size_t len) {
+    if (!buf || len == 0) {
+        return;
+    }
+
+    pthread_mutex_lock(&serial_lock);
+    for (size_t i = 0; i < len; i++) {
+        serial_putc(buf[i]);
+    }
+    pthread_mutex_unlock(&serial_lock);
+}
+
+static void serial_write_cstr(const char *s, size_t max_len) {
+    if (!s || max_len == 0) {
+        return;
+    }
+
+    pthread_mutex_lock(&serial_lock);
+    for (size_t i = 0; i < max_len && s[i]; i++) {
+        serial_putc(s[i]);
+    }
+    pthread_mutex_unlock(&serial_lock);
+}
+
+static int vga_color_to_ansi_fg(uint8_t color) {
+    static const int map[16] = {
+        30, /* black */
+        34, /* blue */
+        32, /* green */
+        36, /* cyan */
+        31, /* red */
+        35, /* magenta */
+        33, /* brown/yellow */
+        37, /* light grey */
+        90, /* dark grey */
+        94, /* light blue */
+        92, /* light green */
+        96, /* light cyan */
+        91, /* light red */
+        95, /* light magenta */
+        93, /* light brown/yellow */
+        97, /* white */
+    };
+    return map[color & 0x0F];
+}
+
+static int vga_color_to_ansi_bg(uint8_t color) {
+    static const int map[16] = {
+        40,  /* black */
+        44,  /* blue */
+        42,  /* green */
+        46,  /* cyan */
+        41,  /* red */
+        45,  /* magenta */
+        43,  /* brown/yellow */
+        47,  /* light grey */
+        100, /* dark grey */
+        104, /* light blue */
+        102, /* light green */
+        106, /* light cyan */
+        101, /* light red */
+        105, /* light magenta */
+        103, /* light brown/yellow */
+        107, /* white */
+    };
+    return map[color & 0x0F];
+}
+
+static void serial_apply_color_attr(uint8_t attr) {
+    uint8_t fg = attr & 0x0F;
+
+    char seq[32];
+    int  fg_code = vga_color_to_ansi_fg(fg);
+    int  n       = snprintf(seq, sizeof(seq), "\x1b[%dm", fg_code);
+    if (n > 0) {
+        serial_write_bytes(seq, (size_t)n);
+    }
+}
+
 static int console_handler(struct ipc_message *msg) {
     uint32_t type = msg->regs.data[0];
 
     switch (type) {
-    case SERIAL_MSG_WRITE: {
-        /* 数据从 data[1] 开始,最多 ABI_IPC_MSG_PAYLOAD_BYTES */
-        const char *str = (const char *)&msg->regs.data[1];
-        /* 计算实际长度 */
-        size_t max_len = ABI_IPC_MSG_PAYLOAD_BYTES;
+    case UDM_CONSOLE_PUTC: {
+        uint32_t   v = msg->regs.data[1];
+        const char c = (char)(v & 0xFF);
 
-        /* 加锁保护硬件访问 */
-        pthread_mutex_lock(&serial_lock);
-        for (size_t i = 0; i < max_len && str[i]; i++) {
-            serial_putc(str[i]);
+        const uint8_t *bytes           = (const uint8_t *)&msg->regs.data[1];
+        bool           looks_like_cstr = (bytes[1] != 0) || (bytes[2] != 0) || (bytes[3] != 0) ||
+                               (msg->regs.data[2] != 0) || (msg->regs.data[3] != 0) ||
+                               (msg->regs.data[4] != 0) || (msg->regs.data[5] != 0) ||
+                               (msg->regs.data[6] != 0) || (msg->regs.data[7] != 0);
+
+        if (looks_like_cstr) {
+            const char *str = (const char *)&msg->regs.data[1];
+            serial_write_cstr(str, ABI_IPC_MSG_PAYLOAD_BYTES);
+        } else {
+            serial_write_bytes(&c, 1);
         }
-        pthread_mutex_unlock(&serial_lock);
         break;
     }
-    case SERIAL_MSG_COLOR: {
-        /* 颜色设置 (保留,暂不实现) */
-        (void)msg;
+    case UDM_CONSOLE_SET_COLOR: {
+        uint8_t attr = (uint8_t)(msg->regs.data[1] & 0xFF);
+        serial_apply_color_attr(attr);
+        break;
+    }
+    case UDM_CONSOLE_RESET_COLOR: {
+        serial_write_bytes("\x1b[0m", 4);
+        break;
+    }
+    case UDM_CONSOLE_CLEAR: {
+        serial_write_bytes("\x1b[2J\x1b[H", 7);
+        break;
+    }
+    case UDM_CONSOLE_WRITE: {
+        const char *data = (const char *)&msg->regs.data[1];
+        size_t      len  = (size_t)(msg->regs.data[7] & 0xFF);
+        if (len > UDM_CONSOLE_WRITE_MAX) {
+            len = UDM_CONSOLE_WRITE_MAX;
+        }
+        serial_write_bytes(data, len);
         break;
     }
     default:
@@ -155,16 +256,13 @@ int main(void) {
         .name     = "seriald",
     };
 
-    serial_puts("[seriald] initializing UDM server\n");
     udm_server_init(&srv);
-    serial_puts("[seriald] UDM server initialized\n");
+    serial_puts("[seriald] server initialized\n");
 
     /* 通知 init 服务已就绪 */
     serial_puts("[seriald] notifying ready\n");
     svc_notify_ready("seriald");
-    serial_puts("[seriald] ready notification sent\n");
 
-    serial_puts("[seriald] entering server loop\n");
     udm_server_run(&srv);
 
     serial_puts("[seriald] ERROR: server loop exited\n");

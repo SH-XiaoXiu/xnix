@@ -26,12 +26,6 @@ extern bool fb_info_available(void);
 #define VGA_CURSOR_START 0x0A
 #define VGA_CURSOR_END   0x0B
 
-/* VGA 颜色 */
-enum vga_color {
-    VGA_BLACK      = 0,
-    VGA_LIGHT_GREY = 7,
-};
-
 static uint16_t *vga_buffer;
 static int       vga_x, vga_y;
 static uint8_t   vga_attr;
@@ -39,6 +33,9 @@ static uint8_t   vga_attr;
 static inline uint8_t make_attr(uint8_t fg, uint8_t bg) {
     return fg | (bg << 4);
 }
+
+#define VGA_DEFAULT_FG EARLY_COLOR_LIGHT_GREY
+#define VGA_DEFAULT_BG EARLY_COLOR_BLACK
 
 static void vga_update_cursor(void) {
     uint16_t pos = vga_y * VGA_WIDTH + vga_x;
@@ -74,9 +71,20 @@ static void vga_init(void) {
     vga_buffer = (uint16_t *)VGA_BUFFER;
     vga_x      = 0;
     vga_y      = 0;
-    vga_attr   = make_attr(VGA_LIGHT_GREY, VGA_BLACK);
+    vga_attr   = make_attr(VGA_DEFAULT_FG, VGA_DEFAULT_BG);
     vga_enable_cursor();
     vga_update_cursor();
+}
+
+static void vga_set_color(uint8_t fg, uint8_t bg) {
+    if (fb_info_available()) {
+        return;
+    }
+    vga_attr = make_attr(fg & 0x0F, bg & 0x0F);
+}
+
+static void vga_reset_color(void) {
+    vga_set_color(VGA_DEFAULT_FG, VGA_DEFAULT_BG);
 }
 
 static void vga_putc(char c) {
@@ -133,11 +141,13 @@ static void vga_clear(void) {
 }
 
 static struct early_console_backend vga_backend = {
-    .name  = "vga",
-    .init  = vga_init,
-    .putc  = vga_putc,
-    .puts  = vga_puts,
-    .clear = vga_clear,
+    .name        = "vga",
+    .init        = vga_init,
+    .putc        = vga_putc,
+    .puts        = vga_puts,
+    .clear       = vga_clear,
+    .set_color   = vga_set_color,
+    .reset_color = vga_reset_color,
 };
 
 void vga_console_register(void) {

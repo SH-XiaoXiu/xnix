@@ -39,3 +39,26 @@ void early_puts(const char *s) {
         early_putc(*s++);
     }
 }
+
+void early_set_color(uint8_t fg, uint8_t bg) {
+    if (!g_early_mode) {
+        return;
+    }
+
+    int ret;
+    asm volatile("int $0x80"
+                 : "=a"(ret)
+                 : "a"(SYS_DEBUG_SET_COLOR), "b"((uint32_t)fg), "c"((uint32_t)bg)
+                 : "memory");
+    (void)ret;
+}
+
+void early_reset_color(void) {
+    if (!g_early_mode) {
+        return;
+    }
+
+    int ret;
+    asm volatile("int $0x80" : "=a"(ret) : "a"(SYS_DEBUG_RESET_COLOR) : "memory");
+    (void)ret;
+}

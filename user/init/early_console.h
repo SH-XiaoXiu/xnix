@@ -7,6 +7,7 @@
 #define INIT_EARLY_CONSOLE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /**
  * 禁用早期控制台(切换到基于IPC的输出)
@@ -27,5 +28,8 @@ void early_putc(char c);
  * 输出字符串(通过 SYS_DEBUG_PUT)
  */
 void early_puts(const char *s);
+
+void early_set_color(uint8_t fg, uint8_t bg);
+void early_reset_color(void);
 
 #endif /* INIT_EARLY_CONSOLE_H */

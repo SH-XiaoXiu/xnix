@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief dmesg — 读取并显示内核日志
+ * @brief dmesg - 读取并显示内核日志
  *
  * 一次性读取 kmsg 中所有已有条目并输出到 stdout.
  */
@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     (void)argv;
 
     uint32_t seq = 0;
-    char buf[KMSG_BUF_SIZE];
+    char     buf[KMSG_BUF_SIZE];
 
     while (1) {
         int ret = sys_kmsg_read(&seq, buf, sizeof(buf));

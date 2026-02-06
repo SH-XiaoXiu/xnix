@@ -39,6 +39,8 @@ enum tty_ioctl {
     TTY_IOCTL_SET_COOKED     = 4, /* 切换到 cooked 模式 */
     TTY_IOCTL_SET_ECHO       = 5, /* echo 开关: data[2]=0/1 */
     TTY_IOCTL_GET_TTY_COUNT  = 6, /* 查询 tty 数量 */
+    TTY_IOCTL_SET_COLOR      = 7, /* 设置颜色: data[2]=fg, data[3]=bg (VGA 16 色) */
+    TTY_IOCTL_RESET_COLOR    = 8, /* 重置颜色 */
 };
 
 /**

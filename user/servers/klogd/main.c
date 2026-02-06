@@ -8,11 +8,11 @@
 #include <d/protocol/tty.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
+#include <xnix/svc.h>
 #include <xnix/syscall.h>
-
-#include <unistd.h>
 
 #define KMSG_BUF_SIZE 512
 
@@ -30,8 +30,8 @@ static void tty_write(const char *s, uint32_t len) {
     memset(&msg, 0, sizeof(msg));
     msg.regs.data[0] = TTY_OP_WRITE;
     msg.regs.data[1] = len;
-    msg.buffer.data   = (void *)s;
-    msg.buffer.size   = len;
+    msg.buffer.data  = (void *)s;
+    msg.buffer.size  = len;
 
     sys_ipc_send(g_tty_ep, &msg, 100);
 }
@@ -68,9 +68,11 @@ int main(int argc, char **argv) {
         g_tty_ep = env_get_handle("tty0");
     }
 
+    svc_notify_ready("klogd");
+
     /* 从 seq 0 开始,先读取已有的日志 */
     uint32_t seq = 0;
-    char buf[KMSG_BUF_SIZE];
+    char     buf[KMSG_BUF_SIZE];
 
     /* 读取积压的历史日志 */
     while (1) {

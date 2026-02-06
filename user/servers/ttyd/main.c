@@ -14,18 +14,17 @@
 #include <d/protocol/serial.h>
 #include <d/protocol/tty.h>
 #include <pthread.h>
-#include <unistd.h>
-#include <xnix/ipc/console.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <xnix/abi/tty.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
+#include <xnix/ipc/console.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
-
-#include <signal.h>
 
 /* 行规程模式 */
 enum ldisc_mode {
@@ -49,9 +48,9 @@ struct line_discipline {
 /* TTY 实例 */
 struct tty_instance {
     int      id;
-    handle_t endpoint;   /* 此 tty 的 endpoint (tty0, tty1) */
-    handle_t output_ep;  /* 输出设备 endpoint (serial, fbd) */
-    handle_t input_ep;   /* 输入设备 endpoint (kbd_ep, serial) */
+    handle_t endpoint;  /* 此 tty 的 endpoint (tty0, tty1) */
+    handle_t output_ep; /* 输出设备 endpoint (serial, fbd) */
+    handle_t input_ep;  /* 输入设备 endpoint (kbd_ep, serial) */
 
     /* 输入队列 */
     char             input_buf[TTY_INPUT_BUF_SIZE];
@@ -91,7 +90,7 @@ static int tty_input_get(struct tty_instance *tty) {
     if (tty->input_head == tty->input_tail) {
         return -1; /* 空 */
     }
-    char c     = tty->input_buf[tty->input_tail];
+    char c          = tty->input_buf[tty->input_tail];
     tty->input_tail = (tty->input_tail + 1) % TTY_INPUT_BUF_SIZE;
     return (unsigned char)c;
 }
@@ -146,6 +145,29 @@ static void tty_output_write(struct tty_instance *tty, const char *data, int len
     }
 }
 
+static void tty_output_set_color(struct tty_instance *tty, uint8_t fg, uint8_t bg) {
+    if (tty->output_ep == HANDLE_INVALID) {
+        return;
+    }
+
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.regs.data[0] = UDM_CONSOLE_SET_COLOR;
+    msg.regs.data[1] = (uint32_t)((fg & 0x0F) | ((bg & 0x0F) << 4));
+    sys_ipc_send(tty->output_ep, &msg, 0);
+}
+
+static void tty_output_reset_color(struct tty_instance *tty) {
+    if (tty->output_ep == HANDLE_INVALID) {
+        return;
+    }
+
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.regs.data[0] = UDM_CONSOLE_RESET_COLOR;
+    sys_ipc_send(tty->output_ep, &msg, 0);
+}
+
 /* 尝试满足挂起的读请求 */
 static void try_fulfill_pending_read(struct tty_instance *tty) {
     if (!tty->pending_read) {
@@ -170,7 +192,9 @@ static void try_fulfill_pending_read(struct tty_instance *tty) {
     char buf[TTY_INPUT_BUF_SIZE];
     for (int i = 0; i < to_read; i++) {
         int c = tty_input_get(tty);
-        if (c < 0) break;
+        if (c < 0) {
+            break;
+        }
         buf[i] = (char)c;
     }
 
@@ -293,7 +317,9 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
 
     case TTY_OP_READ: {
         uint32_t max_len = msg->regs.data[1];
-        if (max_len == 0) max_len = 1;
+        if (max_len == 0) {
+            max_len = 1;
+        }
 
         pthread_mutex_lock(&tty->input_lock);
         int avail = tty_input_available(tty);
@@ -306,7 +332,10 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
             char buf[TTY_INPUT_BUF_SIZE];
             for (int i = 0; i < to_read; i++) {
                 int c = tty_input_get(tty);
-                if (c < 0) { to_read = i; break; }
+                if (c < 0) {
+                    to_read = i;
+                    break;
+                }
                 buf[i] = (char)c;
             }
             pthread_mutex_unlock(&tty->input_lock);
@@ -343,19 +372,27 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
             msg->regs.data[0] = (uint32_t)tty->foreground_pid;
             break;
         case TTY_IOCTL_SET_RAW:
-            tty->ldisc.mode = LDISC_RAW;
+            tty->ldisc.mode   = LDISC_RAW;
             msg->regs.data[0] = 0;
             break;
         case TTY_IOCTL_SET_COOKED:
-            tty->ldisc.mode = LDISC_COOKED;
+            tty->ldisc.mode   = LDISC_COOKED;
             msg->regs.data[0] = 0;
             break;
         case TTY_IOCTL_SET_ECHO:
-            tty->ldisc.echo = (int)msg->regs.data[2];
+            tty->ldisc.echo   = (int)msg->regs.data[2];
             msg->regs.data[0] = 0;
             break;
         case TTY_IOCTL_GET_TTY_COUNT:
             msg->regs.data[0] = (uint32_t)g_tty_count;
+            break;
+        case TTY_IOCTL_SET_COLOR:
+            tty_output_set_color(tty, (uint8_t)msg->regs.data[2], (uint8_t)msg->regs.data[3]);
+            msg->regs.data[0] = 0;
+            break;
+        case TTY_IOCTL_RESET_COLOR:
+            tty_output_reset_color(tty);
+            msg->regs.data[0] = 0;
             break;
         default:
             msg->regs.data[0] = (uint32_t)-1;
@@ -436,16 +473,16 @@ static void *tty_thread(void *arg) {
 }
 
 /* 初始化一个 tty 实例 */
-static void tty_init_instance(struct tty_instance *tty, int id, handle_t ep,
-                              handle_t output, handle_t input) {
+static void tty_init_instance(struct tty_instance *tty, int id, handle_t ep, handle_t output,
+                              handle_t input) {
     memset(tty, 0, sizeof(*tty));
-    tty->id         = id;
-    tty->endpoint   = ep;
-    tty->output_ep  = output;
-    tty->input_ep   = input;
-    tty->input_head = 0;
-    tty->input_tail = 0;
-    tty->pending_read = 0;
+    tty->id             = id;
+    tty->endpoint       = ep;
+    tty->output_ep      = output;
+    tty->input_ep       = input;
+    tty->input_head     = 0;
+    tty->input_tail     = 0;
+    tty->pending_read   = 0;
     tty->foreground_pid = 0;
 
     /* 默认 raw 模式,echo 开启 */
