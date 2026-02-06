@@ -57,7 +57,9 @@ static void spawn_setup_parent(struct process *proc, struct process *creator) {
  */
 static int spawn_transfer_handles(struct process *proc, struct process *creator,
                                   const struct spawn_handle *handles, uint32_t handle_count) {
+    kprintf("[spawn] Transferring %u handles to %s\n", handle_count, proc->name);
     for (uint32_t i = 0; i < handle_count; i++) {
+        kprintf("[spawn]   %u: src=%u, name='%s'\n", i, handles[i].src, handles[i].name);
         handle_t dst =
             handle_transfer(creator, handles[i].src, proc, handles[i].name, HANDLE_INVALID);
         if (dst == HANDLE_INVALID) {
@@ -65,6 +67,7 @@ static int spawn_transfer_handles(struct process *proc, struct process *creator,
                     handles[i].name);
             continue;
         }
+        kprintf("[spawn]   -> slot %u\n", dst);
     }
     return 0;
 }
@@ -166,6 +169,8 @@ void user_thread_entry(void *arg) {
         panic("No current process in user_thread_entry");
     }
 
+    kprintf("[thread] Starting user process '%s' entry=0x%08x\n", proc->name, (uint32_t)arg);
+
     const struct mm_operations *mm = mm_get_ops();
     if (!mm || !mm->query) {
         panic("No mm_ops in user_thread_entry");
@@ -220,8 +225,9 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
         }
     }
 
-    /* 对于 init 进程(无父进程),直接创建 boot handles */
-    if (!creator) {
+    /* 对于 init 进程(由内核进程创建),直接创建 boot handles */
+    /* 注意: process_get_current() 返回 kernel_process 而非 NULL */
+    if (creator && creator->pid == 0) {
         bootinfo_create_handles_for_init(proc);
     }
 

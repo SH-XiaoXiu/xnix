@@ -4,6 +4,7 @@
  */
 
 #include <kernel/sys/syscall.h>
+#include <xnix/console.h>
 #include <xnix/errno.h>
 #include <xnix/stdio.h>
 #include <xnix/syscall.h>
@@ -30,7 +31,7 @@ static int32_t sys_debug_put(const uint32_t *args) {
     }
 
     char c = (char)args[0];
-    kputc(c);
+    console_putc_sync(c);
     return 0;
 }
 #endif

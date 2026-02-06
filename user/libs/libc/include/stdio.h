@@ -25,4 +25,6 @@ char *gets_s(char *buf, size_t size);
 /* 流操作 */
 int fflush(void *stream);
 
+void stdout_debug_mirror_enable(int enable);
+
 #endif /* _STDIO_H */

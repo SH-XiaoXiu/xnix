@@ -67,6 +67,11 @@ void console_init(void);
 void console_putc(char c);
 
 /**
+ * 输出单字符到同步后端
+ */
+void console_putc_sync(char c);
+
+/**
  * 输出字符串到所有后端
  */
 void console_puts(const char *s);

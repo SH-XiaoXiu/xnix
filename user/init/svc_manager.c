@@ -208,6 +208,11 @@ int svc_parse_handles(struct svc_manager *mgr, const char *handles_str,
         }
         spec[spec_len] = '\0';
 
+        if (strchr(spec, ':') != NULL) {
+            printf("Invalid handle spec '%s' (':' syntax is not supported)\n", spec);
+            continue;
+        }
+
         snprintf(handles[count].name, sizeof(handles[count].name), "%s", spec);
         handles[count].src_handle = HANDLE_INVALID;
 

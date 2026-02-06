@@ -114,6 +114,8 @@ void process_exit(struct process *proc, int exit_code) {
         return;
     }
 
+    kprintf("[exit] Process '%s' (pid=%d) exiting with code %d\n", proc->name, proc->pid, exit_code);
+
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = exit_code;
 

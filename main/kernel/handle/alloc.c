@@ -1,8 +1,10 @@
+#include <arch/mmu.h>
 #include <kernel/ipc/endpoint.h>
 #include <kernel/process/process.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/perm.h>
+#include <xnix/physmem.h>
 #include <xnix/process.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
@@ -172,7 +174,9 @@ static void handle_free_entry(struct handle_entry *entry) {
         case HANDLE_ENDPOINT:
             endpoint_unref((struct ipc_endpoint *)entry->object);
             break;
-        /* 其他类型待补充 */
+        case HANDLE_PHYSMEM:
+            physmem_put((struct physmem_region *)entry->object);
+            break;
         default:
             break;
         }

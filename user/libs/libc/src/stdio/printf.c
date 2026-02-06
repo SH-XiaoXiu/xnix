@@ -7,6 +7,7 @@
  */
 
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <xnix/abi/syscall.h>
@@ -23,7 +24,12 @@ extern int serial_init(void) __attribute__((weak));
 #define STDOUT_BUF_SIZE 256
 
 static char stdout_buf[STDOUT_BUF_SIZE];
-static int  stdout_len = 0;
+static int  stdout_len            = 0;
+static int  g_stdout_debug_mirror = 0;
+
+void stdout_debug_mirror_enable(int enable) {
+    g_stdout_debug_mirror = enable ? 1 : 0;
+}
 
 /* 刷新 stdout 缓冲区 */
 static void stdout_flush(void) {
@@ -31,6 +37,16 @@ static void stdout_flush(void) {
         /* Use IPC to seriald if libserial is linked */
         if (serial_write != NULL) {
             serial_write(stdout_buf, stdout_len);
+        }
+        if (g_stdout_debug_mirror) {
+            for (int i = 0; i < stdout_len; i++) {
+                int ret;
+                asm volatile("int $0x80"
+                             : "=a"(ret)
+                             : "a"(SYS_DEBUG_PUT), "b"((uint32_t)stdout_buf[i])
+                             : "memory");
+                (void)ret;
+            }
         }
         /* Otherwise output is silently discarded (pure microkernel design) */
         stdout_len = 0;

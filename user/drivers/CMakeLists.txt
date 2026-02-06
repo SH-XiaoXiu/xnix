@@ -59,20 +59,12 @@ foreach (DRIVER_DIR ${DRIVER_DIRS})
     set(SERVER_EXTRA_SOURCES "")
     set(SERVER_EXTRA_INCLUDES "")
 
-    if (DRIVER_NAME STREQUAL "fatfsd")
-        set(SERVER_EXTRA_LIBS fatfs)
-    elseif (DRIVER_NAME STREQUAL "rootfsd")
-        set(SERVER_EXTRA_SOURCES
-                ${CMAKE_SOURCE_DIR}/user/drivers/fatfsd/fatfs_vfs.c
-        )
-        set(SERVER_EXTRA_INCLUDES
-                ${CMAKE_SOURCE_DIR}/user/drivers/fatfsd
-        )
+    if (DRIVER_NAME STREQUAL "fatfsd" OR DRIVER_NAME STREQUAL "rootfsd")
         set(SERVER_EXTRA_LIBS fatfs)
     endif ()
 
     add_executable(${DRIVER_ELF}
-            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.s
+            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.S
             ${DRIVER_SOURCES}
             ${SERVER_EXTRA_SOURCES}
     )

@@ -1,6 +1,8 @@
+#include <arch/mmu.h>
 #include <kernel/ipc/endpoint.h>
 #include <kernel/process/process.h>
 #include <xnix/handle.h>
+#include <xnix/physmem.h>
 #include <xnix/string.h>
 
 /* 前向声明:内部函数 */
@@ -36,7 +38,9 @@ handle_t handle_transfer(struct process *src, handle_t src_h, struct process *ds
     case HANDLE_ENDPOINT:
         endpoint_ref((struct ipc_endpoint *)object);
         break;
-    /* 其他类型待补充 */
+    case HANDLE_PHYSMEM:
+        physmem_get((struct physmem_region *)object);
+        break;
     default:
         break;
     }
@@ -50,6 +54,9 @@ handle_t handle_transfer(struct process *src, handle_t src_h, struct process *ds
         switch (type) {
         case HANDLE_ENDPOINT:
             endpoint_unref((struct ipc_endpoint *)object);
+            break;
+        case HANDLE_PHYSMEM:
+            physmem_put((struct physmem_region *)object);
             break;
         default:
             break;

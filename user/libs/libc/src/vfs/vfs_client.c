@@ -20,6 +20,18 @@
 /* VFS 服务器 endpoint */
 static uint32_t g_vfsd_ep = HANDLE_INVALID;
 
+static int vfs_ensure_vfsd(void) {
+    if (g_vfsd_ep != HANDLE_INVALID) {
+        return 0;
+    }
+    uint32_t h = env_get_handle("vfs_ep");
+    if (h == HANDLE_INVALID) {
+        return -ENOENT;
+    }
+    g_vfsd_ep = h;
+    return 0;
+}
+
 /* 文件描述符表 */
 #define VFS_MAX_FD 32
 
@@ -57,8 +69,9 @@ int vfs_mount(const char *path, uint32_t fs_ep) {
     if (!path) {
         return -EINVAL;
     }
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     struct ipc_message msg   = {0};
@@ -101,8 +114,9 @@ int vfs_open(const char *path, uint32_t flags) {
     if (!path) {
         return -EINVAL;
     }
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     int fd = vfs_alloc_fd();
@@ -246,8 +260,9 @@ int vfs_mkdir(const char *path) {
     if (!path) {
         return -EINVAL;
     }
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     struct ipc_message msg   = {0};
@@ -273,8 +288,9 @@ int vfs_delete(const char *path) {
     if (!path) {
         return -EINVAL;
     }
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     struct ipc_message msg   = {0};
@@ -300,8 +316,9 @@ int vfs_stat(const char *path, struct vfs_stat *st) {
     if (!st || !path) {
         return -EINVAL;
     }
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     struct ipc_message msg   = {0};
@@ -335,8 +352,9 @@ int vfs_opendir(const char *path) {
     if (!path) {
         return -EINVAL;
     }
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     int fd = vfs_alloc_fd();
@@ -422,8 +440,9 @@ int vfs_chdir(const char *path) {
     if (!path) {
         return -EINVAL;
     }
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     struct ipc_message msg   = {0};
@@ -449,8 +468,9 @@ int vfs_getcwd(char *buf, size_t size) {
     if (!buf || size == 0) {
         return -EINVAL;
     }
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     struct ipc_message msg   = {0};
@@ -486,8 +506,9 @@ int vfs_getcwd(char *buf, size_t size) {
  * 复制当前进程的CWD到子进程(用于进程spawn后的CWD继承)
  */
 int vfs_copy_cwd_to_child(pid_t child_pid) {
-    if (g_vfsd_ep == HANDLE_INVALID) {
-        return -ENOENT;
+    int init_ret = vfs_ensure_vfsd();
+    if (init_ret < 0) {
+        return init_ret;
     }
 
     struct ipc_message msg   = {0};

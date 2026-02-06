@@ -27,9 +27,10 @@
 #define SYS_IPC_REPLY_TO    105 /* 延迟回复: ebx=sender_tid, ecx=msg* */
 
 /* 内存管理 (200-219) */
-#define SYS_SBRK      200 /* 堆管理: ebx=increment, 返回旧堆顶或 -1 */
-#define SYS_MMAP_PHYS 201 /* 映射物理内存: ebx=handle, ecx=offset, edx=size, esi=prot */
-#define SYS_MUNMAP    202 /* 取消映射: ebx=addr, ecx=size */
+#define SYS_SBRK        200 /* 堆管理: ebx=increment, 返回旧堆顶或 -1 */
+#define SYS_MMAP_PHYS   201 /* 映射物理内存: ebx=handle, ecx=offset, edx=size, esi=prot, edi=out_size */
+#define SYS_MUNMAP      202 /* 取消映射: ebx=addr, ecx=size */
+#define SYS_PHYSMEM_INFO 203 /* 查询物理内存信息: ebx=handle, ecx=info_ptr */
 
 /* 任务/线程 (300-319) */
 #define SYS_SPAWN         300 /* 创建进程: ebx=spawn_args* */

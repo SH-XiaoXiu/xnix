@@ -107,7 +107,10 @@ void bootinfo_collect(void) {
 /**
  * 为 init 进程创建 boot handles
  *
- * 在 init 进程中直接创建硬件资源的 handles.
+ * 在 init 进程中直接创建硬件资源的 handles:
+ * - framebuffer (fb_mem)
+ * - 每个 Multiboot 模块 (module_<name>)
+ *
  * 这个函数应该在 spawn_core 中 creator == NULL 时调用.
  *
  * @param proc init 进程
@@ -122,6 +125,21 @@ int bootinfo_create_handles_for_init(struct process *proc) {
     handle_t fb_handle = physmem_create_fb_handle_for_proc(proc, "fb_mem");
     if (fb_handle != HANDLE_INVALID) {
         pr_info("bootinfo: created fb_mem handle %u for init", fb_handle);
+    }
+
+    /* 为每个 Multiboot 模块创建 physmem handle */
+    for (uint32_t i = 0; i < g_boot_resources.count; i++) {
+        struct boot_resource *res = &g_boot_resources.resources[i];
+
+        /* 构建 handle 名称: "module_<name>" */
+        char handle_name[32];
+        snprintf(handle_name, sizeof(handle_name), "module_%s", res->name);
+
+        handle_t h =
+            physmem_create_handle_for_proc(proc, res->phys_addr, res->size, handle_name);
+        if (h != HANDLE_INVALID) {
+            pr_info("bootinfo: created %s handle %u (%u bytes)", handle_name, h, res->size);
+        }
     }
 
     return 0;

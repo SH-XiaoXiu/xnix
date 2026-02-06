@@ -385,7 +385,7 @@ endif ()
 # init.elf（依赖生成的头文件）
 # ============================================
 add_executable(init.elf
-        libs/libc/src/crt0.s
+        libs/libc/src/crt0.S
         init/main.c
         init/early_console.c
         init/ini_parser.c

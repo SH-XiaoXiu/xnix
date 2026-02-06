@@ -37,7 +37,7 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix
         FILES_MATCHING PATTERN "*.h")
 
 # 安装启动代码
-install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/lib/crt0.s
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/lib/crt0.S
         DESTINATION lib)
 
 # 导出目标供其他项目使用

@@ -63,7 +63,7 @@ foreach (APP_DIR ${APP_DIRS})
 
     # 创建可执行文件
     add_executable(${APP_ELF}
-            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.s
+            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.S
             ${APP_SOURCES}
     )
 
@@ -101,6 +101,6 @@ set(APP_NAMES "${_APP_NAMES}" PARENT_SCOPE)
 message(STATUS "App targets: ${_APP_TARGETS}")
 
 # ============================================
-# bin 工具（独立构建，不打包进 ISO）
+# bin 工具（独立构建，打包进 rootfs.img）
 # ============================================
-# add_subdirectory(bin)  # Disabled - moved to .disabled/user/apps/bin
+add_subdirectory(bin)

@@ -37,6 +37,10 @@ void perm_profile_init(void) {
 
     struct perm_profile *default_profile = perm_profile_create("default");
     perm_profile_inherit(default_profile, app_profile);
+
+    struct perm_profile *shell_profile = perm_profile_create("shell");
+    perm_profile_inherit(shell_profile, default_profile);
+    perm_profile_set(shell_profile, "xnix.debug.console", PERM_GRANT);
 }
 
 /**

@@ -308,14 +308,46 @@ static inline void *sys_sbrk(int32_t increment) {
 /**
  * @brief 映射物理内存到用户空间
  *
- * @param handle HANDLE_PHYSMEM 类型的 handle
- * @param offset 资源内偏移
- * @param size   映射大小
- * @param prot   保护标志
- * @return 用户空间虚拟地址,负数表示错误
+ * @param handle   HANDLE_PHYSMEM 类型的 handle
+ * @param offset   资源内偏移
+ * @param size     映射大小 (0 = 整个区域)
+ * @param prot     保护标志
+ * @param out_size 可选输出参数: 实际映射的大小
+ * @return 用户空间虚拟地址,失败返回 (void*)-1
  */
-static inline void *sys_mmap_phys(handle_t handle, uint32_t offset, uint32_t size, uint32_t prot) {
-    return (void *)syscall4(SYS_MMAP_PHYS, handle, offset, size, prot);
+static inline void *sys_mmap_phys(handle_t handle, uint32_t offset, uint32_t size, uint32_t prot,
+                                  uint32_t *out_size) {
+    return (void *)syscall5(SYS_MMAP_PHYS, handle, offset, size, prot, (uint32_t)(uintptr_t)out_size);
+}
+
+/**
+ * Physmem 信息结构(用于 sys_physmem_info)
+ */
+struct physmem_info {
+    uint32_t size;        /* 区域大小 */
+    uint32_t type;        /* 0=generic, 1=fb */
+    uint32_t width;       /* FB 宽度(仅 type=1) */
+    uint32_t height;      /* FB 高度(仅 type=1) */
+    uint32_t pitch;       /* FB pitch(仅 type=1) */
+    uint8_t  bpp;         /* FB bpp(仅 type=1) */
+    uint8_t  red_pos;     /* (仅 type=1) */
+    uint8_t  red_size;    /* (仅 type=1) */
+    uint8_t  green_pos;   /* (仅 type=1) */
+    uint8_t  green_size;  /* (仅 type=1) */
+    uint8_t  blue_pos;    /* (仅 type=1) */
+    uint8_t  blue_size;   /* (仅 type=1) */
+    uint8_t  _reserved[5];
+};
+
+/**
+ * @brief 查询物理内存区域信息
+ *
+ * @param handle HANDLE_PHYSMEM 类型的 handle
+ * @param info   输出信息结构
+ * @return 0 成功, 负数失败
+ */
+static inline int sys_physmem_info(handle_t handle, struct physmem_info *info) {
+    return syscall2(SYS_PHYSMEM_INFO, handle, (uint32_t)(uintptr_t)info);
 }
 
 /*

@@ -1,22 +1,21 @@
 /**
  * @file init.c
- * @brief libc initialization
+ * @brief libc 初始化
  *
- * Called by crt0 before main() to initialize libc services
+ * 在 main() 之前由 crt0 调用以初始化 libc 服务
  */
 
-/* Weak reference to libserial (optional linkage) */
+/* 对 libserial 的弱引用(可选链接) */
 extern int serial_init(void) __attribute__((weak));
 
 /**
- * Initialize libc services
+ * 初始化 libc 服务
  *
- * This function is called from crt0.s before main()
+ * 此函数在 main() 之前由 crt0.s 调用
  *
- * Note: serial_init() is NOT called automatically to avoid bootstrap
- * circular dependency. Programs should call serial_init() explicitly
- * when the serial endpoint is available.
+ * 注意:为了避免引导循环依赖,serial_init() 不会被自动调用.
+ * 程序应在串行端点可用时显式调用 serial_init().
  */
 void __libc_init(void) {
-    /* No automatic initialization - let programs control output setup */
+    /* 无默认初始化:由程序自行决定何时初始化输出/VFS 等服务 */
 }

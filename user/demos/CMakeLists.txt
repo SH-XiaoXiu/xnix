@@ -61,7 +61,7 @@ foreach (DEMO_DIR ${DEMO_DIRS})
 
     # 创建可执行文件
     add_executable(${DEMO_ELF}
-            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.s
+            ${CMAKE_SOURCE_DIR}/user/libs/libc/src/crt0.S
             ${DEMO_SOURCES}
     )
 

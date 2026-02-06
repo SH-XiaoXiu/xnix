@@ -160,11 +160,24 @@ static void run_external(const char *path, int argc, char **argv, int background
         exec_args.argv[i][len] = '\0';
     }
 
-    /* 传递 vfsd handle */
-    if (g_vfs_ep != HANDLE_INVALID) {
-        exec_args.handle_count   = 1;
-        exec_args.handles[0].src = g_vfs_ep;
-        strncpy(exec_args.handles[0].name, "vfs_ep", sizeof(exec_args.handles[0].name) - 1);
+    /* 传递 handles */
+    exec_args.handle_count = 0;
+    if (g_vfs_ep != HANDLE_INVALID && exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
+        exec_args.handles[exec_args.handle_count].src = g_vfs_ep;
+        strncpy(exec_args.handles[exec_args.handle_count].name, "vfs_ep",
+                sizeof(exec_args.handles[exec_args.handle_count].name) - 1);
+        exec_args.handles[exec_args.handle_count]
+            .name[sizeof(exec_args.handles[exec_args.handle_count].name) - 1] = '\0';
+        exec_args.handle_count++;
+    }
+    handle_t serial_ep = env_get_handle("serial");
+    if (serial_ep != HANDLE_INVALID && exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
+        exec_args.handles[exec_args.handle_count].src = serial_ep;
+        strncpy(exec_args.handles[exec_args.handle_count].name, "serial",
+                sizeof(exec_args.handles[exec_args.handle_count].name) - 1);
+        exec_args.handles[exec_args.handle_count]
+            .name[sizeof(exec_args.handles[exec_args.handle_count].name) - 1] = '\0';
+        exec_args.handle_count++;
     }
 
     /* 执行 */
@@ -427,6 +440,8 @@ int main(int argc, char **argv) {
     char line[MAX_LINE];
 
     printf("[shell] starting\n");
+
+    stdout_debug_mirror_enable(1);
 
     /* 查找 handles */
     g_kbd_ep = env_get_handle("kbd_ep");

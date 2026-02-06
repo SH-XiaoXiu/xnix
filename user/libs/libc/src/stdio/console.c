@@ -18,7 +18,12 @@ static handle_t g_kbd_ep    = HANDLE_INVALID;
 
 static handle_t get_serial_ep(void) {
     if (g_serial_ep == HANDLE_INVALID) {
-        g_serial_ep = sys_handle_find("serial");
+        int ret = sys_handle_find("serial");
+        /* Check for negative error codes */
+        if (ret < 0) {
+            return HANDLE_INVALID;
+        }
+        g_serial_ep = (handle_t)ret;
     }
     return g_serial_ep;
 }

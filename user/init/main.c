@@ -87,9 +87,13 @@ int main(int argc, char **argv) {
         early_puts(buf);
     }
 
-    /* VFS 尚未就绪,跳过初始化 */
-    /* TODO:待 VFS 服务实现后重新启用 */
-    // vfs_client_init(vfs_ep_handle);
+    /* 初始化 VFS 客户端(vfs_ep 在 core_services.conf 中定义为 endpoint handle) */
+    int vfs_ep = sys_handle_find("vfs_ep");
+    if (vfs_ep >= 0) {
+        vfs_client_init((uint32_t)vfs_ep);
+    } else {
+        early_puts("[INIT] WARNING: vfs_ep handle not found, VFS client disabled\n");
+    }
 
     /* 创建 init_notify endpoint 用于接收服务就绪通知 */
     int init_notify_ep = sys_endpoint_create("init_notify");

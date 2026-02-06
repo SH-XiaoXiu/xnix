@@ -199,6 +199,14 @@ void console_putc(char c) {
     }
 }
 
+void console_putc_sync(char c) {
+    for (struct console *con = console_list; con; con = con->next) {
+        if ((con->flags & CONSOLE_ASYNC) == 0 && con->putc) {
+            con->putc(c);
+        }
+    }
+}
+
 void console_puts(const char *s) {
     for (struct console *con = console_list; con; con = con->next) {
         if ((con->flags & CONSOLE_ASYNC) == 0 && con->puts) {

@@ -8,6 +8,9 @@
 #include <xnix/syscall.h>
 #include <xnix/usraccess.h>
 
+#include "kernel/process/process.h"
+#include "xnix/stdio.h"
+
 /* SYS_HANDLE_CLOSE: ebx=handle */
 static int32_t sys_handle_close(const uint32_t *args) {
     handle_t        h    = (handle_t)args[0];
@@ -18,7 +21,7 @@ static int32_t sys_handle_close(const uint32_t *args) {
 }
 
 /* SYS_HANDLE_DUPLICATE: ebx=src_handle, ecx=dst_hint, edx=name */
-/* Note: syscall arguments are uint32_t. name pointer needs casting. */
+/* 注意：系统调用参数为 uint32_t name 指针需要进行类型转换。 */
 static int32_t sys_handle_duplicate(const uint32_t *args) {
     handle_t        src_h    = (handle_t)args[0];
     handle_t        dst_hint = (handle_t)args[1];
@@ -55,6 +58,7 @@ static int32_t sys_handle_find(const uint32_t *args) {
     if (name) {
         int ret = copy_from_user(name_buf, name, sizeof(name_buf));
         if (ret < 0) {
+            kprintf("[handle_find] copy_from_user failed for '%s': %d\n", proc->name, ret);
             return ret;
         }
         name_buf[15] = '\0';
@@ -64,6 +68,7 @@ static int32_t sys_handle_find(const uint32_t *args) {
 
     handle_t h = handle_find(proc, name_buf);
     if (h == HANDLE_INVALID) {
+        kprintf("[handle_find] '%s' not found in '%s'\n", name_buf, proc->name);
         return -ENOENT;
     }
 
