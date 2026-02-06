@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <xnix/abi/framebuffer.h>
+#include <xnix/svc.h>
 #include <xnix/syscall.h>
 
 /* 继承的 handles */
@@ -252,6 +253,7 @@ int main(void) {
     };
 
     udm_server_init(&srv);
+    svc_notify_ready("fbd");
     printf("[fbd] Ready, serving on endpoint %u\n", BOOT_FB_EP);
 
     udm_server_run(&srv);

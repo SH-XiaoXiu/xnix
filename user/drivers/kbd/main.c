@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <xnix/env.h>
 #include <xnix/ipc/console.h>
+#include <xnix/svc.h>
 #include <xnix/syscall.h>
 
 #define INPUT_BUF_SIZE 256
@@ -236,6 +237,7 @@ int main(void) {
     };
 
     udm_server_init(&srv);
+    svc_notify_ready("kbd");
     udm_server_run(&srv);
 
     return 0;

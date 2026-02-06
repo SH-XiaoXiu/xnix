@@ -16,7 +16,6 @@
 #include "early_console.h"
 #include "svc_manager.h"
 
-#include <acolor.h>
 #include <core_services.h>
 #include <d/protocol/vfs.h>
 #include <libs/serial/serial.h>
@@ -27,12 +26,38 @@
 #include <vfs_client.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
+#include <xnix/ulog.h>
 
 /* 服务管理器 */
 static struct svc_manager g_mgr;
 
 /* 用户配置路径(可通过引导参数覆盖) */
 static const char *g_user_config_path = USER_CONFIG_DEFAULT;
+
+static void drain_ready_notifications(int init_notify_ep) {
+    if (init_notify_ep < 0) {
+        return;
+    }
+
+    for (int i = 0; i < 16; i++) {
+        struct ipc_message msg     = {0};
+        char               buf[64] = {0};
+        msg.buffer.data            = buf;
+        msg.buffer.size            = sizeof(buf);
+
+        int ipc_ret = sys_ipc_receive((uint32_t)init_notify_ep, &msg, 1);
+        if (ipc_ret != 0) {
+            break;
+        }
+
+        svc_handle_ready_notification(&g_mgr, &msg);
+        if (msg.sender_tid != 0xFFFFFFFFu) {
+            struct ipc_message reply = {0};
+            reply.regs.data[0]       = 0;
+            sys_ipc_reply_to(msg.sender_tid, &reply);
+        }
+    }
+}
 
 /**
  * 解析启动参数
@@ -60,7 +85,10 @@ static void reap_children(void) {
 
 int main(int argc, char **argv) {
     /* 使用早期控制台输出(seriald 启动前)*/
-    early_puts("[INIT] init started\n");
+    early_set_color(10, 0);
+    early_puts("[INIT] ");
+    early_reset_color();
+    early_puts("init started\n");
 
     /* 解析启动参数 */
     if (argc > 0) {
@@ -71,10 +99,19 @@ int main(int argc, char **argv) {
     svc_manager_init(&g_mgr);
 
     /* 加载嵌入式核心服务配置 */
-    early_puts("[INIT] loading core services config...\n");
+    early_set_color(10, 0);
+    early_puts("[INIT] ");
+    early_reset_color();
+    early_puts("loading core services config...\n");
     int ret = svc_load_config_string(&g_mgr, CORE_SERVICES_CONF);
     if (ret < 0) {
-        early_puts("[INIT] FATAL: failed to load core services\n");
+        early_set_color(10, 0);
+        early_puts("[INIT] ");
+        early_reset_color();
+        early_set_color(12, 0);
+        early_puts("FATAL");
+        early_reset_color();
+        early_puts(": failed to load core services\n");
         while (1) {
             msleep(1000);
         }
@@ -82,7 +119,10 @@ int main(int argc, char **argv) {
 
     {
         char buf[64];
-        snprintf(buf, sizeof(buf), "[INIT] loaded %d services, graph_valid=%d\n", g_mgr.count,
+        early_set_color(10, 0);
+        early_puts("[INIT] ");
+        early_reset_color();
+        snprintf(buf, sizeof(buf), "loaded %d services, graph_valid=%d\n", g_mgr.count,
                  g_mgr.graph_valid);
         early_puts(buf);
     }
@@ -92,20 +132,35 @@ int main(int argc, char **argv) {
     if (vfs_ep >= 0) {
         vfs_client_init((uint32_t)vfs_ep);
     } else {
-        early_puts("[INIT] WARNING: vfs_ep handle not found, VFS client disabled\n");
+        early_set_color(10, 0);
+        early_puts("[INIT] ");
+        early_reset_color();
+        early_set_color(14, 0);
+        early_puts("WARNING");
+        early_reset_color();
+        early_puts(": vfs_ep handle not found, VFS client disabled\n");
     }
 
     /* 创建 init_notify endpoint 用于接收服务就绪通知 */
     int init_notify_ep = sys_endpoint_create("init_notify");
     if (init_notify_ep < 0) {
-        early_puts("[INIT] failed to create init_notify endpoint\n");
+        early_set_color(10, 0);
+        early_puts("[INIT] ");
+        early_reset_color();
+        early_puts("failed to create init_notify endpoint\n");
         g_mgr.init_notify_ep = HANDLE_INVALID;
     } else {
-        early_puts("[INIT] init_notify endpoint created\n");
+        early_set_color(10, 0);
+        early_puts("[INIT] ");
+        early_reset_color();
+        early_puts("init_notify endpoint created\n");
         g_mgr.init_notify_ep = (handle_t)init_notify_ep;
     }
 
-    early_puts("[INIT] entering main loop\n");
+    early_set_color(10, 0);
+    early_puts("[INIT] ");
+    early_reset_color();
+    early_puts("entering main loop\n");
 
     /* 主循环:先启动核心服务,等待 /sys 可用后加载用户配置 */
     bool serial_initialized = false;
@@ -115,17 +170,7 @@ int main(int argc, char **argv) {
         /* 收割子进程 */
         reap_children();
 
-        /* 非阻塞接收就绪通知 */
-        if (init_notify_ep >= 0) {
-            struct ipc_message msg     = {0};
-            char               buf[64] = {0};
-            msg.buffer.data            = buf;
-            msg.buffer.size            = sizeof(buf);
-            int ipc_ret                = sys_ipc_receive((uint32_t)init_notify_ep, &msg, 1);
-            if (ipc_ret == 0) {
-                svc_handle_ready_notification(&g_mgr, &msg);
-            }
-        }
+        drain_ready_notifications(init_notify_ep);
 
         /* 服务管理器 tick (并行调度) */
         if (g_mgr.graph_valid) {
@@ -134,10 +179,15 @@ int main(int argc, char **argv) {
             svc_tick(&g_mgr); /* 回退到旧的 tick */
         }
 
+        drain_ready_notifications(init_notify_ep);
+
         /* 前几次 tick 输出诊断 */
         if (loop_count < 5 && early_console_is_active()) {
             char buf[80];
-            snprintf(buf, sizeof(buf), "[INIT] tick %d:", loop_count);
+            early_set_color(10, 0);
+            early_puts("[INIT] ");
+            early_reset_color();
+            snprintf(buf, sizeof(buf), "tick %d:", loop_count);
             early_puts(buf);
             for (int i = 0; i < g_mgr.count; i++) {
                 snprintf(buf, sizeof(buf), " %s=%d", g_mgr.configs[i].name, g_mgr.runtime[i].state);
@@ -149,16 +199,16 @@ int main(int argc, char **argv) {
 
         /* 检查是否可以切换到 IPC-based 输出 (seriald 就绪后) */
         if (!serial_initialized && early_console_is_active()) {
-            if (serial_init() == 0) {
+            int seriald_idx = svc_find_by_name(&g_mgr, "seriald");
+            if (seriald_idx >= 0 && g_mgr.runtime[seriald_idx].ready && serial_init() == 0) {
                 early_console_disable();
                 serial_initialized = true;
-                printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET
-                                     " switched to IPC-based console (pid %d)\n",
-                       sys_getpid());
+                ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ",
+                          " switched to IPC-based console (pid %d)\n", sys_getpid());
 
                 /* 测试消息证明 IPC console 工作 */
-                printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET
-                                     " system ready, waiting for services...\n");
+                ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ",
+                          " system ready, waiting for services...\n");
             }
         }
 
@@ -169,14 +219,11 @@ int main(int argc, char **argv) {
             int test_fd = vfs_open(g_user_config_path, 0);
             if (test_fd >= 0) {
                 vfs_close(test_fd);
-                printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " loading user config from %s\n",
-                       g_user_config_path);
-                ret = svc_load_config(&g_mgr, g_user_config_path);
-                if (ret == 0) {
-                    printf(ACOLOR_BGREEN "[INIT]" ACOLOR_RESET " user config loaded\n");
-                } else {
-                    printf(ACOLOR_BYELLOW "[INIT]" ACOLOR_RESET " user config load failed: %d\n",
-                           ret);
+                ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ", " loading user config from
+        %s\n", g_user_config_path); ret = svc_load_config(&g_mgr, g_user_config_path); if (ret == 0)
+        { ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ", " user config loaded\n"); } else {
+                    ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[INIT] ", " user config load failed:
+        %d\n", ret);
                 }
                 user_config_loaded = true;
             }

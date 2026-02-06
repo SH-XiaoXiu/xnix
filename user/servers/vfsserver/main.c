@@ -3,7 +3,6 @@
  * @brief VFS 服务器 - 维护全局挂载表和路径解析
  */
 
-#include <acolor.h>
 #include <d/protocol/vfs.h>
 #include <d/server.h>
 #include <stdio.h>
@@ -11,7 +10,9 @@
 #include <xnix/abi/handle.h>
 #include <xnix/abi/ipc.h>
 #include <xnix/env.h>
+#include <xnix/svc.h>
 #include <xnix/syscall.h>
+#include <xnix/ulog.h>
 
 #define VFS_MAX_MOUNTS 16
 
@@ -621,9 +622,10 @@ static int vfsd_handler(struct ipc_message *msg) {
 
             int ret = vfsd_mount(path, fs_ep);
             if (ret == 0) {
-                printf(ACOLOR_BGREEN "[vfsd]" ACOLOR_RESET " mounted %s\n", path);
+                ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[vfsd]", " mounted %s\n", path);
             } else {
-                printf(ACOLOR_BRED "[vfsd]" ACOLOR_RESET " mount failed for %s: %d\n", path, ret);
+                ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[vfsd]", " mount failed for %s: %d\n",
+                          path, ret);
             }
             msg->regs.data[0] = op;
             msg->regs.data[1] = (uint32_t)ret;
@@ -725,6 +727,7 @@ int main(void) {
     };
 
     udm_server_init(&srv);
+    svc_notify_ready("vfsserver");
     udm_server_run(&srv);
 
     return 0;

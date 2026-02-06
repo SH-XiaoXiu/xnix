@@ -69,27 +69,6 @@ static int vga_color_to_ansi_fg(uint8_t color) {
     return map[color & 0x0F];
 }
 
-static int vga_color_to_ansi_bg(uint8_t color) {
-    static const int map[16] = {
-        40,  /* black */
-        44,  /* blue */
-        42,  /* green */
-        46,  /* cyan */
-        41,  /* red */
-        45,  /* magenta */
-        43,  /* brown/yellow */
-        47,  /* light grey */
-        100, /* dark grey */
-        104, /* light blue */
-        102, /* light green */
-        106, /* light cyan */
-        101, /* light red */
-        105, /* light magenta */
-        103, /* light brown/yellow */
-        107, /* white */
-    };
-    return map[color & 0x0F];
-}
 
 static void serial_apply_color_attr(uint8_t attr) {
     uint8_t fg = attr & 0x0F;

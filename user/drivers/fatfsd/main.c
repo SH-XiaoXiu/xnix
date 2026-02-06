@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <vfs/vfs.h>
 #include <vfs_client.h>
+#include <xnix/svc.h>
 #include <xnix/syscall.h>
 
 #define BOOT_VFS_EP 0
@@ -43,6 +44,7 @@ int main(void) {
     };
 
     udm_server_init(&srv);
+    svc_notify_ready("fatfsd");
     printf("[fatfsd] started\n");
 
     udm_server_run(&srv);

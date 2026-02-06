@@ -19,7 +19,6 @@
 #define SVC_DEPS_MAX        8
 #define SVC_MAX_SERVICES    16
 #define SVC_MAX_HANDLE_DEFS 32
-#define SVC_READY_DIR       "/run"
 
 /* IPC 就绪通知消息 */
 #define SVC_MSG_READY 0xF001
@@ -29,6 +28,7 @@
  */
 struct svc_ready_msg {
     uint32_t magic;    /* SVC_MSG_READY */
+    uint32_t pid;      /* 进程 ID */
     char     name[16]; /* 服务名 */
 };
 
@@ -149,8 +149,7 @@ struct svc_config {
     uint32_t mount_ep;            /* 挂载使用的 endpoint handle */
 
     /* 行为 */
-    bool respawn;       /* 退出后自动重启 */
-    bool no_ready_file; /* 不使用文件通知就绪状态 */
+    bool respawn; /* 退出后自动重启 */
 };
 
 /**
@@ -160,7 +159,10 @@ struct svc_runtime {
     svc_state_t state;
     int         pid;
     uint32_t    delay_start; /* delay 开始时间(ticks) */
-    bool        ready;       /* 是否已报告就绪 */
+    uint32_t    start_ticks;
+    bool        reported_ready;
+    bool        mounted;
+    bool        ready; /* 是否已报告就绪 */
 };
 
 /**
@@ -325,14 +327,6 @@ void svc_handle_ready_notification(struct svc_manager *mgr, struct ipc_message *
  * @param status 退出状态
  */
 void svc_handle_exit(struct svc_manager *mgr, int pid, int status);
-
-/**
- * 检查服务的 ready 文件是否存在
- *
- * @param name 服务名称
- * @return true 已就绪
- */
-bool svc_check_ready_file(const char *name);
 
 /**
  * 获取当前 tick 计数(毫秒)
