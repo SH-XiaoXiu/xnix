@@ -13,8 +13,10 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <xnix/abi/ipc.h>
+#include <xnix/abi/syscall.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/svc.h>
@@ -22,6 +24,27 @@
 
 /* 保护串口硬件访问的互斥锁 */
 static pthread_mutex_t serial_lock;
+
+static void debug_write(const char *s) {
+    if (!s) {
+        return;
+    }
+
+    uint32_t len = 0;
+    while (s[len] && len < 512) {
+        len++;
+    }
+    if (len == 0) {
+        return;
+    }
+
+    int ret;
+    asm volatile("int $0x80"
+                 : "=a"(ret)
+                 : "a"(SYS_DEBUG_WRITE), "b"((uint32_t)(uintptr_t)s), "c"(len)
+                 : "memory");
+    (void)ret;
+}
 
 static void serial_write_bytes(const char *buf, size_t len) {
     if (!buf || len == 0) {
@@ -141,7 +164,7 @@ static void *input_thread(void *arg) {
     /* kbd 驱动的 endpoint */
     const handle_t kbd_ep = env_get_handle("kbd_ep");
     if (kbd_ep == HANDLE_INVALID) {
-        serial_puts("[seriald] kbd_ep not found, input forwarding disabled\n");
+        debug_write("[seriald] kbd_ep not found, input forwarding disabled\n");
         return NULL;
     }
     bool last_was_cr = false;
@@ -206,27 +229,27 @@ int main(void) {
     serial_hw_init();
 
     /* Early output to confirm we're running */
-    serial_puts("[seriald] main() entered\n");
+    debug_write("[seriald] main() entered\n");
 
     /* 初始化互斥锁 */
     pthread_mutex_init(&serial_lock, NULL);
-    serial_puts("[seriald] mutex initialized\n");
+    debug_write("[seriald] mutex initialized\n");
 
     /* 使用 init 传递的 endpoint handle (seriald provides serial) */
     handle_t ep = env_get_handle("serial");
     if (ep == HANDLE_INVALID) {
-        serial_puts("[seriald] ERROR: 'serial' handle not found\n");
+        debug_write("[seriald] ERROR: 'serial' handle not found\n");
         return 1;
     }
-    serial_puts("[seriald] found serial endpoint handle\n");
+    debug_write("[seriald] found serial endpoint handle\n");
 
     /* 启动输入处理线程 */
-    serial_puts("[seriald] creating input thread\n");
+    debug_write("[seriald] creating input thread\n");
     pthread_t tid;
     if (pthread_create(&tid, NULL, input_thread, NULL) != 0) {
-        serial_puts("[seriald] ERROR: failed to create input thread\n");
+        debug_write("[seriald] ERROR: failed to create input thread\n");
     } else {
-        serial_puts("[seriald] input thread created\n");
+        debug_write("[seriald] input thread created\n");
     }
 
     struct udm_server srv = {
@@ -236,14 +259,14 @@ int main(void) {
     };
 
     udm_server_init(&srv);
-    serial_puts("[seriald] server initialized\n");
+    debug_write("[seriald] server initialized\n");
 
     /* 通知 init 服务已就绪 */
-    serial_puts("[seriald] notifying ready\n");
+    debug_write("[seriald] notifying ready\n");
     svc_notify_ready("seriald");
 
     udm_server_run(&srv);
 
-    serial_puts("[seriald] ERROR: server loop exited\n");
+    debug_write("[seriald] ERROR: server loop exited\n");
     return 0;
 }

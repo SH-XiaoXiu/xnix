@@ -10,7 +10,7 @@
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
 
-#include "../early_console.h"
+#include "early_console.h"
 
 static bool probe_fs_ready(uint32_t ep, uint32_t timeout_ms) {
     uint32_t       elapsed        = 0;
@@ -172,7 +172,7 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
 
     if (early_console_is_active()) {
         extern void early_puts(const char *);
-        char buf[160];
+        char        buf[160];
         snprintf(buf, sizeof(buf), "[INIT] started %s (pid %d)\n", cfg->name, pid);
         early_puts(buf);
     } else {

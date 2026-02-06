@@ -29,6 +29,7 @@ void perm_profile_init(void) {
     perm_profile_set(io_driver_profile, PERM_NODE_IO_PORT_ALL, PERM_GRANT);
     perm_profile_set(io_driver_profile, "xnix.irq.all", PERM_GRANT);
     perm_profile_set(io_driver_profile, PERM_NODE_MM_MMAP, PERM_GRANT);
+    perm_profile_set(io_driver_profile, "xnix.debug.console", PERM_GRANT);
 
     struct perm_profile *app_profile = perm_profile_create("app");
     perm_profile_set(app_profile, PERM_NODE_IPC_SEND, PERM_GRANT);
@@ -40,7 +41,6 @@ void perm_profile_init(void) {
 
     struct perm_profile *shell_profile = perm_profile_create("shell");
     perm_profile_inherit(shell_profile, default_profile);
-    perm_profile_set(shell_profile, "xnix.debug.console", PERM_GRANT);
 }
 
 /**

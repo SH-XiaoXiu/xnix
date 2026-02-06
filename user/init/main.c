@@ -17,7 +17,6 @@
 #include "svc_manager.h"
 
 #include <core_services.h>
-#include <d/protocol/vfs.h>
 #include <libs/serial/serial.h>
 #include <module_index.h>
 #include <stdio.h>
