@@ -195,6 +195,10 @@ static inline int sys_ipc_send(uint32_t ep, struct ipc_message *msg, uint32_t ti
     return syscall3(SYS_IPC_SEND, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
 }
 
+static inline int sys_ipc_send_async(uint32_t ep, struct ipc_message *msg) {
+    return syscall2(SYS_IPC_SEND_ASYNC, ep, (uint32_t)(uintptr_t)msg);
+}
+
 /**
  * 接收 IPC 消息
  */
@@ -314,25 +318,26 @@ static inline void *sys_sbrk(int32_t increment) {
  */
 static inline void *sys_mmap_phys(handle_t handle, uint32_t offset, uint32_t size, uint32_t prot,
                                   uint32_t *out_size) {
-    return (void *)syscall5(SYS_MMAP_PHYS, handle, offset, size, prot, (uint32_t)(uintptr_t)out_size);
+    return (void *)syscall5(SYS_MMAP_PHYS, handle, offset, size, prot,
+                            (uint32_t)(uintptr_t)out_size);
 }
 
 /**
  * Physmem 信息结构(用于 sys_physmem_info)
  */
 struct physmem_info {
-    uint32_t size;        /* 区域大小 */
-    uint32_t type;        /* 0=generic, 1=fb */
-    uint32_t width;       /* FB 宽度(仅 type=1) */
-    uint32_t height;      /* FB 高度(仅 type=1) */
-    uint32_t pitch;       /* FB pitch(仅 type=1) */
-    uint8_t  bpp;         /* FB bpp(仅 type=1) */
-    uint8_t  red_pos;     /* (仅 type=1) */
-    uint8_t  red_size;    /* (仅 type=1) */
-    uint8_t  green_pos;   /* (仅 type=1) */
-    uint8_t  green_size;  /* (仅 type=1) */
-    uint8_t  blue_pos;    /* (仅 type=1) */
-    uint8_t  blue_size;   /* (仅 type=1) */
+    uint32_t size;       /* 区域大小 */
+    uint32_t type;       /* 0=generic, 1=fb */
+    uint32_t width;      /* FB 宽度(仅 type=1) */
+    uint32_t height;     /* FB 高度(仅 type=1) */
+    uint32_t pitch;      /* FB pitch(仅 type=1) */
+    uint8_t  bpp;        /* FB bpp(仅 type=1) */
+    uint8_t  red_pos;    /* (仅 type=1) */
+    uint8_t  red_size;   /* (仅 type=1) */
+    uint8_t  green_pos;  /* (仅 type=1) */
+    uint8_t  green_size; /* (仅 type=1) */
+    uint8_t  blue_pos;   /* (仅 type=1) */
+    uint8_t  blue_size;  /* (仅 type=1) */
     uint8_t  _reserved[5];
 };
 

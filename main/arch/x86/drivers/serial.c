@@ -9,13 +9,10 @@
 #include <arch/cpu.h>
 
 #include <asm/irq_defs.h>
+#include <drivers/serial_hw_lock.h>
 #include <xnix/early_console.h>
 #include <xnix/irq.h>
 #include <xnix/stdio.h>
-#include <xnix/sync.h>
-
-/* 串口输出锁,保护多核同时输出 */
-static spinlock_t serial_lock = SPINLOCK_INIT;
 
 #define COM1 0x3F8
 
@@ -37,23 +34,23 @@ static void serial_putc_hw(char c) {
 
 /* 同步输出(带锁保护,\n 前自动加 \r) */
 static void serial_putc_sync(char c) {
-    uint32_t flags = spin_lock_irqsave(&serial_lock);
+    uint32_t flags = serial_hw_lock_irqsave();
     if (c == '\n') {
         serial_putc_hw('\r');
     }
     serial_putc_hw(c);
-    spin_unlock_irqrestore(&serial_lock, flags);
+    serial_hw_unlock_irqrestore(flags);
 }
 
 static void serial_puts_sync(const char *s) {
-    uint32_t flags = spin_lock_irqsave(&serial_lock);
+    uint32_t flags = serial_hw_lock_irqsave();
     while (*s) {
         if (*s == '\n') {
             serial_putc_hw('\r');
         }
         serial_putc_hw(*s++);
     }
-    spin_unlock_irqrestore(&serial_lock, flags);
+    serial_hw_unlock_irqrestore(flags);
 }
 
 static int serial_vga_color_to_ansi_fg(uint8_t color) {
@@ -78,27 +75,6 @@ static int serial_vga_color_to_ansi_fg(uint8_t color) {
     return map[color & 0x0F];
 }
 
-static int serial_vga_color_to_ansi_bg(uint8_t color) {
-    static const int map[16] = {
-        40,  /* black */
-        44,  /* blue */
-        42,  /* green */
-        46,  /* cyan */
-        41,  /* red */
-        45,  /* magenta */
-        43,  /* brown/yellow */
-        47,  /* light grey */
-        100, /* dark grey */
-        104, /* light blue */
-        102, /* light green */
-        106, /* light cyan */
-        101, /* light red */
-        105, /* light magenta */
-        103, /* light brown/yellow */
-        107, /* white */
-    };
-    return map[color & 0x0F];
-}
 
 static void serial_set_color(uint8_t fg, uint8_t bg) {
     char seq[32];

@@ -214,6 +214,26 @@ static int32_t sys_ipc_send(const uint32_t *args) {
     return ret;
 }
 
+static int32_t sys_ipc_send_async(const uint32_t *args) {
+    handle_t            ep       = (handle_t)args[0];
+    struct ipc_message *user_msg = (struct ipc_message *)(uintptr_t)args[1];
+
+    struct process *proc = process_current();
+    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+        return -EPERM;
+    }
+
+    struct ipc_message *kmsg = NULL;
+    int                 ret  = ipc_msg_copy_in(&kmsg, user_msg, false);
+    if (ret < 0) {
+        return ret;
+    }
+
+    ret = ipc_send_async(ep, kmsg);
+    ipc_msg_free(kmsg);
+    return ret;
+}
+
 /* SYS_IPC_RECV: ebx=ep, ecx=msg, edx=timeout */
 static int32_t sys_ipc_recv(const uint32_t *args) {
     handle_t            ep       = (handle_t)args[0];
@@ -343,6 +363,7 @@ static int32_t sys_notification_wait(const uint32_t *args) {
 void sys_ipc_init(void) {
     syscall_register(SYS_ENDPOINT_CREATE, sys_endpoint_create, 1, "endpoint_create");
     syscall_register(SYS_IPC_SEND, sys_ipc_send, 3, "ipc_send");
+    syscall_register(SYS_IPC_SEND_ASYNC, sys_ipc_send_async, 2, "ipc_send_async");
     syscall_register(SYS_IPC_RECV, sys_ipc_recv, 3, "ipc_recv");
     syscall_register(SYS_IPC_CALL, sys_ipc_call, 4, "ipc_call");
     syscall_register(SYS_IPC_REPLY, sys_ipc_reply, 1, "ipc_reply");

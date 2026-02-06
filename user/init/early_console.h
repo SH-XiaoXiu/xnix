@@ -20,12 +20,12 @@ void early_console_disable(void);
 bool early_console_is_active(void);
 
 /**
- * 输出单个字符(通过 SYS_DEBUG_PUT)
+ * 输出单个字符(通过 SYS_DEBUG_WRITE)
  */
 void early_putc(char c);
 
 /**
- * 输出字符串(通过 SYS_DEBUG_PUT)
+ * 输出字符串(通过 SYS_DEBUG_WRITE)
  */
 void early_puts(const char *s);
 

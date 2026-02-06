@@ -25,11 +25,13 @@
 #define SYS_IPC_CALL        103 /* RPC 调用: ebx=handle, ecx=msg* */
 #define SYS_IPC_REPLY       104 /* RPC 回复: ecx=msg* */
 #define SYS_IPC_REPLY_TO    105 /* 延迟回复: ebx=sender_tid, ecx=msg* */
+#define SYS_IPC_SEND_ASYNC  106
 
 /* 内存管理 (200-219) */
-#define SYS_SBRK        200 /* 堆管理: ebx=increment, 返回旧堆顶或 -1 */
-#define SYS_MMAP_PHYS   201 /* 映射物理内存: ebx=handle, ecx=offset, edx=size, esi=prot, edi=out_size */
-#define SYS_MUNMAP      202 /* 取消映射: ebx=addr, ecx=size */
+#define SYS_SBRK 200 /* 堆管理: ebx=increment, 返回旧堆顶或 -1 */
+#define SYS_MMAP_PHYS \
+    201 /* 映射物理内存: ebx=handle, ecx=offset, edx=size, esi=prot, edi=out_size */
+#define SYS_MUNMAP       202 /* 取消映射: ebx=addr, ecx=size */
 #define SYS_PHYSMEM_INFO 203 /* 查询物理内存信息: ebx=handle, ecx=info_ptr */
 
 /* 任务/线程 (300-319) */
@@ -49,7 +51,7 @@
 #define SYS_HANDLE_DUPLICATE 403 /* 复制 handle: ebx=src, ecx=dst_hint, edx=name */
 
 /* 权限 (420-439) */
-#define SYS_PERM_CHECK 20 /* 检查权限: ebx=perm_id(编号待迁移) */
+#define SYS_PERM_CHECK 420 /* 检查权限: ebx=perm_id */
 
 /* 硬件访问 (500-519) - 基于权限 */
 #define SYS_IOPORT_OUTB 500 /* 写端口 8位: ebx=port, ecx=val (需 xnix.io.port.<port> 权限) */
@@ -84,8 +86,10 @@
 #define SYS_KMSG_READ 850 /* 读取内核日志: ebx=seq_ptr, ecx=buf, edx=size */
 
 /* 杂项 (900-999) */
-#define SYS_SLEEP     900 /* 睡眠: ebx=ms */
-#define SYS_DEBUG_PUT 901 /* 调试输出(仅编译时启用): ebx=char */
+#define SYS_SLEEP             900 /* 睡眠: ebx=ms */
+#define SYS_DEBUG_WRITE       901 /* 调试控制台写(仅编译时启用): ebx=buf_ptr, ecx=len */
+#define SYS_DEBUG_SET_COLOR   902 /* 调试控制台颜色: ebx=fg, ecx=bg (仅编译时启用) */
+#define SYS_DEBUG_RESET_COLOR 903 /* 调试控制台颜色复位(仅编译时启用) */
 
 /*
  * 系统调用调用约定(x86)

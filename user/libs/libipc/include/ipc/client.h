@@ -60,6 +60,10 @@ int ipc_call_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t *result
  */
 int ipc_send_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout);
 
+int ipc_send_async(handle_t ep, const struct abi_ipc_message *msg);
+
+int ipc_send_async_simple(handle_t ep, uint32_t opcode, uint32_t arg);
+
 /**
  * Builder 模式(栈上分配)
  */
@@ -119,5 +123,7 @@ int ipc_builder_call(struct ipc_builder *builder, handle_t ep, struct abi_ipc_me
  * @return 0 成功,负数失败
  */
 int ipc_builder_send(struct ipc_builder *builder, handle_t ep, uint32_t timeout);
+
+int ipc_builder_send_async(struct ipc_builder *builder, handle_t ep);
 
 #endif /* IPC_CLIENT_H */

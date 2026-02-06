@@ -1,6 +1,6 @@
 /**
  * @file early_console.c
- * @brief Early console output using SYS_DEBUG_PUT
+ * @brief Early console output using SYS_DEBUG_WRITE
  *
  * Used by init before seriald is available. Requires xnix.debug.console permission.
  */
@@ -25,8 +25,12 @@ void early_putc(char c) {
         return;
     }
 
-    int ret;
-    asm volatile("int $0x80" : "=a"(ret) : "a"(SYS_DEBUG_PUT), "b"((uint32_t)c) : "memory");
+    int  ret;
+    char buf = c;
+    asm volatile("int $0x80"
+                 : "=a"(ret)
+                 : "a"(SYS_DEBUG_WRITE), "b"((uint32_t)(uintptr_t)&buf), "c"(1u)
+                 : "memory");
     (void)ret;
 }
 
@@ -35,9 +39,20 @@ void early_puts(const char *s) {
         return;
     }
 
-    while (*s) {
-        early_putc(*s++);
+    uint32_t len = 0;
+    while (s[len] && len < 512) {
+        len++;
     }
+    if (len == 0) {
+        return;
+    }
+
+    int ret;
+    asm volatile("int $0x80"
+                 : "=a"(ret)
+                 : "a"(SYS_DEBUG_WRITE), "b"((uint32_t)(uintptr_t)s), "c"(len)
+                 : "memory");
+    (void)ret;
 }
 
 void early_set_color(uint8_t fg, uint8_t bg) {

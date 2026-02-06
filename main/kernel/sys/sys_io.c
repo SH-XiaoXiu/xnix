@@ -5,11 +5,17 @@
 
 #include <arch/cpu.h>
 
+#include <drivers/serial_hw_lock.h>
 #include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/perm.h>
 #include <xnix/process.h>
 #include <xnix/syscall.h>
+#include <xnix/types.h>
+
+static inline bool is_com1_port(uint16_t port) {
+    return (port >= 0x3F8) && (port <= 0x3FF);
+}
 
 /* SYS_IOPORT_OUTB: ebx=port, ecx=val */
 static int32_t sys_ioport_outb(const uint32_t *args) {
@@ -19,6 +25,13 @@ static int32_t sys_ioport_outb(const uint32_t *args) {
 
     if (!perm_check_ioport(proc, port)) {
         return -EPERM;
+    }
+
+    if (is_com1_port(port)) {
+        uint32_t flags = serial_hw_lock_irqsave();
+        outb(port, val);
+        serial_hw_unlock_irqrestore(flags);
+        return 0;
     }
 
     outb(port, val);
@@ -34,6 +47,13 @@ static int32_t sys_ioport_inb(const uint32_t *args) {
         return -EPERM;
     }
 
+    if (is_com1_port(port)) {
+        uint32_t flags = serial_hw_lock_irqsave();
+        int32_t  v     = (int32_t)inb(port);
+        serial_hw_unlock_irqrestore(flags);
+        return v;
+    }
+
     return (int32_t)inb(port);
 }
 
@@ -47,6 +67,13 @@ static int32_t sys_ioport_outw(const uint32_t *args) {
         return -EPERM;
     }
 
+    if (is_com1_port(port)) {
+        uint32_t flags = serial_hw_lock_irqsave();
+        outw(port, val);
+        serial_hw_unlock_irqrestore(flags);
+        return 0;
+    }
+
     outw(port, val);
     return 0;
 }
@@ -58,6 +85,13 @@ static int32_t sys_ioport_inw(const uint32_t *args) {
 
     if (!perm_check_ioport(proc, port)) {
         return -EPERM;
+    }
+
+    if (is_com1_port(port)) {
+        uint32_t flags = serial_hw_lock_irqsave();
+        int32_t  v     = (int32_t)inw(port);
+        serial_hw_unlock_irqrestore(flags);
+        return v;
     }
 
     return (int32_t)inw(port);
