@@ -95,6 +95,10 @@ static int handle_def_create(struct svc_handle_def *def) {
     case SVC_HANDLE_TYPE_ENDPOINT:
         h = sys_endpoint_create(def->name);
         break;
+    case SVC_HANDLE_TYPE_INHERIT:
+        /* 查找已存在的 handle(由内核在启动时创建) */
+        h = sys_handle_find(def->name);
+        break;
     default:
         return -1;
     }
@@ -390,6 +394,8 @@ static bool ini_handler(const char *section, const char *key, const char *value,
         if (strcmp(key, "type") == 0) {
             if (strcmp(value, "endpoint") == 0) {
                 h->type = SVC_HANDLE_TYPE_ENDPOINT;
+            } else if (strcmp(value, "inherit") == 0) {
+                h->type = SVC_HANDLE_TYPE_INHERIT;
             }
         }
         return true;

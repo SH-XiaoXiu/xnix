@@ -2,8 +2,7 @@
  * @file kernel/boot/bootinfo.c
  * @brief Boot 资源信息收集
  *
- * 收集启动时的硬件资源信息(暂不创建 handles)
- * Handles 将在启动 init 时直接在其 handle table 中创建
+ * 收集启动时的硬件资源信息,创建 boot handles 传给 init
  */
 
 #include <arch/mmu.h>
@@ -11,6 +10,8 @@
 #include <xnix/abi/handle.h>
 #include <xnix/boot.h>
 #include <xnix/handle.h>
+#include <xnix/physmem.h>
+#include <xnix/process.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/types.h>
@@ -103,15 +104,33 @@ void bootinfo_collect(void) {
     pr_info("bootinfo: collected %u boot resources", g_boot_resources.count);
 }
 
-/* 外部函数声明(将在 physmem.c 中实现) */
-extern handle_t physmem_create_handle_for_proc(struct process *proc, paddr_t phys_addr,
-                                               uint32_t size, const char *name);
-
 /**
  * 为 init 进程创建 boot handles
  *
- * 当前模块加载使用 module_index 方式(init 通过 sys_module_map 直接访问),
- * 不需要通过 handle 传递.返回空列表.
+ * 在 init 进程中直接创建硬件资源的 handles.
+ * 这个函数应该在 spawn_core 中 creator == NULL 时调用.
+ *
+ * @param proc init 进程
+ * @return 0 成功, <0 失败
+ */
+int bootinfo_create_handles_for_init(struct process *proc) {
+    if (!proc) {
+        return -1;
+    }
+
+    /* 创建 framebuffer handle */
+    handle_t fb_handle = physmem_create_fb_handle_for_proc(proc, "fb_mem");
+    if (fb_handle != HANDLE_INVALID) {
+        pr_info("bootinfo: created fb_mem handle %u for init", fb_handle);
+    }
+
+    return 0;
+}
+
+/**
+ * 获取 boot handles (兼容旧接口)
+ *
+ * 当前实现返回空列表,实际 handles 通过 bootinfo_create_handles_for_init 创建.
  *
  * @param out_handles 输出 handle 数组
  * @param out_count   输出 handle 数量
@@ -127,6 +146,5 @@ int bootinfo_get_handles(struct spawn_handle **out_handles, uint32_t *out_count)
     *out_handles = spawn_handles;
     *out_count   = 0;
 
-    pr_debug("bootinfo_get_handles: module_index mode, no handles to pass");
     return 0;
 }

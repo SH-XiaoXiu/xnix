@@ -305,6 +305,19 @@ static inline void *sys_sbrk(int32_t increment) {
     return (void *)syscall1(SYS_SBRK, (uint32_t)increment);
 }
 
+/**
+ * @brief 映射物理内存到用户空间
+ *
+ * @param handle HANDLE_PHYSMEM 类型的 handle
+ * @param offset 资源内偏移
+ * @param size   映射大小
+ * @param prot   保护标志
+ * @return 用户空间虚拟地址,负数表示错误
+ */
+static inline void *sys_mmap_phys(handle_t handle, uint32_t offset, uint32_t size, uint32_t prot) {
+    return (void *)syscall4(SYS_MMAP_PHYS, handle, offset, size, prot);
+}
+
 /*
  * 进程列表
  */

@@ -6,8 +6,11 @@
 #include <kernel/process/process.h>
 #include <kernel/sys/syscall.h>
 #include <xnix/errno.h>
+#include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
+#include <xnix/perm.h>
+#include <xnix/physmem.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/syscall.h>
@@ -128,19 +131,26 @@ static int32_t sys_mmap_phys(const uint32_t *args) {
     uint32_t size   = args[2];
     uint32_t prot   = args[3];
 
-    (void)handle;
-    (void)offset;
-    (void)size;
-    (void)prot;
+    struct process *proc = process_get_current();
+    if (!proc) {
+        return -EINVAL;
+    }
 
-    /* TODO: 实现 handle 查找和物理内存映射 */
-    /* 需要:
-     * 1. 查找 handle,验证类型为 HANDLE_PHYSMEM
-     * 2. 检查 xnix.mm.mmap 权限
-     * 3. 获取物理地址范围
-     * 4. 映射到用户空间
-     */
-    return -ENOSYS; /* 暂未实现 */
+    /* 解析 handle,验证类型为 HANDLE_PHYSMEM */
+    struct physmem_region *region =
+        (struct physmem_region *)handle_resolve(proc, handle, HANDLE_PHYSMEM, PERM_ID_INVALID);
+    if (!region) {
+        pr_warn("sys_mmap_phys: invalid handle %u", handle);
+        return -EINVAL;
+    }
+
+    /* 映射到用户空间 */
+    uint32_t user_addr = physmem_map_to_user(proc, region, offset, size, prot);
+    if (user_addr == 0) {
+        return -ENOMEM;
+    }
+
+    return (int32_t)user_addr;
 }
 
 /**

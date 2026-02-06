@@ -103,7 +103,8 @@ struct svc_handle_desc {
 
 typedef enum {
     SVC_HANDLE_TYPE_NONE = 0,
-    SVC_HANDLE_TYPE_ENDPOINT,
+    SVC_HANDLE_TYPE_ENDPOINT, /* 创建新的 IPC endpoint */
+    SVC_HANDLE_TYPE_INHERIT,  /* 继承已存在的 handle(如 fb_mem) */
 } svc_handle_type_t;
 
 struct svc_handle_def {

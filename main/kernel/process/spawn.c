@@ -7,6 +7,7 @@
 
 #include <kernel/process/process.h>
 #include <kernel/sched/sched.h>
+#include <xnix/boot.h>
 #include <xnix/debug.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
@@ -217,6 +218,11 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
             process_destroy((process_t)proc);
             return PID_INVALID;
         }
+    }
+
+    /* 对于 init 进程(无父进程),直接创建 boot handles */
+    if (!creator) {
+        bootinfo_create_handles_for_init(proc);
     }
 
     /* 加载 ELF */
