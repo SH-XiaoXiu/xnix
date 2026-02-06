@@ -10,6 +10,7 @@
 
 #include <d/protocol/vfs.h>
 #include <d/server.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs/vfs.h>
@@ -62,8 +63,8 @@ int main(void) {
     /* 使用 sys_mmap_phys 映射模块到用户空间 */
     uint32_t mod_size = 0;
     void *mod_addr = sys_mmap_phys(mod_handle, 0, 0, 0x03, &mod_size); /* PROT_READ | PROT_WRITE */
-    if (mod_addr == (void *)-1 || mod_addr == NULL) {
-        printf("[rootfsd] Failed to map module\n");
+    if (mod_addr == NULL || (intptr_t)mod_addr < 0) {
+        printf("[rootfsd] Failed to map module (%d)\n", (int)(intptr_t)mod_addr);
         return 1;
     }
 

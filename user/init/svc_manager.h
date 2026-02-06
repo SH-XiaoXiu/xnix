@@ -312,6 +312,13 @@ int svc_resolve_service_discovery(struct svc_manager *mgr);
 void svc_tick_parallel(struct svc_manager *mgr);
 
 /**
+ * 抑制服务诊断输出
+ *
+ * 用于在 shell 启动后停止诊断日志输出
+ */
+void svc_suppress_diagnostics(void);
+
+/**
  * 处理服务就绪通知(IPC 消息)
  *
  * @param mgr 管理器实例

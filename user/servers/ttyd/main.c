@@ -50,7 +50,10 @@ struct tty_instance {
     int      id;
     handle_t endpoint;  /* 此 tty 的 endpoint (tty0, tty1) */
     handle_t output_ep; /* 输出设备 endpoint (serial, fbd) */
-    handle_t input_ep;  /* 输入设备 endpoint (kbd_ep, serial) */
+    handle_t fallback_output_ep;
+    handle_t primary_output_ep; /* 原始输出设备(用于重试) */
+    int      fallback_count;    /* 连续 fallback 次数 */
+    handle_t input_ep;          /* 输入设备 endpoint (kbd_ep, serial) */
 
     /* 输入队列 */
     char             input_buf[TTY_INPUT_BUF_SIZE];
@@ -70,7 +73,8 @@ struct tty_instance {
     int foreground_pid;
 };
 
-#define MAX_TTY 2
+#define MAX_TTY               2
+#define TTY_OUTPUT_TIMEOUT_MS 50
 static struct tty_instance g_ttys[MAX_TTY];
 static int                 g_tty_count = 0;
 
@@ -103,16 +107,51 @@ static int tty_input_available(struct tty_instance *tty) {
     return TTY_INPUT_BUF_SIZE - tty->input_tail + tty->input_head;
 }
 
+/**
+ * 发送消息到输出设备,失败时使用 fallback,定期重试 primary
+ */
+static int tty_output_send(struct tty_instance *tty, struct ipc_message *msg) {
+    if (tty->output_ep == HANDLE_INVALID) {
+        return -1;
+    }
+
+    /* 每 32 次 fallback 后尝试恢复 primary */
+    if (tty->fallback_count > 0 && (tty->fallback_count % 32) == 0 &&
+        tty->primary_output_ep != HANDLE_INVALID &&
+        tty->output_ep != tty->primary_output_ep) {
+        int probe = sys_ipc_send(tty->primary_output_ep, msg, TTY_OUTPUT_TIMEOUT_MS);
+        if (probe == IPC_OK) {
+            tty->output_ep      = tty->primary_output_ep;
+            tty->fallback_count = 0;
+            return IPC_OK;
+        }
+    }
+
+    int ret = sys_ipc_send(tty->output_ep, msg, TTY_OUTPUT_TIMEOUT_MS);
+    if (ret == IPC_OK) {
+        if (tty->output_ep == tty->primary_output_ep) {
+            tty->fallback_count = 0;
+        }
+        return IPC_OK;
+    }
+
+    /* fallback */
+    if (tty->fallback_output_ep != HANDLE_INVALID &&
+        tty->output_ep != tty->fallback_output_ep) {
+        tty->output_ep = tty->fallback_output_ep;
+        tty->fallback_count++;
+        return sys_ipc_send(tty->output_ep, msg, TTY_OUTPUT_TIMEOUT_MS);
+    }
+    return ret;
+}
+
 /* 向输出设备写一个字符 */
 static void tty_output_char(struct tty_instance *tty, char c) {
-    if (tty->output_ep == HANDLE_INVALID) {
-        return;
-    }
     struct ipc_message msg;
     memset(&msg, 0, sizeof(msg));
     msg.regs.data[0] = UDM_CONSOLE_PUTC;
     msg.regs.data[1] = (uint32_t)(unsigned char)c;
-    sys_ipc_send(tty->output_ep, &msg, 0);
+    tty_output_send(tty, &msg);
 }
 
 /* 向输出设备写字符串(通过 WRITE 批量发送) */
@@ -121,7 +160,6 @@ static void tty_output_write(struct tty_instance *tty, const char *data, int len
         return;
     }
 
-    /* 通过 inline 寄存器发送小数据 */
     while (len > 0) {
         struct ipc_message msg;
         memset(&msg, 0, sizeof(msg));
@@ -132,13 +170,12 @@ static void tty_output_write(struct tty_instance *tty, const char *data, int len
             chunk = UDM_CONSOLE_WRITE_MAX;
         }
 
-        /* 将字符数据打包到 data[1..7] 中 */
         memcpy(&msg.regs.data[1], data, chunk);
-
-        /* 在最后一个寄存器的末尾设置长度信息 */
         msg.regs.data[7] = (uint32_t)chunk;
 
-        sys_ipc_send(tty->output_ep, &msg, 0);
+        if (tty_output_send(tty, &msg) != IPC_OK) {
+            break;
+        }
 
         data += chunk;
         len -= chunk;
@@ -146,26 +183,18 @@ static void tty_output_write(struct tty_instance *tty, const char *data, int len
 }
 
 static void tty_output_set_color(struct tty_instance *tty, uint8_t fg, uint8_t bg) {
-    if (tty->output_ep == HANDLE_INVALID) {
-        return;
-    }
-
     struct ipc_message msg;
     memset(&msg, 0, sizeof(msg));
     msg.regs.data[0] = UDM_CONSOLE_SET_COLOR;
     msg.regs.data[1] = (uint32_t)((fg & 0x0F) | ((bg & 0x0F) << 4));
-    sys_ipc_send(tty->output_ep, &msg, 0);
+    tty_output_send(tty, &msg);
 }
 
 static void tty_output_reset_color(struct tty_instance *tty) {
-    if (tty->output_ep == HANDLE_INVALID) {
-        return;
-    }
-
     struct ipc_message msg;
     memset(&msg, 0, sizeof(msg));
     msg.regs.data[0] = UDM_CONSOLE_RESET_COLOR;
-    sys_ipc_send(tty->output_ep, &msg, 0);
+    tty_output_send(tty, &msg);
 }
 
 /* 尝试满足挂起的读请求 */
@@ -190,18 +219,19 @@ static void try_fulfill_pending_read(struct tty_instance *tty) {
 
     /* 将数据打包到回复中 */
     char buf[TTY_INPUT_BUF_SIZE];
+    int  actual_read = 0;
     for (int i = 0; i < to_read; i++) {
         int c = tty_input_get(tty);
         if (c < 0) {
             break;
         }
-        buf[i] = (char)c;
+        buf[actual_read++] = (char)c;
     }
 
-    reply.regs.data[0] = (uint32_t)to_read;
-    if (to_read > 0) {
+    reply.regs.data[0] = (uint32_t)actual_read;
+    if (actual_read > 0) {
         reply.buffer.data = buf;
-        reply.buffer.size = (uint32_t)to_read;
+        reply.buffer.size = (uint32_t)actual_read;
     }
 
     sys_ipc_reply_to(tty->pending_tid, &reply);
@@ -474,16 +504,19 @@ static void *tty_thread(void *arg) {
 
 /* 初始化一个 tty 实例 */
 static void tty_init_instance(struct tty_instance *tty, int id, handle_t ep, handle_t output,
-                              handle_t input) {
+                              handle_t fallback_output, handle_t input) {
     memset(tty, 0, sizeof(*tty));
-    tty->id             = id;
-    tty->endpoint       = ep;
-    tty->output_ep      = output;
-    tty->input_ep       = input;
-    tty->input_head     = 0;
-    tty->input_tail     = 0;
-    tty->pending_read   = 0;
-    tty->foreground_pid = 0;
+    tty->id                 = id;
+    tty->endpoint           = ep;
+    tty->output_ep          = output;
+    tty->primary_output_ep  = output;
+    tty->fallback_output_ep = fallback_output;
+    tty->fallback_count     = 0;
+    tty->input_ep           = input;
+    tty->input_head         = 0;
+    tty->input_tail         = 0;
+    tty->pending_read       = 0;
+    tty->foreground_pid     = 0;
 
     /* 默认 raw 模式,echo 开启 */
     tty->ldisc.mode     = LDISC_RAW;
@@ -497,69 +530,72 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    printf("[ttyd] starting terminal server\n");
+    /* printf 不能在服务线程启动前使用,会死锁 */
 
-    /* 查找设备 handles */
     handle_t serial_ep = env_get_handle("serial");
     handle_t kbd_ep    = env_get_handle("kbd_ep");
 
     if (serial_ep == HANDLE_INVALID) {
-        printf("[ttyd] ERROR: serial handle not found\n");
         return 1;
     }
 
-    /* 获取 tty1 (serial) endpoint(由 init 通过 provides 传递) */
+    /* 获取 tty1 (serial) endpoint */
     handle_t tty1_ep = env_get_handle(ABI_TTY1_HANDLE_NAME);
     if (tty1_ep == HANDLE_INVALID) {
-        /* 回退:自行创建(init 未传递 handle 时) */
         tty1_ep = sys_endpoint_create(ABI_TTY1_HANDLE_NAME);
         if (tty1_ep == HANDLE_INVALID) {
-            printf("[ttyd] ERROR: failed to get tty1 endpoint\n");
             return 1;
         }
     }
 
-    /* 初始化 tty1 (serial 终端)
-     * 输出走 seriald,输入走 kbd(seriald 把 UART 输入转发给 kbd) */
-    tty_init_instance(&g_ttys[0], 1, tty1_ep, serial_ep, kbd_ep);
+    /* 初始化 tty1 (serial 终端) */
+    tty_init_instance(&g_ttys[0], 1, tty1_ep, serial_ep, serial_ep, kbd_ep);
     g_tty_count = 1;
 
-    /* 如果 kbd 可用,获取 tty0 (VGA 终端) */
+    /* 如果 kbd 可用,创建 tty0 (VGA 终端) */
     if (kbd_ep != HANDLE_INVALID) {
         handle_t tty0_ep = env_get_handle(ABI_TTY0_HANDLE_NAME);
         if (tty0_ep == HANDLE_INVALID) {
             tty0_ep = sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
         }
         if (tty0_ep != HANDLE_INVALID) {
-            /* tty0 使用 fb_ep 输出到 VGA,回退到 serial_ep */
-            handle_t fb_ep     = env_get_handle("fb_ep");
-            handle_t output_ep = (fb_ep != HANDLE_INVALID) ? fb_ep : serial_ep;
-            if (fb_ep != HANDLE_INVALID) {
-                printf("[ttyd] tty0 will use fb_ep for VGA output\n");
-            } else {
-                printf("[ttyd] WARNING: fb_ep not available, tty0 using serial fallback\n");
-            }
-            tty_init_instance(&g_ttys[1], 0, tty0_ep, output_ep, kbd_ep);
+            handle_t vga_ep    = env_get_handle("vga_ep");
+
+            /* 调试: 检查 vga_ep 是否有效 */
+            printf("[ttyd] vga_ep=%d, serial_ep=%d\n", (int)vga_ep, (int)serial_ep);
+
+            handle_t output_ep = (vga_ep != HANDLE_INVALID) ? vga_ep : serial_ep;
+
+            tty_init_instance(&g_ttys[1], 0, tty0_ep, output_ep, serial_ep, kbd_ep);
             g_tty_count = 2;
         }
     }
 
-    printf("[ttyd] initialized %d tty(s)\n", g_tty_count);
-
-    /* 启动 tty1 的输入监听线程 */
+    /* 启动输入监听线程 */
     if (kbd_ep != HANDLE_INVALID) {
+        struct tty_instance *input_tty = NULL;
+        for (int i = 0; i < g_tty_count; i++) {
+            if (g_ttys[i].id == 0 && g_ttys[i].input_ep != HANDLE_INVALID) {
+                input_tty = &g_ttys[i];
+                break;
+            }
+        }
+        if (!input_tty) {
+            input_tty = &g_ttys[0];
+        }
         pthread_t input_tid;
-        pthread_create(&input_tid, NULL, input_listener_thread, &g_ttys[0]);
+        pthread_create(&input_tid, NULL, input_listener_thread, input_tty);
     }
 
-    /* 为每个 tty 创建服务线程 */
+    /* 为每个 tty 创建服务线程(跳过 index 0,主线程负责) */
     for (int i = 1; i < g_tty_count; i++) {
         pthread_t tid;
         pthread_create(&tid, NULL, tty_thread, &g_ttys[i]);
     }
 
-    /* 通知 init 就绪 */
     svc_notify_ready("ttyd");
+
+    printf("[ttyd] ready (%d ttys)\n", g_tty_count);
 
     /* 主线程服务 tty1 (serial) */
     tty_thread(&g_ttys[0]);

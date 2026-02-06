@@ -355,10 +355,7 @@ static int vfsd_forward(struct ipc_message *msg, uint32_t pid, const char *path)
 
     int fs_ep = vfsd_lookup(abs_path, rel_path, sizeof(rel_path));
 
-    if (fs_ep == HANDLE_INVALID) {
-        if (fs_ep == -2) {
-            return fs_ep;
-        }
+    if (fs_ep < 0) {
         return fs_ep;
     }
 
@@ -400,7 +397,7 @@ static int vfsd_forward(struct ipc_message *msg, uint32_t pid, const char *path)
 static int vfsd_opendir(struct ipc_message *msg, const char *abs_path) {
     char rel_path[VFS_PATH_MAX];
     int  backend_ep = vfsd_lookup(abs_path, rel_path, sizeof(rel_path));
-    if (backend_ep == HANDLE_INVALID) {
+    if (backend_ep < 0) {
         return backend_ep;
     }
 
@@ -539,7 +536,7 @@ static int vfsd_handler(struct ipc_message *msg) {
             /* 验证路径存在且是目录(通过 stat 转发给 FS 驱动)*/
             char rel_path[VFS_PATH_MAX];
             int  fs_ep = vfsd_lookup(abs_path, rel_path, sizeof(rel_path));
-            if (fs_ep == HANDLE_INVALID) {
+            if (fs_ep < 0) {
                 msg->regs.data[0] = op;
                 msg->regs.data[1] = (uint32_t)fs_ep;
                 return 0;

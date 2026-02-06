@@ -98,6 +98,12 @@ int boot_handles_create_for_init(struct process *proc) {
         pr_info("boot_handles: created fb_mem handle %u for init", fb_handle);
     }
 
+    /* 创建 VGA text buffer handle (0xB8000, 4KB) */
+    handle_t vga_handle = physmem_create_handle_for_proc(proc, 0xB8000, 0x1000, "vga_mem");
+    if (vga_handle != HANDLE_INVALID) {
+        pr_info("boot_handles: created vga_mem handle %u for init", vga_handle);
+    }
+
     /* 为每个 Multiboot 模块创建 physmem handle */
     for (uint32_t i = 0; i < g_boot_resources.count; i++) {
         struct boot_resource *res = &g_boot_resources.resources[i];

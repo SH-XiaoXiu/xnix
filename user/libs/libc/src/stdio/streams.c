@@ -8,6 +8,7 @@
 #include <d/protocol/tty.h>
 #include <stdio_internal.h>
 #include <string.h>
+#include <unistd.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
@@ -107,37 +108,43 @@ int _file_getc(FILE *f) {
     if (!f || !(f->flags & _FILE_READ)) {
         return EOF;
     }
-    if (f->eof) {
-        return EOF;
-    }
-    if (f->tty_ep == HANDLE_INVALID) {
-        return EOF;
-    }
 
     struct ipc_message req;
     struct ipc_message reply;
     char               recv_buf[4];
 
-    memset(&req, 0, sizeof(req));
-    memset(&reply, 0, sizeof(reply));
+    for (;;) {
+        if (f->tty_ep == HANDLE_INVALID) {
+            f->tty_ep = find_tty_ep();
+            if (f->tty_ep == HANDLE_INVALID) {
+                f->error = 1;
+                msleep(10);
+                continue;
+            }
+        }
 
-    req.regs.data[0] = TTY_OP_READ;
-    req.regs.data[1] = 1;
+        memset(&req, 0, sizeof(req));
+        memset(&reply, 0, sizeof(reply));
 
-    reply.buffer.data = recv_buf;
-    reply.buffer.size = sizeof(recv_buf);
+        req.regs.data[0] = TTY_OP_READ;
+        req.regs.data[1] = 1;
 
-    int ret = sys_ipc_call(f->tty_ep, &req, &reply, 0);
-    if (ret != 0) {
-        f->error = 1;
-        return EOF;
+        reply.buffer.data = recv_buf;
+        reply.buffer.size = sizeof(recv_buf);
+
+        int ret = sys_ipc_call(f->tty_ep, &req, &reply, 0);
+        if (ret != 0) {
+            /* 重试当前 endpoint,不要切换到其他 tty */
+            msleep(10);
+            continue;
+        }
+
+        int n = (int)reply.regs.data[0];
+        if (n <= 0) {
+            msleep(1);
+            continue;
+        }
+
+        return (unsigned char)recv_buf[0];
     }
-
-    int n = (int)reply.regs.data[0];
-    if (n <= 0) {
-        f->eof = 1;
-        return EOF;
-    }
-
-    return (unsigned char)recv_buf[0];
 }

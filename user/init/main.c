@@ -35,7 +35,7 @@ static struct svc_manager g_mgr;
 /* 用户配置路径(可通过引导参数覆盖) */
 static const char *g_user_config_path = USER_CONFIG_DEFAULT;
 
-static void drain_ready_notifications(int init_notify_ep) {
+static void drain_ready_notifications(handle_t init_notify_ep) {
     if (init_notify_ep == HANDLE_INVALID) {
         return;
     }

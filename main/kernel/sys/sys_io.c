@@ -6,7 +6,6 @@
 #include <arch/cpu.h>
 
 #include <drivers/serial_hw_lock.h>
-
 #include <sys/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/perm.h>

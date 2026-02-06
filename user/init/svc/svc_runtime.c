@@ -185,6 +185,11 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     rt->mounted        = false;
     rt->ready          = false;
 
+    /* 如果启动的是shell,立即抑制诊断输出,避免与shell输出混乱 */
+    if (strcmp(cfg->name, "shell") == 0) {
+        svc_suppress_diagnostics();
+    }
+
     return pid;
 }
 

@@ -4,8 +4,9 @@
 #include <vfs_client.h>
 #include <xnix/ulog.h>
 
-static uint32_t g_ticks           = 0;
-static uint32_t g_last_diag_ticks = 0;
+static uint32_t g_ticks                = 0;
+static uint32_t g_last_diag_ticks      = 0;
+static bool     g_suppress_diagnostics = false;
 
 #define SVC_READY_TIMEOUT_MS 5000
 #define SVC_DIAG_INTERVAL_MS 2000
@@ -56,6 +57,10 @@ static void svc_propagate_failed_requires(struct svc_manager *mgr) {
 }
 
 static void svc_dump_waiting(struct svc_manager *mgr) {
+    if (g_suppress_diagnostics) {
+        return;
+    }
+
     /* 先检查是否有需要报告的服务 */
     bool has_waiting = false;
     for (int i = 0; i < mgr->count; i++) {
@@ -241,4 +246,8 @@ void svc_tick_parallel(struct svc_manager *mgr) {
             svc_start_service(mgr, idx);
         }
     }
+}
+
+void svc_suppress_diagnostics(void) {
+    g_suppress_diagnostics = true;
 }
