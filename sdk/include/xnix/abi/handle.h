@@ -44,7 +44,7 @@ typedef enum {
  * 传递给子进程.
  */
 struct spawn_handle {
-    handle_t src;                 /* 父进程中的 handle */
+    handle_t src;                   /* 父进程中的 handle */
     char     name[HANDLE_NAME_MAX]; /* 子进程中的 handle 名称 */
 };
 

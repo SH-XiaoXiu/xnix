@@ -5,9 +5,9 @@
  * 管理 stdin/stdout/stderr 三个标准流,通过 TTY IPC 协议与 ttyd 通信.
  */
 
+#include <d/protocol/tty.h>
 #include <stdio_internal.h>
 #include <string.h>
-#include <d/protocol/tty.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
@@ -21,10 +21,14 @@ static handle_t find_tty_ep(void) {
     handle_t h;
 
     h = env_get_handle("tty1");
-    if (h != HANDLE_INVALID) return h;
+    if (h != HANDLE_INVALID) {
+        return h;
+    }
 
     h = env_get_handle("tty0");
-    if (h != HANDLE_INVALID) return h;
+    if (h != HANDLE_INVALID) {
+        return h;
+    }
 
     return HANDLE_INVALID;
 }
@@ -62,8 +66,8 @@ int _file_flush(FILE *f) {
     memset(&msg, 0, sizeof(msg));
     msg.regs.data[0] = TTY_OP_WRITE;
     msg.regs.data[1] = (uint32_t)f->buf_pos;
-    msg.buffer.data   = f->buf;
-    msg.buffer.size   = (uint32_t)f->buf_pos;
+    msg.buffer.data  = f->buf;
+    msg.buffer.size  = (uint32_t)f->buf_pos;
 
     sys_ipc_send(f->tty_ep, &msg, 100);
     f->buf_pos = 0;

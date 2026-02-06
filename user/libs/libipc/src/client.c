@@ -68,8 +68,8 @@ int ipc_send_async_simple(handle_t ep, uint32_t opcode, uint32_t arg) {
     }
 
     struct abi_ipc_message msg = {0};
-    msg.regs.data[0]          = opcode;
-    msg.regs.data[1]          = arg;
+    msg.regs.data[0]           = opcode;
+    msg.regs.data[1]           = arg;
 
     return ipc_send_async(ep, &msg);
 }

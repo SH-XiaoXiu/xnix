@@ -56,7 +56,7 @@ int main(void) {
 
     /* 使用 sys_mmap_phys 映射模块到用户空间 */
     uint32_t mod_size = 0;
-    void    *mod_addr = sys_mmap_phys(mod_handle, 0, 0, 0x03, &mod_size); /* PROT_READ | PROT_WRITE */
+    void *mod_addr = sys_mmap_phys(mod_handle, 0, 0, 0x03, &mod_size); /* PROT_READ | PROT_WRITE */
     if (mod_addr == (void *)-1 || mod_addr == NULL) {
         printf("[rootfsd] Failed to map module\n");
         return 1;

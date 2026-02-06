@@ -8,8 +8,9 @@
 
 #include <arch/cpu.h>
 
-#include <asm/irq_defs.h>
 #include <drivers/serial_hw_lock.h>
+
+#include <asm/irq_defs.h>
 #include <xnix/early_console.h>
 #include <xnix/irq.h>
 #include <xnix/stdio.h>
@@ -74,7 +75,6 @@ static int serial_vga_color_to_ansi_fg(uint8_t color) {
     };
     return map[color & 0x0F];
 }
-
 
 static void serial_set_color(uint8_t fg, uint8_t bg) {
     char seq[32];

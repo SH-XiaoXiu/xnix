@@ -1,3 +1,4 @@
+#include "early_console.h"
 #include "svc_internal.h"
 
 #include <d/protocol/vfs.h>
@@ -9,8 +10,6 @@
 #include <xnix/abi/process.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
-
-#include "early_console.h"
 
 static bool probe_fs_ready(uint32_t ep, uint32_t timeout_ms) {
     uint32_t       elapsed        = 0;

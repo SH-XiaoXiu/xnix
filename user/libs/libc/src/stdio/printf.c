@@ -35,8 +35,8 @@ static void file_emit(char c, void *ctx) {
 }
 
 /* 数字格式化输出 */
-static int emit_num(emit_fn emit, void *ctx, unsigned int num, int base,
-                    int is_signed, int width, int pad_zero) {
+static int emit_num(emit_fn emit, void *ctx, unsigned int num, int base, int is_signed, int width,
+                    int pad_zero) {
     char         tmp[32];
     int          i        = 0;
     int          negative = 0;

@@ -66,8 +66,8 @@ void boot_handles_collect(void) {
             snprintf(res->name, sizeof(res->name), "module%u", i);
         }
 
-        pr_debug("boot: module %u: addr=0x%08x, size=%u, name=%s", i, res->phys_addr,
-                 res->size, res->name);
+        pr_debug("boot: module %u: addr=0x%08x, size=%u, name=%s", i, res->phys_addr, res->size,
+                 res->name);
 
         g_boot_resources.count++;
     }

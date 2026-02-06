@@ -12,8 +12,8 @@
 #include <libs/serial/serial.h> /* 消息类型定义 */
 #include <pthread.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <xnix/abi/ipc.h>
 #include <xnix/abi/syscall.h>
@@ -91,7 +91,6 @@ static int vga_color_to_ansi_fg(uint8_t color) {
     };
     return map[color & 0x0F];
 }
-
 
 static void serial_apply_color_attr(uint8_t attr) {
     uint8_t fg = attr & 0x0F;

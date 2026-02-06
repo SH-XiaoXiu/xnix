@@ -19,4 +19,3 @@ int svc_find_by_name(struct svc_manager *mgr, const char *name) {
     }
     return -1;
 }
-

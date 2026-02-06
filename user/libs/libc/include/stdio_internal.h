@@ -8,8 +8,8 @@
 #ifndef _STDIO_INTERNAL_H
 #define _STDIO_INTERNAL_H
 
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <xnix/abi/handle.h>
 
 #define STREAM_BUF_SIZE 256
@@ -26,11 +26,11 @@ enum {
 #define _FILE_WRITE 2
 
 struct _FILE {
-    handle_t tty_ep;             /* 连接的 tty endpoint */
+    handle_t tty_ep; /* 连接的 tty endpoint */
     char     buf[STREAM_BUF_SIZE];
     int      buf_pos;
-    int      buf_mode;           /* _IONBF, _IOLBF, _IOFBF */
-    int      flags;              /* _FILE_READ / _FILE_WRITE */
+    int      buf_mode; /* _IONBF, _IOLBF, _IOFBF */
+    int      flags;    /* _FILE_READ / _FILE_WRITE */
     int      error;
     int      eof;
 };

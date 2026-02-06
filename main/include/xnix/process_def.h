@@ -35,8 +35,8 @@ struct page_table;   /* 前向声明 */
 #endif
 struct sync_table {
     mutex_t   *mutexes[CFG_PROCESS_MUTEX_SLOTS]; /* 互斥锁数组 */
-    uint32_t   mutex_bitmap; /* 位图标记已分配的槽位 */
-    spinlock_t lock;         /* 保护表操作 */
+    uint32_t   mutex_bitmap;                     /* 位图标记已分配的槽位 */
+    spinlock_t lock;                             /* 保护表操作 */
 };
 
 /**

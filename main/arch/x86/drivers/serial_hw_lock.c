@@ -11,4 +11,3 @@ uint32_t serial_hw_lock_irqsave(void) {
 void serial_hw_unlock_irqrestore(uint32_t flags) {
     spin_unlock_irqrestore(&g_serial_hw_lock, flags);
 }
-

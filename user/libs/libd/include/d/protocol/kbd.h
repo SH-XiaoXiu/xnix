@@ -10,8 +10,8 @@
 
 /* 消息解析辅助宏 */
 #ifndef UDM_MSG_OPCODE
-#define UDM_MSG_OPCODE(msg) ((msg)->regs.data[0])  /* 获取消息操作码 */
-#define UDM_MSG_ARG(msg, n) ((msg)->regs.data[(n) + 1])  /* 获取消息第n个参数 */
+#define UDM_MSG_OPCODE(msg) ((msg)->regs.data[0])       /* 获取消息操作码 */
+#define UDM_MSG_ARG(msg, n) ((msg)->regs.data[(n) + 1]) /* 获取消息第n个参数 */
 #endif
 
 /* 键盘操作码 */
