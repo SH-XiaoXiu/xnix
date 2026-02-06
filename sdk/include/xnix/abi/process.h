@@ -103,4 +103,6 @@ struct abi_proclist_args {
     struct abi_sys_info  *sys_info;    /* 系统信息输出(可为 NULL) */
 };
 
+#define WNOHANG 1
+
 #endif /* XNIX_ABI_PROCESS_H */

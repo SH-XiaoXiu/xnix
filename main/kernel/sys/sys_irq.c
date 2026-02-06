@@ -5,6 +5,7 @@
 
 #include <ipc/notification.h>
 #include <sys/syscall.h>
+#include <xnix/abi/irq.h>
 #include <xnix/errno.h>
 #include <xnix/handle.h>
 #include <xnix/irq.h>
@@ -55,8 +56,6 @@ static int32_t sys_irq_unbind(const uint32_t *args) {
 }
 
 /* SYS_IRQ_READ: ebx=irq, ecx=buf, edx=size, esi=flags */
-#define IRQ_READ_NONBLOCK 1
-
 static int32_t sys_irq_read(const uint32_t *args) {
     uint8_t  irq   = (uint8_t)args[0];
     uint8_t *buf   = (uint8_t *)args[1];

@@ -17,6 +17,7 @@
 #include <xnix/stdio.h>
 #include <xnix/string.h>
 #include <xnix/thread_def.h>
+#include <xnix/vm_layout.h>
 
 /* 声明 vmm_kmap/kunmap */
 extern void *vmm_kmap(paddr_t paddr);
@@ -28,9 +29,6 @@ extern void enter_user_mode(uint32_t eip, uint32_t esp);
 /* 声明内部函数 */
 extern thread_t thread_create_with_owner(const char *name, void (*entry)(void *), void *arg,
                                          struct process *owner);
-
-/* 用户栈配置 */
-#define USER_STACK_TOP 0xBFFFF000
 
 /* argv 传递信息 */
 struct argv_info {

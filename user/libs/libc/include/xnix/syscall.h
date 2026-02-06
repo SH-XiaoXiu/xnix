@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <xnix/abi/handle.h>
+#include <xnix/abi/irq.h>
 #include <xnix/abi/process.h>
 #include <xnix/abi/syscall.h>
 
@@ -238,9 +239,6 @@ static inline int sys_spawn(struct spawn_args *args) {
     return syscall1(SYS_SPAWN, (uint32_t)(uintptr_t)args);
 }
 
-/* waitpid options */
-#define WNOHANG 1
-
 /**
  * 等待子进程退出
  */
@@ -272,7 +270,6 @@ static inline int sys_kill(int pid, int sig) {
 /*
  * IRQ 绑定
  */
-#define IRQ_READ_NONBLOCK 1
 
 /**
  * @brief 绑定 IRQ 到 Notification

@@ -12,9 +12,6 @@
 
 #include <xnix/thread_def.h>
 
-/* 时间片长度(tick 数) */
-#define RR_TIMESLICE 10
-
 /* 获取运行队列(单核简化版) */
 extern struct runqueue *sched_get_runqueue(cpu_id_t cpu);
 
@@ -27,7 +24,7 @@ static void rr_enqueue(struct thread *t, cpu_id_t cpu) {
 
     t->next       = NULL;
     t->state      = THREAD_READY;
-    t->time_slice = RR_TIMESLICE; /* 重置时间片 */
+    t->time_slice = CFG_DEF_TIME_SLICE; /* 重置时间片 */
 
     if (!rq->head) {
         /* 队列为空 */
@@ -103,7 +100,7 @@ static struct thread *rr_pick_next(void) {
         }
 
         /* 重置时间片 */
-        t->time_slice = RR_TIMESLICE;
+        t->time_slice = CFG_DEF_TIME_SLICE;
     }
 
     return rq->head;

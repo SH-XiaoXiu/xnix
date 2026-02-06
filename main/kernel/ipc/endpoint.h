@@ -9,9 +9,6 @@ struct thread;
 struct ipc_kmsg;
 struct poll_entry;
 
-/* 异步消息队列大小 */
-#define IPC_ASYNC_QUEUE_SIZE 64
-
 /* 异步消息队列节点 */
 struct ipc_async_msg {
     struct ipc_msg_regs regs; /* 只缓存寄存器部分 */
@@ -51,7 +48,7 @@ struct ipc_endpoint {
     struct ipc_kmsg *async_tail;
     uint32_t         async_len;
 #else
-    struct ipc_async_msg async_queue[IPC_ASYNC_QUEUE_SIZE];
+    struct ipc_async_msg async_queue[CFG_IPC_ASYNC_QUEUE_SIZE];
     uint32_t             async_head; /* 读指针 */
     uint32_t             async_tail; /* 写指针 */
 #endif

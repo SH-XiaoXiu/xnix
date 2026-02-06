@@ -68,7 +68,7 @@ struct perm_entry {
  *
  * 类似角色的概念,包含一组权限规则.支持单继承.
  */
-#define PERM_MAX_PROFILES 64
+#define PERM_MAX_PROFILES CFG_PERM_MAX_PROFILES
 struct perm_profile {
     char                 name[32];      /* Profile 名称 */
     struct perm_profile *parent;        /* 父 Profile(继承其权限) */

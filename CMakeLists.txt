@@ -66,6 +66,12 @@ set(CFG_SCHED_HZ 100 CACHE STRING "Scheduler tick frequency (Hz)")
 set(CFG_DEF_TIME_SLICE 10 CACHE STRING "Default thread time slice (ticks)")
 
 # ============================================
+# 内核基础配置
+# ============================================
+set(CFG_NR_SYSCALLS 1024 CACHE STRING "Syscall table size")
+set(CFG_MAX_BOOT_RESOURCES 32 CACHE STRING "Max boot resources collected for init")
+
+# ============================================
 # 内存配置
 # ============================================
 set(CFG_THREAD_STACK_SIZE 4096 CACHE STRING "Thread kernel stack size (bytes)")
@@ -88,11 +94,25 @@ set(CFG_IPC_MSG_REGS 8 CACHE STRING "Number of short message registers")
 set(CFG_IPC_MSG_HANDLES_MAX 4 CACHE STRING "Max handles per message")
 set(CFG_HANDLE_TABLE_SIZE 1024 CACHE STRING "Handle table initial size")
 option(CFG_IPC_MSG_POOL "Enable IPC global message pool for async buffering" ON)
+set(CFG_IPC_ASYNC_QUEUE_SIZE 64 CACHE STRING "Endpoint async queue size (when msg_pool is OFF)")
+set(CFG_IPC_KMSG_GROW_CHUNK 128 CACHE STRING "IPC kmsg pool grow chunk (when msg_pool is ON)")
 
 # ============================================
 # IRQ 配置
 # ============================================
 set(CFG_IRQ_USER_BUF_SIZE 64 CACHE STRING "IRQ user-mode buffer size")
+
+# ============================================
+# 进程/权限配置
+# ============================================
+set(CFG_PROCESS_MUTEX_SLOTS 32 CACHE STRING "Per-process user mutex slots (<= 32)")
+set(CFG_PERM_MAX_PROFILES 64 CACHE STRING "Max permission profiles")
+
+# ============================================
+# 日志配置
+# ============================================
+set(CFG_KMSG_BUF_SIZE 16384 CACHE STRING "Kernel log ring buffer size (bytes)")
+set(CFG_KMSG_MAX_LINE 256 CACHE STRING "Kernel log max line length")
 
 # ============================================
 # 调试配置

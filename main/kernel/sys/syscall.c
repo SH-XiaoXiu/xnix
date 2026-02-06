@@ -11,13 +11,13 @@
 #include <xnix/string.h>
 
 /* 系统调用表 */
-static struct syscall_entry syscall_table[NR_SYSCALLS];
+static struct syscall_entry syscall_table[CFG_NR_SYSCALLS];
 
 /**
  * 注册系统调用
  */
 void syscall_register(uint32_t nr, syscall_fn_t handler, uint8_t nargs, const char *name) {
-    if (nr >= NR_SYSCALLS) {
+    if (nr >= CFG_NR_SYSCALLS) {
         pr_err("syscall: nr %u out of range", nr);
         return;
     }
@@ -36,7 +36,7 @@ struct syscall_result syscall_dispatch(const struct syscall_args *args) {
     struct syscall_result result;
     uint32_t              nr = args->nr;
 
-    if (nr >= NR_SYSCALLS || syscall_table[nr].handler == NULL) {
+    if (nr >= CFG_NR_SYSCALLS || syscall_table[nr].handler == NULL) {
         pr_warn("Unknown syscall: %u", nr);
         result.retval = -ENOSYS;
         return result;
@@ -79,5 +79,5 @@ void syscall_init(void) {
     sys_perm_init();
     sys_kmsg_init();
 
-    pr_info("syscall: initialized %d syscalls", NR_SYSCALLS);
+    pr_info("syscall: initialized %d syscalls", CFG_NR_SYSCALLS);
 }

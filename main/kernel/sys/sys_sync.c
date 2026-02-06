@@ -4,7 +4,7 @@
  *
  * 实现用户态线程的同步原语支持,当前包括互斥锁(mutex).
  * - 锁对象存储在内核,用户态通过 handle(索引)访问
- * - 每个进程维护一个 sync_table,最多 32 个锁(可扩展)
+ * - 每个进程维护一个 sync_table,槽位数量由配置决定
  * - 锁基于内核已有的 mutex 实现,自动支持阻塞等待和公平调度
  * - 进程退出时自动清理所有锁资源
  */
@@ -26,7 +26,7 @@ static int sync_table_alloc_mutex(struct sync_table *table, mutex_t *m) {
     uint32_t flags = spin_lock_irqsave(&table->lock);
 
     /* 查找空闲槽位 */
-    for (uint32_t i = 0; i < 32; i++) {
+    for (uint32_t i = 0; i < CFG_PROCESS_MUTEX_SLOTS; i++) {
         uint32_t bit = 1u << i;
         if (table->mutex_bitmap & bit) {
             continue; /* 槽位已占用 */
@@ -49,7 +49,7 @@ static int sync_table_alloc_mutex(struct sync_table *table, mutex_t *m) {
  * @return 锁指针,未找到返回 NULL
  */
 static mutex_t *sync_table_get_mutex(struct sync_table *table, uint32_t handle) {
-    if (handle >= 32) {
+    if (handle >= CFG_PROCESS_MUTEX_SLOTS) {
         return NULL;
     }
 
@@ -68,7 +68,7 @@ static mutex_t *sync_table_get_mutex(struct sync_table *table, uint32_t handle) 
  * @return 锁指针,未找到返回 NULL
  */
 static mutex_t *sync_table_take_mutex(struct sync_table *table, uint32_t handle) {
-    if (handle >= 32) {
+    if (handle >= CFG_PROCESS_MUTEX_SLOTS) {
         return NULL;
     }
 

@@ -35,7 +35,6 @@ struct handle_entry {
  *
  * 进程私有的 handle 映射表.支持动态扩容.
  */
-#define HANDLE_TABLE_INITIAL_SIZE 16
 struct handle_table {
     struct handle_entry *entries;  /* handle 数组 */
     uint32_t             capacity; /* 当前容量 */

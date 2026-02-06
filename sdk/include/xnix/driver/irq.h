@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 #include <xnix/abi/handle.h>
+#include <xnix/abi/irq.h>
 #include <xnix/abi/syscall.h>
 
 /**

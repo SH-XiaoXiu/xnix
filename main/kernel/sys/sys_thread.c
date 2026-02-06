@@ -17,11 +17,9 @@
 #include <xnix/syscall.h>
 #include <xnix/thread_def.h>
 #include <xnix/usraccess.h>
+#include <xnix/vm_layout.h>
 
 extern void enter_user_mode(uint32_t eip, uint32_t esp);
-
-/* 用户地址空间上限(内核空间起始地址) */
-#define USER_ADDR_MAX 0xC0000000u
 
 /**
  * 用户线程启动参数

@@ -15,8 +15,6 @@
 #include <xnix/stdio.h>
 #include <xnix/types.h>
 
-#define MAX_BOOT_RESOURCES 32
-
 /**
  * Boot 资源描述符
  */
@@ -30,7 +28,7 @@ struct boot_resource {
  * Boot 阶段收集的资源信息(物理地址和大小)
  */
 static struct {
-    struct boot_resource resources[MAX_BOOT_RESOURCES];
+    struct boot_resource resources[CFG_MAX_BOOT_RESOURCES];
     uint32_t             count;
 } g_boot_resources;
 
@@ -53,7 +51,7 @@ void boot_handles_collect(void) {
             continue;
         }
 
-        if (g_boot_resources.count >= MAX_BOOT_RESOURCES) {
+        if (g_boot_resources.count >= CFG_MAX_BOOT_RESOURCES) {
             pr_err("bootinfo: too many boot resources");
             break;
         }

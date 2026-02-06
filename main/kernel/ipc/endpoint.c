@@ -339,7 +339,7 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
     if (ep->async_head != ep->async_tail) {
         /* 有缓存的异步消息,直接取出 */
         memcpy(&msg->regs, &ep->async_queue[ep->async_head].regs, sizeof(struct ipc_msg_regs));
-        ep->async_head = (ep->async_head + 1) % IPC_ASYNC_QUEUE_SIZE;
+        ep->async_head = (ep->async_head + 1) % CFG_IPC_ASYNC_QUEUE_SIZE;
         spin_unlock(&ep->lock);
 
         current->ipc_peer = TID_INVALID; /* 异步消息无需回复 */
@@ -455,7 +455,7 @@ int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
 
     /* 没有接收者,尝试入队 */
 #if CFG_IPC_MSG_POOL
-    if (ep->async_len >= IPC_ASYNC_QUEUE_SIZE) {
+    if (ep->async_len >= CFG_IPC_ASYNC_QUEUE_SIZE) {
         spin_unlock(&ep->lock);
         return IPC_ERR_TIMEOUT;
     }
@@ -484,7 +484,7 @@ int ipc_send_async(handle_t ep_handle, struct ipc_message *msg) {
     pr_debug("[IPC] async enqueue: sender=%d\n", current->tid);
     return IPC_OK;
 #else
-    uint32_t next_tail = (ep->async_tail + 1) % IPC_ASYNC_QUEUE_SIZE;
+    uint32_t next_tail = (ep->async_tail + 1) % CFG_IPC_ASYNC_QUEUE_SIZE;
     if (next_tail == ep->async_head) {
         /* 队列满 */
         spin_unlock(&ep->lock);

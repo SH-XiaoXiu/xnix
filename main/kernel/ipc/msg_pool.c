@@ -21,8 +21,6 @@
  * - 节点不会单独 kfree;回收只是回到 free-list(适合内核常驻池)
  */
 
-#define IPC_KMSG_GROW_CHUNK 128u
-
 static spinlock_t       g_kmsg_pool_lock = SPINLOCK_INIT;
 static struct ipc_kmsg *g_kmsg_free_list = NULL;
 static uint32_t         g_kmsg_total     = 0;
@@ -68,7 +66,7 @@ static bool ipc_kmsg_pool_grow(uint32_t count) {
  * - 初始化失败时打印告警,后续 ipc_kmsg_alloc() 将可能返回 NULL.
  */
 void ipc_kmsg_pool_init(void) {
-    if (!ipc_kmsg_pool_grow(IPC_KMSG_GROW_CHUNK)) {
+    if (!ipc_kmsg_pool_grow(CFG_IPC_KMSG_GROW_CHUNK)) {
         pr_warn("IPC: kmsg pool init failed");
         return;
     }
@@ -99,7 +97,7 @@ struct ipc_kmsg *ipc_kmsg_alloc(void) {
         }
         spin_unlock_irqrestore(&g_kmsg_pool_lock, flags);
 
-        if (!ipc_kmsg_pool_grow(IPC_KMSG_GROW_CHUNK)) {
+        if (!ipc_kmsg_pool_grow(CFG_IPC_KMSG_GROW_CHUNK)) {
             break;
         }
     }

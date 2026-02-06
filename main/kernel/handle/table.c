@@ -15,7 +15,7 @@ struct handle_table *handle_table_create(void) {
         return NULL;
     }
 
-    table->capacity = HANDLE_TABLE_INITIAL_SIZE;
+    table->capacity = CFG_HANDLE_TABLE_SIZE;
     table->entries  = kmalloc(table->capacity * sizeof(struct handle_entry));
     if (!table->entries) {
         kfree(table);

@@ -30,8 +30,11 @@ struct page_table;   /* 前向声明 */
  * 用于管理用户态线程的同步原语(主要是互斥锁).
  * 内核为每个进程维护此表,用户态通过 handle(索引)访问同步对象.
  */
+#if CFG_PROCESS_MUTEX_SLOTS > 32
+#error "CFG_PROCESS_MUTEX_SLOTS must be <= 32"
+#endif
 struct sync_table {
-    mutex_t   *mutexes[32];  /* 互斥锁数组,最多 32 个 */
+    mutex_t   *mutexes[CFG_PROCESS_MUTEX_SLOTS]; /* 互斥锁数组 */
     uint32_t   mutex_bitmap; /* 位图标记已分配的槽位 */
     spinlock_t lock;         /* 保护表操作 */
 };
@@ -206,9 +209,6 @@ void process_exit(struct process *proc, int exit_code);
  * @return 退出的子进程 PID,0 表示无子进程退出(WNOHANG),<0 错误
  */
 pid_t process_waitpid(pid_t pid, int *status, int options);
-
-/* waitpid options */
-#define WNOHANG 1 /* 非阻塞 */
 
 /**
  * 向进程发送信号

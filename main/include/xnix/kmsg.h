@@ -12,8 +12,8 @@
 #include <xnix/types.h>
 
 /* 缓冲区大小 */
-#define KMSG_BUF_SIZE  16384 /* 16 KB */
-#define KMSG_MAX_LINE  256
+#define KMSG_BUF_SIZE CFG_KMSG_BUF_SIZE
+#define KMSG_MAX_LINE CFG_KMSG_MAX_LINE
 
 /* 日志设施 */
 #define KMSG_KERN   0 /* 内核核心 */

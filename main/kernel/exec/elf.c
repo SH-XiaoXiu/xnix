@@ -9,6 +9,7 @@
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
+#include <xnix/vm_layout.h>
 #include <xnix/vmm.h>
 
 /* ELF Header Constants */
@@ -68,10 +69,6 @@ typedef struct {
 
 /* 声明架构相关的用户态跳转函数 */
 extern void enter_user_mode(uint32_t eip, uint32_t esp);
-
-/* 栈大小 */
-#define USER_STACK_SIZE (64 * 1024)
-#define USER_STACK_TOP  0xBFFFF000
 
 /**
  * 验证 ELF 头

@@ -25,8 +25,6 @@ struct syscall_entry {
     const char  *name;    /* 名称(用于调试) */
 };
 
-#define NR_SYSCALLS 1024  /* 扩展以支持新的syscall范围 (900+) */
-
 /**
  * 注册系统调用
  *
