@@ -14,16 +14,17 @@ MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](http
 
 ## 核心能力
 
-| 能力           | 说明                  | 示例                         |
-|--------------|---------------------|----------------------------|
-| 微内核设计        | 最小化内核，策略与机制分离       | 内核仅含调度、IPC、内存管理            |
-| 平台抽象         | HAL + 弱符号机制，支持多平台移植 | 新增架构只需实现少量强符号              |
-| 权限系统 (Perms) | 字符串节点权限，Profile 管理  | `xnix.io.port.*` 控制 I/O 访问 |
-| IPC 通信       | 同步/异步消息传递，支持 RPC 模式 | endpoint send/recv/call    |
-| 用户态驱动 (UDM)  | 驱动隔离，崩溃可恢复，支持热更新    | seriald、kbd 均为用户进程         |
-| 进程管理         | 完整生命周期、信号机制、进程树     | fork-like spawn、SIGTERM    |
-| FAT32 文件系统   | 支持读写 FAT32 格式磁盘     | 可挂载硬盘镜像进行文件操作              |
-| 声明式服务管理      | INI 配置、依赖管理、自动重启    | services.conf 定义启动顺序       |
+| 能力           | 说明                         | 示例                         |
+|--------------|----------------------------|----------------------------|
+| 微内核设计        | 最小化内核，策略与机制分离              | 内核仅含调度、IPC、内存管理            |
+| Bootstrap 自举 | Init 完全自举，内核不依赖 bootloader | 内置 FAT32 驱动，绕过 VFS 启动服务    |
+| 平台抽象         | HAL + 弱符号机制，支持多平台移植        | 新增架构只需实现少量强符号              |
+| 权限系统 (Perms) | 字符串节点权限，Profile 管理         | `xnix.io.port.*` 控制 I/O 访问 |
+| IPC 通信       | 同步/异步消息传递，支持 RPC 模式        | endpoint send/recv/call    |
+| 用户态驱动 (UDM)  | 驱动隔离，崩溃可恢复，支持热更新           | seriald、kbd 均为用户进程         |
+| 进程管理         | 完整生命周期、信号机制、进程树            | exec-based spawn、SIGTERM   |
+| FAT32 文件系统   | 支持读写 FAT32 格式磁盘            | 可挂载硬盘镜像进行文件操作              |
+| 声明式服务管理      | INI 配置、依赖管理、自动重启           | services.conf 定义启动顺序       |
 
 ## 项目亮点
 
@@ -79,6 +80,18 @@ cd xnix
 | 编译器  | GCC 支持 32 位编译（gcc-multilib）   |
 | 模拟器  | QEMU x86                      |
 | 构建工具 | CMake 3.10+, Make             |
+
+## Bootstrap 启动
+
+Xnix 实现了微内核自举架构，内核不依赖 bootloader 细节：
+
+### 设计原则
+
+| 组件       | 职责                | 不知道什么             |
+|----------|-------------------|-------------------|
+| **内核**   | 提供机制（进程创建、IPC、内存） | 不知道 GRUB、不知道文件系统  |
+| **Init** | 策略实现（服务启动、配置管理）   | 完全自举，不依赖外部服务      |
+| **服务**   | 功能实现（VFS、驱动等）     | 从 system.img 按需加载 |
 
 ## 配置选项
 
@@ -140,18 +153,30 @@ xnix/
 │   ├── drivers/            # 内核态控制台（早期输出）
 │   └── include/            # 公共头文件
 │
+├── sdk/                    # 公共 ABI 层
+│   ├── include/xnix/abi/   # 稳定 ABI 接口（syscall, ipc, handle）
+│   └── include/xnix/driver/# 驱动辅助工具（ioport, irq）
+│
 ├── user/                   # 用户态代码
-│   ├── init/               # init 进程（服务管理）
+│   ├── init/               # Init 进程（服务管理 + 自举）
+│   │   ├── bootstrap/      # FAT32 reader + exec wrapper
+│   │   ├── svc/            # 服务管理器
+│   │   ├── ramfs.c         # 内置 ramfsd
+│   │   └── core_services.conf  # 核心服务配置
 │   ├── apps/               # 应用程序
 │   │   ├── shell/          # 交互式 shell
 │   │   └── bin/            # 独立工具程序
 │   ├── drivers/            # UDM 驱动（seriald, kbd, fatfsd...）
+│   ├── servers/            # 系统服务（vfsserver 等）
 │   ├── demos/              # 示例程序
-│   └── libs/               # 用户态库
+│   └── libs/               # 用户态库（libc, libvfs, libpthread）
 │
 ├── iso/                    # ISO 打包模块
-│   ├── CMakeLists.txt      # ISO 构建配置
-│   └── generate_rootfs.cmake
+│   ├── CMakeLists.txt      # 生成 initramfs.img + system.img
+│   └── create_initramfs.sh # TAR 打包脚本
+│
+├── scripts/
+│   └── build_system_img.sh# FAT32 镜像生成
 │
 ├── run                     # 构建运行脚本
 ├── release.sh              # 发布版本构建脚本
@@ -205,18 +230,34 @@ graph TD
 ### 启动流程
 
 ```mermaid
-graph LR
-    Boot[GRUB] --> Early[早期初始化]
-    Early --> Core[核心初始化]
-    Core --> Subsys[子系统初始化]
-    Subsys --> Late[后期初始化]
-    Late --> Services[启动服务]
-    Services --> User[用户态]
+graph TD
+    GRUB[GRUB Multiboot] --> Modules[加载 4 个模块]
+    Modules --> Kernel[xnix.elf 内核]
+    Modules --> Init[init.elf Init进程]
+    Modules --> Initramfs[initramfs.img 配置]
+    Modules --> System[system.img FAT32镜像]
 
-    subgraph User[" "]
-        Init2[Init] --> Drivers[加载驱动]
-        Drivers --> Shell2[启动 Shell]
-    end
+    Kernel --> BootHandles[创建 boot handles]
+    BootHandles --> module_init
+    BootHandles --> module_initramfs
+    BootHandles --> module_system
+
+    Init --> Map1[映射 initramfs]
+    Map1 --> Extract[提取配置到 ramfs]
+
+    Init --> Map2[映射 system.img]
+    Map2 --> FAT32[FAT32 mount]
+
+    Extract --> LoadSvc[从配置加载服务]
+    FAT32 --> LoadSvc
+    LoadSvc --> BootExec[bootstrap_exec]
+    BootExec --> Services[服务启动完成]
+
+    Services --> Shell[Shell 就绪]
+
+    style GRUB fill:#e1f5fe
+    style Init fill:#fff3e0
+    style System fill:#c8e6c9
 ```
 
 ### 调度与 IPC
@@ -249,146 +290,260 @@ graph TD
 
 ## 服务配置
 
-Xnix 采用声明式服务配置，分为核心服务和用户服务两类。
+Xnix 采用声明式服务配置，所有服务从 **system.img**（FAT32 格式）加载。
 
-### 核心服务 vs 用户服务
+### ISO 结构
 
-| 类型   | 配置              | 加载方式            | 存放位置              |
-|------|-----------------|-----------------|-------------------|
-| 核心服务 | `core=true`     | Multiboot 模块启动  | ISO 根目录           |
-| 用户服务 | `core=false`/默认 | 从 rootfs.img 加载 | `build/optional/` |
+```
+xnix.iso
+├── boot/
+│   ├── xnix.elf         # 内核
+│   ├── init.elf         # Init 进程（内置 ramfsd + bootstrap）
+│   ├── initramfs.img    # TAR 格式配置文件（~5KB）
+│   └── system.img       # FAT32 镜像（所有服务，16MB）
+└── ...
+```
 
-### 驱动/应用的 service.conf
+### system.img 内容
 
-每个驱动或应用目录下可包含 `service.conf` 文件：
+```
+system.img (FAT32):
+├── sbin/                # 核心服务
+│   ├── seriald.elf
+│   ├── kbd.elf
+│   ├── vfsserver.elf
+│   └── ...
+├── bin/                 # 应用程序
+│   └── shell.elf
+├── etc/                 # 配置文件
+│   └── core_services.conf
+└── drivers/             # 可选驱动
+```
+
+### 服务配置文件
+
+核心服务配置在 `user/init/core_services.conf`，使用 INI 格式：
 
 ```ini
-# user/drivers/mydrv/service.conf
-core = true          # 核心服务（Multiboot 模块）
-after = seriald      # 启动顺序依赖
-profile = driver     # 权限 Profile
-handles = my_ep:0    # Handle 传递（名称:目标槽位）
-mount = /dev         # 挂载点（可选）
-respawn = true       # 退出后自动重启
+# 服务定义
+[service.seriald]
+builtin = true       # 内置服务标记
+type = path          # 加载类型（path=从文件系统）
+path = /sbin/seriald.elf   # ELF 文件路径（相对 system.img）
+profile = io_driver  # 权限 Profile
+after = ramfsd       # 启动顺序依赖
+provides = serial    # 提供的 handle
+respawn = false      # 退出后是否重启
 ```
 
 ### 配置字段
 
-| 字段        | 类型     | 说明                                 |
-|-----------|--------|------------------------------------|
-| `core`    | bool   | `true`=核心服务，`false`=用户服务           |
-| `after`   | string | 启动顺序依赖，空格分隔多个服务                    |
-| `profile` | string | 权限配置 Profile (如 driver, io_driver) |
-| `handles` | string | Handle 传递，格式 `name:dst_hint`，可多次指定 |
-| `mount`   | string | 服务提供的挂载点                           |
-| `respawn` | bool   | 退出后自动重启                            |
-| `path`    | string | 自定义 ELF 路径（可选）                     |
+| 字段         | 类型     | 说明                                            |
+|------------|--------|-----------------------------------------------|
+| `builtin`  | bool   | 标记为内置服务（由 init 硬编码启动）                         |
+| `type`     | string | `path`=从文件系统加载（system.img）                    |
+| `path`     | string | ELF 文件路径（相对 system.img 根目录，如 `/sbin/xxx.elf`） |
+| `profile`  | string | 权限配置 Profile (如 `io_driver`, `default`)       |
+| `after`    | string | 启动顺序依赖，空格分隔多个服务                               |
+| `ready`    | string | 就绪等待依赖，等待服务报告就绪                               |
+| `provides` | string | 提供的 handle 名称                                 |
+| `requires` | string | 需要的 handle，空格分隔                               |
+| `respawn`  | bool   | 退出后自动重启                                       |
 
-### Handle 传递格式
+### Handle 机制
 
-`handles` 字段格式：`名称:目标槽位 名称:目标槽位 ...`
+服务可以通过 `provides` 和 `requires` 声明 handle 依赖：
 
 ```ini
-# 示例：传递 ata_io 到槽位 1，ata_ctrl 到槽位 2
-handles = ata_io:1 ata_ctrl:2
+[service.vfsserver]
+provides = vfs_ep      # 创建名为 vfs_ep 的 endpoint
+
+[service.shell]
+requires = vfs_ep      # 接收 vfs_ep handle
 ```
 
-- **名称**：init 持有的 handle 名称（见下表）
-- **目标槽位**：传递给子进程后的 handle 编号
-
-子进程通过槽位编号访问 handle（或者通过 `sys_handle_find` 按名称查找）：
+服务内部通过名称查找 handle：
 
 ```c
-#define MY_EP_HANDLE 0   // 对应 handles = my_ep:0
-sys_ipc_send(MY_EP_HANDLE, &msg);
+handle_t vfs = sys_handle_find("vfs_ep");
+ipc_send(vfs, &msg);
 ```
 
-### 生成的配置文件
+### 构建时生成
 
-CMake 构建时会自动生成：
+CMake 构建时自动生成：
 
-- `build/include/module_index.h` - 模块索引定义
-- `build/include/core_services.h` - 核心服务嵌入配置
-- `build/generated/services.conf` - 用户服务配置
+- `build/system.img` - FAT32 镜像，包含所有服务 ELF
+- `build/initramfs.img` - TAR 镜像，包含配置文件
+- `build/generated/services.conf` - 合并后的服务配置
 
-### 内置 Handle 名称
+## 构建规范
 
-| 名称           | 槽位 | 说明                   |
-|--------------|----|----------------------|
-| `serial_ep`  | 0  | 串口 endpoint          |
-| `vfs_ep`     | 2  | VFS endpoint         |
-| `ata_io`     | 3  | ATA I/O 端口           |
-| `ata_ctrl`   | 4  | ATA 控制端口             |
-| `fat_vfs_ep` | 5  | FAT VFS endpoint     |
-| `fb_ep`      | 6  | Framebuffer endpoint |
-| `rootfs_ep`  | 7  | Rootfs endpoint      |
+### 如果基于 Xnix 开发
 
-## 扩展开发
+遵循以下规范可让 CMake 自动发现并构建你的组件：
 
-### 添加新驱动
+#### 1. 添加驱动/服务
 
-1. 在 `user/drivers/` 下创建目录（如 `user/drivers/mydrv/`）
-2. 创建 `main.c` 实现驱动主循环
-3. 创建 `service.conf` 配置服务属性
-4. 重新 cmake 即可自动发现
-
-**目录结构：**
+在 `user/drivers/` 或 `user/servers/` 创建目录：
 
 ```
 user/drivers/mydrv/
-├── main.c           # 驱动实现
-└── service.conf     # 服务配置
+├── src/
+│   └── main.c       # 驱动实现
+└── CMakeLists.txt   # 构建配置
 ```
 
-**service.conf 示例：**
+**CMakeLists.txt 最小示例：**
+
+```cmake
+add_executable(mydrv.elf src/main.c)
+target_link_libraries(mydrv.elf PRIVATE c d)
+target_link_options(mydrv.elf PRIVATE ${USER_LINK_OPTIONS})
+```
+
+**在 core_services.conf 中声明：**
 
 ```ini
-# core=true 表示核心服务（作为 Multiboot 模块启动）
-# core=false/默认 表示用户服务（从 rootfs 加载）
-core = false
-after = rootfsd
-profile = driver
-handles = my_ep:0
+[service.mydrv]
+builtin = true
+type = path
+path = /sbin/mydrv.elf
+profile = io_driver
 ```
 
-**驱动基本结构：**
+#### 2. 添加应用程序
+
+在 `user/apps/` 创建目录：
+
+```
+user/apps/myapp/
+├── main.c
+└── CMakeLists.txt
+```
+
+**CMakeLists.txt：**
+
+```cmake
+add_executable(myapp.elf main.c)
+target_link_libraries(myapp.elf PRIVATE c vfs)
+target_link_options(myapp.elf PRIVATE ${USER_LINK_OPTIONS})
+```
+
+应用会自动打包到 `system.img:/bin/myapp.elf`。
+
+#### 3. 头文件包含规范
+
+| 路径前缀                | 可见性   | 说明         |
+|---------------------|-------|------------|
+| `<xnix/abi/xxx>`    | 公共ABI | 用户态/内核共享接口 |
+| `<xnix/driver/xxx>` | 公共SDK | 驱动辅助工具     |
+| `<libs/xxx/xxx.h>`  | 服务SDK | 服务客户端库     |
+| `<xnix/xxx>`        | 内核内部  | 仅内核可用      |
+
+**用户态代码只能包含：**
 
 ```c
-int main(void) {
-    // 按名称查找 handle (推荐)
-    handle_t ep = sys_handle_find("my_ep");
-    
-    // 初始化
-    while (1) {
-        ipc_msg_t msg;
-        ipc_receive(ep, &msg);  // 等待请求
-        // 处理请求
-        ipc_reply(ep, &reply);  // 回复
+#include <xnix/abi/syscall.h>    // ✓ ABI
+#include <xnix/driver/ioport.h>  // ✓ 驱动工具
+#include <libs/serial/serial.h>  // ✓ 服务 SDK
+#include <stdio.h>               // ✓ libc
+
+#include <xnix/ipc.h>            // ✗ 内核内部
+```
+
+#### 4. 权限 Profile
+
+在 `main/kernel/perm/profile.c` 定义 Profile：
+
+```c
+static const struct perm_profile profiles[] = {
+    {
+        .name = "my_driver",
+        .nodes = {
+            "xnix.irq.5",
+            "xnix.io.port.0x300-0x3ff",
+            NULL
+        }
     }
+};
+```
+
+### 如果不基于 Xnix
+
+你可以自由组织代码结构，只需确保：
+
+1. **ABI 兼容**：包含 `sdk/include/xnix/abi/` 头文件
+2. **启动约定**：实现 `_start` 或使用 `sdk/lib/crt0.S`
+3. **系统调用**：通过 `int 0x80` 调用内核
+
+**最小用户程序：**
+
+```c
+#include <xnix/abi/syscall.h>
+
+void _start(void) {
+    asm volatile("mov $305, %eax; mov $0, %ebx; int $0x80");
+    __builtin_unreachable();
 }
+```
+
+**构建：**
+
+```bash
+gcc -m32 -nostdlib -T custom.ld myapp.c -o myapp.elf
 ```
 
 ### 添加系统调用
 
-1. 在 `main/include/xnix/syscall_nr.h` 添加调用号
-2. 在 `main/kernel/sys/syscall.c` 添加处理函数
-3. 在 `user/libs/` 添加用户态封装
+1. **定义系统调用号**（`sdk/include/xnix/abi/syscall.h`）：
+   ```c
+   #define SYS_MYNEWCALL 700
+   ```
 
-### 添加独立工具程序
+2. **实现内核处理**（`main/kernel/sys/sys_xxx.c`）：
+   ```c
+   static int32_t sys_mynewcall(const uint32_t *args) {
+       // 实现逻辑
+       return 0;
+   }
 
-在 `user/apps/bin/` 下创建子目录，包含 `main.c` 即可自动编译：
+   void sys_xxx_init(void) {
+       syscall_register(SYS_MYNEWCALL, sys_mynewcall, 1, "mynewcall");
+   }
+   ```
 
+3. **用户态封装**（`user/libs/libc/include/xnix/syscall.h`）：
+   ```c
+   static inline int sys_mynewcall(int arg) {
+       return syscall1(SYS_MYNEWCALL, arg);
+   }
+   ```
+
+### 调试技巧
+
+#### 内核调试
+
+```bash
+# 终端 1
+./run -d -i
+
+# 终端 2
+gdb build/xnix.elf
+(gdb) target remote :1234
+(gdb) b kernel_main
+(gdb) c
 ```
-user/apps/bin/mytool/
-├── main.c           # 工具实现
-└── service.conf     # 可选，core=true 则打包到 rootfs
+
+#### 用户态调试
+
+在代码中使用 `kprintf`（通过串口输出）：
+
+```c
+#include <xnix/ulog.h>
+
+ulog_info("mydrv", "Initialized, handle=%d", ep);
 ```
-
-工具默认编译到 `build/optional/bin/`，shell 会搜索 `/sys/bin` 和 `/mnt/bin`。
-
-### 添加 Shell 命令
-
-修改 `user/apps/shell/main.c`，在命令表中添加新命令。
 
 ## 部署
 

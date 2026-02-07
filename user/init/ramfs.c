@@ -150,7 +150,7 @@ static struct ramfs_node *lookup_parent(struct ramfs_ctx *ctx, const char *path,
 }
 
 /* VFS 操作回调(实现接口) */
-static int ramfs_open(void *vctx, const char *path, uint32_t flags) {
+int ramfs_open(void *vctx, const char *path, uint32_t flags) {
     struct ramfs_ctx  *ctx  = vctx;
     struct ramfs_node *node = lookup_path(ctx, path);
 
@@ -205,7 +205,7 @@ static int ramfs_open(void *vctx, const char *path, uint32_t flags) {
     return h;
 }
 
-static int ramfs_close(void *vctx, uint32_t handle) {
+int ramfs_close(void *vctx, uint32_t handle) {
     struct ramfs_ctx *ctx = vctx;
     if (!get_handle(ctx, handle)) {
         return -EBADF;
@@ -214,7 +214,7 @@ static int ramfs_close(void *vctx, uint32_t handle) {
     return 0;
 }
 
-static int ramfs_read(void *vctx, uint32_t handle, void *buf, uint32_t offset, uint32_t size) {
+int ramfs_read(void *vctx, uint32_t handle, void *buf, uint32_t offset, uint32_t size) {
     struct ramfs_ctx    *ctx = vctx;
     struct ramfs_handle *h   = get_handle(ctx, handle);
     if (!h) {
@@ -242,8 +242,7 @@ static int ramfs_read(void *vctx, uint32_t handle, void *buf, uint32_t offset, u
     return (int)size;
 }
 
-static int ramfs_write(void *vctx, uint32_t handle, const void *buf, uint32_t offset,
-                       uint32_t size) {
+int ramfs_write(void *vctx, uint32_t handle, const void *buf, uint32_t offset, uint32_t size) {
     struct ramfs_ctx    *ctx = vctx;
     struct ramfs_handle *h   = get_handle(ctx, handle);
     if (!h) {
@@ -293,7 +292,7 @@ static int ramfs_info(void *vctx, const char *path, struct vfs_info *info) {
     return 0;
 }
 
-static int ramfs_finfo(void *vctx, uint32_t handle, struct vfs_info *info) {
+int ramfs_finfo(void *vctx, uint32_t handle, struct vfs_info *info) {
     struct ramfs_ctx    *ctx = vctx;
     struct ramfs_handle *h   = get_handle(ctx, handle);
     if (!h) {
@@ -356,7 +355,7 @@ static int ramfs_readdir(void *vctx, uint32_t handle, uint32_t index, struct vfs
     return 0;
 }
 
-static int ramfs_mkdir(void *vctx, const char *path) {
+int ramfs_mkdir(void *vctx, const char *path) {
     struct ramfs_ctx *ctx = vctx;
 
     /* 检查是否已存在 */

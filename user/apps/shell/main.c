@@ -304,6 +304,15 @@ static void cmd_clear(int argc, char **argv) {
 }
 
 static void cmd_run(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    /* sys_spawn has been removed - use exec from filesystem instead */
+    printf("Error: 'run' command is deprecated (sys_spawn removed)\n");
+    printf("Use regular commands to execute programs from /sys or /mnt\n");
+    return;
+
+#if 0 /* Old implementation using sys_spawn - kept for reference */
     if (argc < 2) {
         printf("Usage: run <module_name>\n");
         return;
@@ -336,6 +345,7 @@ static void cmd_run(int argc, char **argv) {
     if (ret > 0) {
         printf("Process %d exited (status=%d)\n", pid, status);
     }
+#endif
 }
 
 static void cmd_kill(int argc, char **argv) {
@@ -475,10 +485,9 @@ int main(int argc, char **argv) {
     printf("\nXnix Shell\n");
     printf("Type 'help' for available commands.\n\n");
 
-
     while (1) {
         char cwd[256];
-        int cwd_ret = vfs_getcwd(cwd, sizeof(cwd));
+        int  cwd_ret = vfs_getcwd(cwd, sizeof(cwd));
 
         if (cwd_ret >= 0) {
             printf("%s> ", cwd);
@@ -492,9 +501,6 @@ int main(int argc, char **argv) {
             msleep(100);
             continue;
         }
-
-
-
 
         /* 防止用户按住回车键时产生输入风暴 */
         if (line[0] == '\0') {

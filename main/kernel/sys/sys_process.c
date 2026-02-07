@@ -176,56 +176,6 @@ static int32_t sys_exec(const uint32_t *args) {
     return (int32_t)pid;
 }
 
-/* SYS_SPAWN: ebx=args */
-static int32_t sys_spawn(const uint32_t *args) {
-    struct abi_spawn_args *user_args = (struct abi_spawn_args *)(uintptr_t)args[0];
-    struct abi_spawn_args  kargs;
-    struct process        *proc = process_get_current();
-
-    if (!perm_check_name(proc, PERM_NODE_PROCESS_SPAWN)) {
-        return -EPERM;
-    }
-
-    int ret = copy_from_user(&kargs, user_args, sizeof(kargs));
-    if (ret < 0) {
-        return ret;
-    }
-
-    kargs.name[sizeof(kargs.name) - 1]                 = '\0';
-    kargs.profile_name[sizeof(kargs.profile_name) - 1] = '\0';
-    kargs.module_name[sizeof(kargs.module_name) - 1]   = '\0';
-
-    /* 按名称查找模块 */
-    void    *mod_addr = NULL;
-    uint32_t mod_size = 0;
-    ret               = boot_find_module_by_name(kargs.module_name, &mod_addr, &mod_size);
-    if (ret < 0) {
-        return -EINVAL;
-    }
-
-    /* 构建 handle 传递列表 */
-    uint32_t handle_count = kargs.handle_count;
-    if (handle_count > 8) {
-        handle_count = 8;
-    }
-
-    /* kargs.handles 已经是 struct spawn_handle 类型 */
-
-    /* 查找 Profile */
-    struct perm_profile *profile = perm_profile_find(kargs.profile_name);
-    if (!profile && kargs.profile_name[0] != '\0') {
-        kprintf("[sys_spawn] WARNING: Profile '%s' not found for process '%s'\n",
-                kargs.profile_name, kargs.name);
-    }
-
-    pid_t pid = process_spawn_module_ex(kargs.name, mod_addr, mod_size, kargs.handles, handle_count,
-                                        profile);
-
-    if (pid == PID_INVALID) {
-        return -ENOMEM;
-    }
-    return (int32_t)pid;
-}
 
 /* SYS_PROCLIST: ebx=proclist_args* */
 static int32_t sys_proclist(const uint32_t *args) {
@@ -344,7 +294,6 @@ static int32_t sys_proclist(const uint32_t *args) {
 
 void sys_process_init(void) {
     syscall_register(SYS_EXIT, sys_exit, 1, "exit");
-    syscall_register(SYS_SPAWN, sys_spawn, 1, "spawn");
     syscall_register(SYS_WAITPID, sys_waitpid, 3, "waitpid");
     syscall_register(SYS_GETPID, sys_getpid, 0, "getpid");
     syscall_register(SYS_GETPPID, sys_getppid, 0, "getppid");

@@ -2,14 +2,12 @@
 #
 # 职责：
 #   - 编译所有用户态程序（drivers, apps, demos, init）
-#   - 发现服务配置（service.conf）
-#   - 生成 init 所需的头文件（module_index.h, core_services.h）
-#   - 导出 CORE_SERVICES / USER_SERVICES 供 iso 模块使用
+#   - 导出 CORE_SERVICES 供 iso 模块使用
 #
 # 规范：
-#   - 每个驱动/应用目录可包含 service.conf
-#   - core=true 表示核心服务（作为 Multiboot 模块启动）
-#   - core=false/默认 表示用户服务（从文件系统加载）
+#   - 每个程序使用 app.cmake 模板构建
+#   - APP_INSTALL_TO_SYSTEM=ON  -> 打包到 system.img
+#   - APP_INSTALL_TO_SYSTEM=OFF -> 输出到 optional/
 #
 
 # 通用编译选项
@@ -48,11 +46,6 @@ add_subdirectory(servers)
 # 应用程序
 # ============================================
 add_subdirectory(apps)
-
-# ============================================
-# Demo 程序
-# ============================================
-add_subdirectory(demos)
 
 # ============================================
 # 服务发现与配置生成
@@ -124,8 +117,8 @@ endfunction()
 set(CORE_SERVICES
         seriald
         kbd
-        ramfsd
-        rootfsd
+        # ramfsd - 已内置到 init，不再作为独立服务
+        # rootfsd - 已被 system.img 替代，不再需要
         vfsserver
         fatfsd
         vgad
@@ -133,7 +126,7 @@ set(CORE_SERVICES
         fbcond
         ttyd
         klogd
-        shell
+        # shell - 移到 /bin/，不是系统服务
 )
 
 set(USER_SERVICES "")
@@ -276,87 +269,20 @@ set(CORE_SERVICES ${SORTED_CORE})
 message(STATUS "[user] Sorted core: ${CORE_SERVICES}")
 
 # ============================================
-# 生成 module_index.h
+# 无需生成头文件
 # ============================================
-set(MODULE_H "/* 自动生成 - user/CMakeLists.txt */\n")
-string(APPEND MODULE_H "#ifndef _MODULE_INDEX_H\n")
-string(APPEND MODULE_H "#define _MODULE_INDEX_H\n\n")
-string(APPEND MODULE_H "#define USER_CONFIG_DEFAULT \"/sys/etc/services.conf\"\n\n")
-string(APPEND MODULE_H "#endif\n")
-
-file(WRITE ${CMAKE_BINARY_DIR}/include/module_index.h "${MODULE_H}")
+# 核心服务配置：user/core_services.conf -> initramfs:/etc/core_services.conf
+# 用户服务配置：user/user_services.conf -> system.img:/etc/user_services.conf
+# init 通过 ramfs/VFS 直接读取配置文件，不再使用嵌入式头文件
 
 # ============================================
-# 生成 core_services.h（嵌入式配置）
+# 用户服务配置
 # ============================================
-# 直接使用 core_services.conf 文件（新服务管理系统）
-set(CORE_SERVICES_CONF_PATH "${CMAKE_CURRENT_SOURCE_DIR}/init/core_services.conf")
-
-if (EXISTS ${CORE_SERVICES_CONF_PATH})
-    file(READ ${CORE_SERVICES_CONF_PATH} CORE_CONF)
-    message(STATUS "Using core_services.conf from ${CORE_SERVICES_CONF_PATH}")
-else ()
-    message(FATAL_ERROR "core_services.conf not found at ${CORE_SERVICES_CONF_PATH}")
-endif ()
-
-# 转换为 C 字符串
-string(REPLACE "\\" "\\\\" CORE_CONF_ESC "${CORE_CONF}")
-string(REPLACE "\"" "\\\"" CORE_CONF_ESC "${CORE_CONF_ESC}")
-string(REPLACE "\n" "\\n\"\n    \"" CORE_CONF_ESC "${CORE_CONF_ESC}")
-
-set(CORE_H "/* 自动生成 - user/CMakeLists.txt */\n")
-string(APPEND CORE_H "#ifndef _CORE_SERVICES_H\n")
-string(APPEND CORE_H "#define _CORE_SERVICES_H\n\n")
-string(APPEND CORE_H "static const char CORE_SERVICES_CONF[] =\n")
-string(APPEND CORE_H "    \"${CORE_CONF_ESC}\";\n\n")
-string(APPEND CORE_H "#endif\n")
-
-file(WRITE ${CMAKE_BINARY_DIR}/include/core_services.h "${CORE_H}")
-
-# ============================================
-# 生成 services.conf（用户服务配置）
-# ============================================
-set(USER_CONF "# 用户服务配置\n\n")
-
-foreach (SVC ${USER_SERVICES})
-    string(APPEND USER_CONF "[service.${SVC}]\n")
-    string(APPEND USER_CONF "type = path\n")
-    string(APPEND USER_CONF "path = ${SVC_${SVC}_PATH}\n")
-    if (SVC_${SVC}_AFTER)
-        string(APPEND USER_CONF "after = ${SVC_${SVC}_AFTER}\n")
-    endif ()
-    if (SVC_${SVC}_HANDLES)
-        string(APPEND USER_CONF "handles = ${SVC_${SVC}_HANDLES}\n")
-    endif ()
-    if (SVC_${SVC}_PROVIDES)
-        string(APPEND USER_CONF "provides = ${SVC_${SVC}_PROVIDES}\n")
-    endif ()
-    if (SVC_${SVC}_REQUIRES)
-        string(APPEND USER_CONF "requires = ${SVC_${SVC}_REQUIRES}\n")
-    endif ()
-    if (SVC_${SVC}_WANTS)
-        string(APPEND USER_CONF "wants = ${SVC_${SVC}_WANTS}\n")
-    endif ()
-    if (SVC_${SVC}_MOUNT)
-        string(APPEND USER_CONF "mount = ${SVC_${SVC}_MOUNT}\n")
-    endif ()
-    if (SVC_${SVC}_RESPAWN)
-        string(APPEND USER_CONF "respawn = true\n")
-    endif ()
-    if (SVC_${SVC}_PROFILE)
-        string(APPEND USER_CONF "profile = ${SVC_${SVC}_PROFILE}\n")
-    endif ()
-    string(APPEND USER_CONF "\n")
-endforeach ()
-
-file(WRITE ${CMAKE_BINARY_DIR}/generated/services.conf "${USER_CONF}")
-
-if (EXISTS ${INIT_HANDLES_CONF_PATH})
-    if (NOT DEFINED INIT_HANDLES_CONF_CONTENT)
-        file(READ ${INIT_HANDLES_CONF_PATH} INIT_HANDLES_CONF_CONTENT)
-    endif ()
-    file(APPEND ${CMAKE_BINARY_DIR}/generated/services.conf "\n${INIT_HANDLES_CONF_CONTENT}\n")
-endif ()
+# 用户服务配置已改为手写配置文件：user/user_services.conf
+# 不再从 service.conf 自动生成（简化构建流程）
+#
+# 注意：保留 generated 目录，以防其他地方依赖
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/generated)
 
 # ============================================
 # init.elf（依赖生成的头文件）
@@ -373,16 +299,24 @@ add_executable(init.elf
         init/svc/svc_runtime.c
         init/svc/svc_scheduler.c
         init/svc/svc_notify.c
+        init/ramfs.c
+        init/initramfs_tar.c
+        init/ramfsd_service.c
+        init/bootstrap/exec.c
+        init/bootstrap/fat32_reader.c
 )
 
 target_compile_options(init.elf PRIVATE ${USER_C_FLAGS})
 target_include_directories(init.elf PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/libc/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/libd/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/libvfs/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/libpthread/include
         ${CMAKE_SOURCE_DIR}/main/include
         ${CMAKE_BINARY_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/init
 )
-target_link_libraries(init.elf PRIVATE c serial)
+target_link_libraries(init.elf PRIVATE c d vfs pthread serial)
 target_link_options(init.elf PRIVATE
         -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/libs/user.ld -nostdlib
 )

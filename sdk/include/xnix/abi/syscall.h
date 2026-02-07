@@ -34,7 +34,6 @@
 #define SYS_PHYSMEM_INFO 203 /* 查询物理内存信息: ebx=handle, ecx=info_ptr */
 
 /* 任务/线程 (300-319) */
-#define SYS_SPAWN         300 /* 创建进程: ebx=spawn_args* */
 #define SYS_THREAD_CREATE 301 /* 创建用户线程: ebx=entry, ecx=arg, edx=stack_top */
 #define SYS_THREAD_EXIT   302 /* 退出线程: ebx=retval */
 #define SYS_THREAD_JOIN   303 /* 等待线程: ebx=tid, ecx=retval_ptr */

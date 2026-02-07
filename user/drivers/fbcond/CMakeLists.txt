@@ -1,28 +1,7 @@
-# 服务元数据
-set(SVC_ISO TRUE)           # 打包到 ISO
-set(SVC_INSTALL_DIR "sbin") # 核心服务，安装到 sbin
+# fbcond - Framebuffer Console
 
-add_executable(fbcond.elf
-        $<TARGET_OBJECTS:crt0>
-        main.c
-)
+set(APP_NAME "fbcond")
+set(APP_SOURCES main.c)
+set(APP_LIBS c d pthread font)
 
-target_compile_options(fbcond.elf PRIVATE ${USER_C_FLAGS})
-
-target_include_directories(fbcond.elf PRIVATE
-        ${CMAKE_SOURCE_DIR}/user/libs/libc/include
-        ${CMAKE_SOURCE_DIR}/user/libs/libd/include
-        ${CMAKE_SOURCE_DIR}/user/libs/libpthread/include
-        ${CMAKE_BINARY_DIR}/include
-)
-
-target_link_libraries(fbcond.elf PRIVATE c d pthread font)
-
-target_link_options(fbcond.elf PRIVATE
-        -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/libs/user.ld -nostdlib
-)
-
-add_custom_command(TARGET fbcond.elf POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fbcond.elf> ${CMAKE_BINARY_DIR}/fbcond.elf
-)
-
+include(${CMAKE_SOURCE_DIR}/user/app.cmake)

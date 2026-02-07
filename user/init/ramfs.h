@@ -57,4 +57,15 @@ void ramfs_init(struct ramfs_ctx *ctx);
  */
 struct vfs_operations *ramfs_get_ops(void);
 
+/**
+ * 直接操作 ramfs 的函数(用于 init 和 initramfs 提取)
+ * 注意:这些函数使用 vfs_operations 签名(void *vctx, uint32_t handle)
+ */
+int ramfs_mkdir(void *vctx, const char *path);
+int ramfs_open(void *vctx, const char *path, uint32_t flags);
+int ramfs_close(void *vctx, uint32_t handle);
+int ramfs_read(void *vctx, uint32_t handle, void *buf, uint32_t offset, uint32_t size);
+int ramfs_write(void *vctx, uint32_t handle, const void *buf, uint32_t offset, uint32_t size);
+int ramfs_finfo(void *vctx, uint32_t handle, struct vfs_info *info);
+
 #endif /* RAMFS_H */

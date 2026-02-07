@@ -338,18 +338,6 @@ static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *repl
  */
 #define spawn_args abi_spawn_args
 
-/**
- * 创建新进程(spawn)
- * @return 进程 PID,-1 失败(设置 errno)
- */
-static inline int sys_spawn(struct spawn_args *args) {
-    int ret = syscall1(SYS_SPAWN, (uint32_t)(uintptr_t)args);
-    if (ret < 0) {
-        errno = -ret;
-        return -1;
-    }
-    return ret;
-}
 
 /**
  * 等待子进程退出
