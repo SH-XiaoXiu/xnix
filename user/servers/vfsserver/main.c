@@ -360,7 +360,7 @@ static int vfsd_forward(struct ipc_message *msg, uint32_t pid, const char *path)
     }
 
     /* 替换 buffer 为相对路径 */
-    msg->buffer.data = rel_path;
+    msg->buffer.data = (uint64_t)(uintptr_t)rel_path;
     msg->buffer.size = strlen(rel_path);
 
     /* 调整消息格式:移除 PID,使参数从 data[1] 开始 */
@@ -432,7 +432,7 @@ static int vfsd_opendir(struct ipc_message *msg, const char *abs_path) {
     msg->regs.data[1]       = (uint32_t)h;
     msg->handles.handles[0] = g_vfs_ep;
     msg->handles.count      = 1;
-    msg->buffer.data        = NULL;
+    msg->buffer.data        = (uint64_t)(uintptr_t)0;
     msg->buffer.size        = 0;
     return 0;
 }
@@ -452,7 +452,7 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
 
         msg->regs.data[0] = UDM_VFS_READDIR;
         msg->regs.data[1] = 0;
-        msg->buffer.data  = &g_reply_dirent;
+        msg->buffer.data  = (uint64_t)(uintptr_t)&g_reply_dirent;
         msg->buffer.size  = sizeof(g_reply_dirent);
         return 0;
     }
@@ -477,10 +477,10 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
 
     int32_t result = (int32_t)reply.regs.data[1];
     if (result == 0) {
-        msg->buffer.data = &g_reply_dirent;
+        msg->buffer.data = (uint64_t)(uintptr_t)&g_reply_dirent;
         msg->buffer.size = sizeof(g_reply_dirent);
     } else {
-        msg->buffer.data = NULL;
+        msg->buffer.data = (uint64_t)(uintptr_t)0;
         msg->buffer.size = 0;
     }
     return 0;
@@ -508,7 +508,7 @@ static int vfsd_close_handle(struct ipc_message *msg, uint32_t h) {
 
     msg->regs.data[0]  = UDM_VFS_CLOSE;
     msg->regs.data[1]  = (uint32_t)result;
-    msg->buffer.data   = NULL;
+    msg->buffer.data   = (uint64_t)(uintptr_t)0;
     msg->buffer.size   = 0;
     msg->handles.count = 0;
     return 0;
@@ -527,7 +527,7 @@ static int vfsd_handler(struct ipc_message *msg) {
         char     abs_path[VFS_PATH_MAX];
 
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-            memcpy(path, msg->buffer.data, msg->buffer.size);
+            memcpy(path, (void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
             path[msg->buffer.size] = '\0';
 
             /* 解析为绝对路径 */
@@ -582,7 +582,7 @@ static int vfsd_handler(struct ipc_message *msg) {
 
         msg->regs.data[0] = op;
         msg->regs.data[1] = 0; /* success */
-        msg->buffer.data  = (void *)cwd;
+        msg->buffer.data  = (uint64_t)(uintptr_t)(void *)cwd;
         msg->buffer.size  = strlen(cwd);
         return 0;
     }
@@ -614,7 +614,7 @@ static int vfsd_handler(struct ipc_message *msg) {
         uint32_t fs_ep = msg->handles.handles[0]; /* vfsd 现在拥有这个 handle */
 
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-            memcpy(path, msg->buffer.data, msg->buffer.size);
+            memcpy(path, (void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
             path[msg->buffer.size] = '\0';
 
             int ret = vfsd_mount(path, fs_ep);
@@ -640,7 +640,7 @@ static int vfsd_handler(struct ipc_message *msg) {
         char     abs_path[VFS_PATH_MAX];
 
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-            memcpy(rel_path, msg->buffer.data, msg->buffer.size);
+            memcpy(rel_path, (void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
             rel_path[msg->buffer.size] = '\0';
 
             /* 解析为绝对路径 */
@@ -660,7 +660,7 @@ static int vfsd_handler(struct ipc_message *msg) {
         if (ret < 0) {
             msg->regs.data[0] = op;
             msg->regs.data[1] = (uint32_t)ret;
-            msg->buffer.data  = NULL;
+            msg->buffer.data  = (uint64_t)(uintptr_t)0;
             msg->buffer.size  = 0;
         }
         return 0;
@@ -683,7 +683,7 @@ static int vfsd_handler(struct ipc_message *msg) {
     char     path[VFS_PATH_MAX];
 
     if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-        memcpy(path, msg->buffer.data, msg->buffer.size);
+        memcpy(path, (void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
         path[msg->buffer.size] = '\0';
 
         int ret = vfsd_forward(msg, pid, path);

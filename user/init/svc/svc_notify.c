@@ -18,7 +18,7 @@ void svc_handle_ready_notification(struct svc_manager *mgr, struct ipc_message *
         memcpy(name, &msg->regs.data[2], sizeof(name));
         name[sizeof(name) - 1] = '\0';
     } else if (msg->buffer.data && msg->buffer.size >= sizeof(struct svc_ready_msg)) {
-        struct svc_ready_msg *ready = (struct svc_ready_msg *)msg->buffer.data;
+        struct svc_ready_msg *ready = (struct svc_ready_msg *)(uintptr_t)msg->buffer.data;
         if (ready->magic != SVC_MSG_READY) {
             return;
         }

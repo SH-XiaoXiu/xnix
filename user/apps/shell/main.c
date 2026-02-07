@@ -10,7 +10,6 @@
 #include <d/protocol/vfs.h>
 #include <signal.h>
 #include <stdio.h>
-#include <stdio_internal.h>
 #include <string.h>
 #include <vfs_client.h>
 #include <xnix/abi/process.h>
@@ -441,25 +440,11 @@ static void cmd_pwd(int argc, char **argv) {
     }
 }
 
-static void serial_print(handle_t serial, const char *msg) {
-    if (serial == HANDLE_INVALID) return;
-    struct ipc_message m;
-    memset(&m, 0, sizeof(m));
-    m.regs.data[0] = 5; /* UDM_CONSOLE_WRITE */
-    size_t len = strlen(msg);
-    if (len > 24) len = 24;
-    m.regs.data[7] = len;
-    memcpy(&m.regs.data[1], msg, len);
-    sys_ipc_send(serial, &m, 100);
-}
-
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
     char line[MAX_LINE];
-
-    handle_t serial = env_get_handle("serial");
 
     /* 查找 handles */
     g_tty_ep = env_get_handle("tty0");
@@ -467,12 +452,10 @@ int main(int argc, char **argv) {
 
     /* 重新绑定stdio到tty0(libc默认优先tty1) */
     if (g_tty_ep != HANDLE_INVALID) {
-        stdout->tty_ep = g_tty_ep;
-        stderr->tty_ep = g_tty_ep;
-        stdin->tty_ep = g_tty_ep;
+        _stdio_set_tty(stdout, g_tty_ep);
+        _stdio_set_tty(stderr, g_tty_ep);
+        _stdio_set_tty(stdin, g_tty_ep);
     }
-
-    serial_print(serial, "[shell] stdio->tty0\n");
 
     /* 初始化 VFS 客户端 */
     vfs_client_init(g_vfs_ep);
@@ -480,52 +463,25 @@ int main(int argc, char **argv) {
     /* 初始化 PATH */
     path_init();
 
-    /* 检查init_notify handle */
-    handle_t init_notify = sys_handle_find("init_notify");
-    if (init_notify == HANDLE_INVALID) {
-        serial_print(serial, "[shell] no init_notif");
-        serial_print(serial, "y\n");
-    } else {
-        serial_print(serial, "[shell] has init_noti");
-        serial_print(serial, "fy\n");
-    }
+    svc_notify_ready("shell");
 
-    int ready_ret = svc_notify_ready("shell");
-    if (ready_ret == 0) {
-        serial_print(serial, "[shell] ready OK\n");
-    } else {
-        serial_print(serial, "[shell] ready FAIL\n");
-    }
-
-    /* 通过serial输出欢迎信息,避免使用printf */
-    serial_print(serial, "\nXnix Shell\n");
-    serial_print(serial, "Type 'help' for availa");
-    serial_print(serial, "ble commands.\n\n");
-
-    serial_print(serial, "[shell] enter loop\n");
+    /* 输出欢迎信息 */
+    printf("\nXnix Shell\n");
+    printf("Type 'help' for available commands.\n\n");
 
     while (1) {
-        serial_print(serial, "[shell] loop start\n");
-
         char cwd[256];
-        serial_print(serial, "[shell] getcwd\n");
         if (vfs_getcwd(cwd, sizeof(cwd)) >= 0) {
-            serial_print(serial, "[shell] printf prompt\n");
             termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
             printf("%s> ", cwd);
             fflush(stdout);
             termcolor_reset(stdout);
         } else {
-            serial_print(serial, "[shell] printf >\n");
             termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
             printf("> ");
-            serial_print(serial, "[shell] fflush\n");
             fflush(stdout);
-            serial_print(serial, "[shell] reset col\n");
             termcolor_reset(stdout);
         }
-        serial_print(serial, "[shell] fflush all\n");
-        fflush(NULL);
 
         if (gets_s(line, sizeof(line)) == NULL) {
             msleep(100);

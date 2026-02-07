@@ -30,7 +30,7 @@ static void tty_write(const char *s, uint32_t len) {
     memset(&msg, 0, sizeof(msg));
     msg.regs.data[0] = TTY_OP_WRITE;
     msg.regs.data[1] = len;
-    msg.buffer.data  = (void *)s;
+    msg.buffer.data  = (uint64_t)(uintptr_t)s;
     msg.buffer.size  = len;
 
     sys_ipc_send(g_tty_ep, &msg, 100);

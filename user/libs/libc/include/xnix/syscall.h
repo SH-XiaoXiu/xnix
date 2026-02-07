@@ -232,10 +232,15 @@ static inline int sys_notification_create(void) {
  * 等待 Notification
  *
  * @param handle Notification handle
- * @return 信号位掩码
+ * @return 信号位掩码,失败返回 0 并设置 errno
  */
 static inline uint32_t sys_notification_wait(uint32_t handle) {
-    return (uint32_t)syscall1(SYS_NOTIFICATION_WAIT, handle);
+    int ret = syscall1(SYS_NOTIFICATION_WAIT, handle);
+    if (ret < 0) {
+        errno = -ret;
+        return 0;
+    }
+    return (uint32_t)ret;
 }
 
 /**

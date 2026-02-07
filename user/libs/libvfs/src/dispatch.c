@@ -65,7 +65,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         }
         result = ops->read(ctx, handle, g_data_buf, offset, size);
         if (result > 0) {
-            reply.buffer.data = g_data_buf;
+            reply.buffer.data = (uint64_t)(uintptr_t)g_data_buf;
             reply.buffer.size = (uint32_t)result;
         }
         break;
@@ -146,7 +146,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         uint32_t index  = UDM_MSG_ARG(msg, 1);
         result          = ops->readdir(ctx, handle, index, &g_dirent_buf);
         if (result == 0) {
-            reply.buffer.data = &g_dirent_buf;
+            reply.buffer.data = (uint64_t)(uintptr_t)&g_dirent_buf;
             reply.buffer.size = sizeof(g_dirent_buf);
         }
         break;

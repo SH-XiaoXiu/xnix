@@ -21,7 +21,7 @@ static bool probe_fs_ready(uint32_t ep, uint32_t timeout_ms) {
 
         msg.regs.data[0]      = UDM_VFS_INFO;
         const char *test_path = ".";
-        msg.buffer.data       = (void *)test_path;
+        msg.buffer.data       = (uint64_t)(uintptr_t)test_path;
         msg.buffer.size       = 2;
 
         int ret = sys_ipc_call(ep, &msg, &reply, 500);

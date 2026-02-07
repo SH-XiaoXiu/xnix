@@ -328,7 +328,7 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
     case TTY_OP_WRITE: {
         /* 写输出到设备 */
         int   len  = (int)msg->regs.data[1];
-        char *data = (char *)msg->buffer.data;
+        char *data = (char *)(uintptr_t)msg->buffer.data;
         if (data && len > 0) {
             tty_output_write(tty, data, len);
         }
@@ -368,7 +368,7 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
             }
             pthread_mutex_unlock(&tty->input_lock);
             msg->regs.data[0] = (uint32_t)to_read;
-            msg->buffer.data  = buf;
+            msg->buffer.data  = (uint64_t)(uintptr_t)buf;
             msg->buffer.size  = (uint32_t)to_read;
             return 0;
         }
@@ -528,7 +528,8 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    /* printf 不能在服务线程启动前使用,会死锁 */
+    /* 强制 stdout/stderr 使用 debug fallback,避免 printf 发给自己死锁 */
+    _stdio_force_debug_mode();
 
     handle_t serial_ep = env_get_handle("serial");
     handle_t kbd_ep    = env_get_handle("kbd_ep");
@@ -557,12 +558,21 @@ int main(int argc, char **argv) {
             tty0_ep = sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
         }
         if (tty0_ep != HANDLE_INVALID) {
-            handle_t vga_ep = env_get_handle("vga_ep");
+            handle_t fbcon_ep = env_get_handle("fbcon_ep");
+            handle_t vga_ep   = env_get_handle("vga_ep");
 
-            /* 调试: 检查 vga_ep 是否有效 */
-            printf("[ttyd] vga_ep=%d, serial_ep=%d\n", (int)vga_ep, (int)serial_ep);
+            /* 调试: 检查 endpoint 是否有效 */
+            printf("[ttyd] fbcon_ep=%d, vga_ep=%d, serial_ep=%d\n", (int)fbcon_ep, (int)vga_ep,
+                   (int)serial_ep);
 
-            handle_t output_ep = (vga_ep != HANDLE_INVALID) ? vga_ep : serial_ep;
+            handle_t output_ep;
+            if (fbcon_ep != HANDLE_INVALID) {
+                output_ep = fbcon_ep;
+            } else if (vga_ep != HANDLE_INVALID) {
+                output_ep = vga_ep;
+            } else {
+                output_ep = serial_ep;
+            }
 
             tty_init_instance(&g_ttys[1], 0, tty0_ep, output_ep, serial_ep, kbd_ep);
             g_tty_count = 2;

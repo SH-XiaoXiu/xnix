@@ -21,7 +21,7 @@ void udm_server_run(struct udm_server *srv) {
 
     while (1) {
         memset(&msg, 0, sizeof(msg));
-        msg.buffer.data = g_recv_buf;
+        msg.buffer.data = (uint64_t)(uintptr_t)g_recv_buf;
         msg.buffer.size = UDM_RECV_BUF_SIZE;
 
         if (sys_ipc_receive(srv->endpoint, &msg, 0) < 0) {

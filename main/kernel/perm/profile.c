@@ -24,6 +24,7 @@ void perm_profile_init(void) {
     perm_profile_set(driver_profile, "xnix.ipc.*", PERM_GRANT);
     perm_profile_set(driver_profile, PERM_NODE_HANDLE_GRANT, PERM_GRANT);
     perm_profile_set(driver_profile, PERM_NODE_MM_MMAP, PERM_GRANT);
+    perm_profile_set(driver_profile, "xnix.debug.console", PERM_GRANT);
 
     struct perm_profile *io_driver_profile = perm_profile_create("io_driver");
     perm_profile_inherit(io_driver_profile, driver_profile);
@@ -36,6 +37,7 @@ void perm_profile_init(void) {
     perm_profile_set(default_profile, PERM_NODE_IPC_RECV, PERM_GRANT);
     perm_profile_set(default_profile, PERM_NODE_PROCESS_EXEC, PERM_GRANT);
     perm_profile_set(default_profile, "xnix.ipc.endpoint.*", PERM_GRANT);
+    perm_profile_set(default_profile, "xnix.debug.console", PERM_GRANT);
 }
 
 /**

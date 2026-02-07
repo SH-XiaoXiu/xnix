@@ -20,7 +20,6 @@
 #include <libs/serial/serial.h>
 #include <module_index.h>
 #include <stdio.h>
-#include <stdio_internal.h>
 #include <string.h>
 #include <unistd.h>
 #include <vfs_client.h>
@@ -43,7 +42,7 @@ static void drain_ready_notifications(handle_t init_notify_ep) {
     for (int i = 0; i < 16; i++) {
         struct ipc_message msg     = {0};
         char               buf[64] = {0};
-        msg.buffer.data            = buf;
+        msg.buffer.data            = (uint64_t)(uintptr_t)buf;
         msg.buffer.size            = sizeof(buf);
 
         int ipc_ret = sys_ipc_receive((uint32_t)init_notify_ep, &msg, 1);
@@ -204,8 +203,8 @@ int main(int argc, char **argv) {
                 /* 更新 stdout/stderr 的 tty endpoint(启动时尚未初始化) */
                 handle_t tty_h = sys_handle_find("tty1");
                 if (tty_h != HANDLE_INVALID) {
-                    stdout->tty_ep = tty_h;
-                    stderr->tty_ep = tty_h;
+                    _stdio_set_tty(stdout, tty_h);
+                    _stdio_set_tty(stderr, tty_h);
                 }
 
                 serial_init();

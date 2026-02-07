@@ -78,7 +78,7 @@ int vfs_mount(const char *path, uint32_t fs_ep) {
     struct ipc_message reply = {0};
 
     msg.regs.data[0] = 0x1000; /* VFS_MOUNT */
-    msg.buffer.data  = (void *)path;
+    msg.buffer.data  = (uint64_t)(uintptr_t)(void *)path;
     msg.buffer.size  = strlen(path);
 
     /* 通过 IPC handle 传递 FS endpoint */
@@ -131,7 +131,7 @@ int vfs_open(const char *path, uint32_t flags) {
     msg.regs.data[0] = UDM_VFS_OPEN;
     msg.regs.data[1] = (uint32_t)sys_getpid(); /* 传递 PID 供 vfsd 解析路径 */
     msg.regs.data[2] = flags;
-    msg.buffer.data  = (void *)path;
+    msg.buffer.data  = (uint64_t)(uintptr_t)(void *)path;
     msg.buffer.size  = strlen(path);
 
     /* 发送给 vfsd,vfsd 会转发给对应的 FS 驱动 */
@@ -198,7 +198,7 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
     msg.regs.data[3] = size;
 
     /* 预设接收 buffer(零拷贝)*/
-    reply.buffer.data = buf;
+    reply.buffer.data = (uint64_t)(uintptr_t)buf;
     reply.buffer.size = (uint32_t)size;
 
     int ret = sys_ipc_call(fd_table[fd].fs_ep, &msg, &reply, 5000);
@@ -237,7 +237,7 @@ ssize_t vfs_write(int fd, const void *buf, size_t size) {
     msg.regs.data[1] = fd_table[fd].fs_handle;
     msg.regs.data[2] = fd_table[fd].offset;
     msg.regs.data[3] = size;
-    msg.buffer.data  = (void *)buf;
+    msg.buffer.data  = (uint64_t)(uintptr_t)(void *)buf;
     msg.buffer.size  = size;
 
     int ret = sys_ipc_call(fd_table[fd].fs_ep, &msg, &reply, 5000);
@@ -270,7 +270,7 @@ int vfs_mkdir(const char *path) {
 
     msg.regs.data[0] = UDM_VFS_MKDIR;
     msg.regs.data[1] = (uint32_t)sys_getpid();
-    msg.buffer.data  = (void *)path;
+    msg.buffer.data  = (uint64_t)(uintptr_t)(void *)path;
     msg.buffer.size  = strlen(path);
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
@@ -298,7 +298,7 @@ int vfs_delete(const char *path) {
 
     msg.regs.data[0] = UDM_VFS_DEL;
     msg.regs.data[1] = (uint32_t)sys_getpid();
-    msg.buffer.data  = (void *)path;
+    msg.buffer.data  = (uint64_t)(uintptr_t)(void *)path;
     msg.buffer.size  = strlen(path);
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
@@ -326,7 +326,7 @@ int vfs_stat(const char *path, struct vfs_stat *st) {
 
     msg.regs.data[0] = UDM_VFS_INFO;
     msg.regs.data[1] = (uint32_t)sys_getpid();
-    msg.buffer.data  = (void *)path;
+    msg.buffer.data  = (uint64_t)(uintptr_t)(void *)path;
     msg.buffer.size  = strlen(path);
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
@@ -367,7 +367,7 @@ int vfs_opendir(const char *path) {
 
     msg.regs.data[0] = UDM_VFS_OPENDIR;
     msg.regs.data[1] = (uint32_t)sys_getpid();
-    msg.buffer.data  = (void *)path;
+    msg.buffer.data  = (uint64_t)(uintptr_t)(void *)path;
     msg.buffer.size  = strlen(path);
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
@@ -409,7 +409,7 @@ int vfs_readdir(int fd, char *name, size_t size) {
     msg.regs.data[2] = fd_table[fd].offset;
 
     /* 预设接收 buffer */
-    reply.buffer.data = tmp_name;
+    reply.buffer.data = (uint64_t)(uintptr_t)tmp_name;
     reply.buffer.size = sizeof(tmp_name);
 
     int ret = sys_ipc_call(fd_table[fd].fs_ep, &msg, &reply, 5000);
@@ -450,7 +450,7 @@ int vfs_chdir(const char *path) {
 
     msg.regs.data[0] = UDM_VFS_CHDIR;
     msg.regs.data[1] = (uint32_t)sys_getpid();
-    msg.buffer.data  = (void *)path;
+    msg.buffer.data  = (uint64_t)(uintptr_t)(void *)path;
     msg.buffer.size  = strlen(path);
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
@@ -479,7 +479,7 @@ int vfs_getcwd(char *buf, size_t size) {
     msg.regs.data[0] = UDM_VFS_GETCWD;
     msg.regs.data[1] = (uint32_t)sys_getpid();
 
-    reply.buffer.data = buf;
+    reply.buffer.data = (uint64_t)(uintptr_t)buf;
     reply.buffer.size = size;
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
@@ -546,7 +546,7 @@ int vfs_readdir_index(int fd, uint32_t index, struct vfs_dirent *dirent) {
     msg.regs.data[2] = index;
 
     /* 预设接收 buffer */
-    reply.buffer.data = dirent;
+    reply.buffer.data = (uint64_t)(uintptr_t)dirent;
     reply.buffer.size = sizeof(*dirent);
 
     int ret = sys_ipc_call(fd_table[fd].fs_ep, &msg, &reply, 5000);
