@@ -235,13 +235,13 @@ int ipc_send(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
     }
 
     if (handle_acquire(proc, ep_handle, HANDLE_ENDPOINT, &entry) < 0) {
-        return -EINVAL;
+        return -EBADF;
     }
 
     struct ipc_endpoint *ep = entry.object;
     if (entry.perm_send == PERM_ID_INVALID || !perm_check(proc, entry.perm_send)) {
         handle_object_put(entry.type, entry.object);
-        return -EINVAL;
+        return -EPERM;
     }
 
     int ret = ipc_send_to_ep(ep, msg, NULL, timeout_ms);
@@ -258,13 +258,13 @@ int ipc_call(handle_t ep_handle, struct ipc_message *request, struct ipc_message
     }
 
     if (handle_acquire(proc, ep_handle, HANDLE_ENDPOINT, &entry) < 0) {
-        return -EINVAL;
+        return -EBADF;
     }
 
     struct ipc_endpoint *ep = entry.object;
     if (entry.perm_send == PERM_ID_INVALID || !perm_check(proc, entry.perm_send)) {
         handle_object_put(entry.type, entry.object);
-        return -EINVAL;
+        return -EPERM;
     }
 
     int ret = ipc_send_to_ep(ep, request, reply, timeout_ms);
@@ -291,13 +291,13 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
     }
 
     if (handle_acquire(proc, ep_handle, HANDLE_ENDPOINT, &entry) < 0) {
-        return -EINVAL;
+        return -EBADF;
     }
 
     struct ipc_endpoint *ep = entry.object;
     if (entry.perm_recv == PERM_ID_INVALID || !perm_check(proc, entry.perm_recv)) {
         handle_object_put(entry.type, entry.object);
-        return -EINVAL;
+        return -EPERM;
     }
 
     current = sched_current();

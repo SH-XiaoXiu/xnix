@@ -33,7 +33,7 @@ static int ipc_msg_copy_in(struct ipc_message **out_kmsg, struct ipc_message *us
 
     if (copy_buffer) {
         if (umsg.buffer.size > CFG_IPC_MAX_BUF) {
-            return -E2BIG;
+            return -EMSGSIZE;
         }
         if (umsg.buffer.size && !umsg.buffer.data) {
             return -EINVAL;

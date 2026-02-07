@@ -181,7 +181,18 @@ int main(int argc, char **argv) {
 
         drain_ready_notifications(init_notify_ep);
 
-        /* 前几次 tick 输出诊断 */
+        /* 检查是否可以关闭早期控制台(ttyd 就绪后,fbcond 已接管显示) */
+        if (!serial_initialized) {
+            int ttyd_idx = svc_find_by_name(&g_mgr, "ttyd");
+            if (ttyd_idx >= 0 && g_mgr.runtime[ttyd_idx].ready) {
+                early_puts("[INIT] system ready\n");
+                serial_init();
+                serial_initialized = true;
+                early_console_disable();
+            }
+        }
+
+        /* 前几次 tick 输出诊断(early console 关闭后自动停止) */
         if (loop_count < 5 && early_console_is_active()) {
             char buf[80];
             early_set_color(10, 0);
@@ -194,22 +205,6 @@ int main(int argc, char **argv) {
                 early_puts(buf);
             }
             early_puts("\n");
-        }
-
-        /* 检查是否可以切换到 IPC-based 输出 (ttyd 就绪后) */
-        if (!serial_initialized && early_console_is_active()) {
-            int ttyd_idx = svc_find_by_name(&g_mgr, "ttyd");
-            if (ttyd_idx >= 0 && g_mgr.runtime[ttyd_idx].ready) {
-                early_puts("[INIT] ttyd ready - keeping early console for debugging\n");
-
-                /* TODO: 暂时不切换到 tty1,因为会触发内核崩溃
-                 * 问题:切换后 printf 通过 IPC 发送到 ttyd,内核在处理时访问无效内存
-                 */
-                serial_init();
-                serial_initialized = true;
-
-                early_puts("[INIT] system ready (still using early console)\n");
-            }
         }
 
         /* 尝试加载用户配置(在 /sys 挂载后) */

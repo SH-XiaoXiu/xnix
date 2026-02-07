@@ -39,6 +39,9 @@ foreach (SVC ${USER_SERVICES})
     endif ()
 endforeach ()
 
+# shell.elf -> rootfs /sys/bin/ (允许从文件系统启动第二个实例)
+list(APPEND ROOTFS_FILES "${CMAKE_BINARY_DIR}/shell.elf:bin/shell.elf")
+
 # core bin 工具 -> rootfs /sys/bin/
 foreach (BIN ${CORE_BIN_TOOLS})
     list(APPEND ROOTFS_FILES "${BIN_TOOL_OUTPUT_DIR}/${BIN}.elf:bin/${BIN}.elf")
@@ -66,6 +69,8 @@ endforeach ()
 foreach (BIN ${CORE_BIN_TOOLS})
     list(APPEND ROOTFS_DEPENDS bin_${BIN}.elf)
 endforeach ()
+# shell.elf 也需要复制到 rootfs
+list(APPEND ROOTFS_DEPENDS shell.elf)
 
 add_custom_command(
         OUTPUT ${ROOTFS_IMG}

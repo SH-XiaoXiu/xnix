@@ -118,41 +118,27 @@ function(parse_service_conf FILE_PATH OUT_PREFIX)
     endforeach ()
 endfunction()
 
-# 收集服务
-set(CORE_SERVICES "")
+# ============================================
+# 核心服务列表直接硬编码 核心服务是固定的
+# ============================================
+set(CORE_SERVICES
+        seriald
+        kbd
+        ramfsd
+        rootfsd
+        vfsserver
+        fatfsd
+        vgad
+        fbd
+        fbcond
+        ttyd
+        klogd
+        shell
+)
+
 set(USER_SERVICES "")
 
-# 扫描 Drivers
-foreach (DRIVER ${DRIVER_NAMES})
-    set(SVC_CONF "${CMAKE_CURRENT_SOURCE_DIR}/drivers/${DRIVER}/service.conf")
-    parse_service_conf("${SVC_CONF}" "SVC")
-
-    if (SVC_CORE)
-        list(APPEND CORE_SERVICES "${DRIVER}")
-        set(SVC_${DRIVER}_CORE TRUE CACHE INTERNAL "")
-    else ()
-        list(APPEND USER_SERVICES "${DRIVER}")
-        set(SVC_${DRIVER}_CORE FALSE CACHE INTERNAL "")
-    endif ()
-
-    set(SVC_${DRIVER}_TYPE "driver" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_AFTER "${SVC_AFTER}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_HANDLES "${SVC_HANDLES}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_MOUNT "${SVC_MOUNT}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_RESPAWN "${SVC_RESPAWN}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_PROFILE "${SVC_PROFILE}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_PROVIDES "${SVC_PROVIDES}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_REQUIRES "${SVC_REQUIRES}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_WANTS "${SVC_WANTS}" CACHE INTERNAL "")
-    set(SVC_${DRIVER}_HANDLES "${SVC_HANDLES}" CACHE INTERNAL "")
-    if (SVC_PATH)
-        set(SVC_${DRIVER}_PATH "${SVC_PATH}" CACHE INTERNAL "")
-    else ()
-        set(SVC_${DRIVER}_PATH "/sys/drivers/${DRIVER}.elf" CACHE INTERNAL "")
-    endif ()
-endforeach ()
-
-# 扫描 Servers
+# 扫描 Servers(保留占位)
 foreach (SERVER ${SERVER_NAMES})
     set(SVC_CONF "${CMAKE_CURRENT_SOURCE_DIR}/servers/${SERVER}/service.conf")
     parse_service_conf("${SVC_CONF}" "SVC")

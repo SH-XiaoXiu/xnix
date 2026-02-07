@@ -123,6 +123,38 @@ static void fb_fill_rect(struct fbcon_state *st, int x, int y, int w, int h, uin
     }
 }
 
+/**
+ * 扫描 framebuffer,找到最后一行有内容的字符行
+ *
+ * 用于 fbcond 初始化时继承内核早期控制台的光标位置.
+ * 从底部向上扫描,找到第一个有非黑色像素的字符行.
+ *
+ * @return 最后一行有内容的行号,全空返回 -1
+ */
+static int fb_detect_last_row(struct fbcon_state *st) {
+    if (!st || !st->fb_addr || st->rows <= 0) {
+        return -1;
+    }
+
+    for (int row = st->rows - 1; row >= 0; row--) {
+        int py_start = row * CHAR_HEIGHT;
+        int py_end   = py_start + CHAR_HEIGHT;
+        if ((uint32_t)py_end > st->fb_height) {
+            py_end = (int)st->fb_height;
+        }
+        for (int y = py_start; y < py_end; y++) {
+            uint8_t *line        = st->fb_addr + (uint32_t)y * st->fb_pitch;
+            uint32_t check_bytes = st->fb_width * st->bytes_per_pixel;
+            for (uint32_t i = 0; i < check_bytes; i++) {
+                if (line[i] != 0) {
+                    return row;
+                }
+            }
+        }
+    }
+    return -1;
+}
+
 static void fb_scroll_chars(struct fbcon_state *st, int lines) {
     if (!st || !st->fb_addr || lines <= 0) {
         return;
@@ -139,7 +171,8 @@ static void fb_scroll_chars(struct fbcon_state *st, int lines) {
     }
 
     uint32_t move_lines = st->fb_height - (uint32_t)scroll_pixels;
-    memmove(st->fb_addr, st->fb_addr + (uint32_t)scroll_pixels * st->fb_pitch, move_lines * st->fb_pitch);
+    memmove(st->fb_addr, st->fb_addr + (uint32_t)scroll_pixels * st->fb_pitch,
+            move_lines * st->fb_pitch);
     fb_fill_rect(st, 0, (int)move_lines, (int)st->fb_width, scroll_pixels, st->bg_color);
 }
 
@@ -167,8 +200,10 @@ static void fb_apply_color(struct fbcon_state *st, uint8_t fg, uint8_t bg) {
     st->cur_fg = (uint8_t)(fg & 0x0Fu);
     st->cur_bg = (uint8_t)(bg & 0x0Fu);
 
-    st->fg_color = fb_make_color(st, palette[st->cur_fg][0], palette[st->cur_fg][1], palette[st->cur_fg][2]);
-    st->bg_color = fb_make_color(st, palette[st->cur_bg][0], palette[st->cur_bg][1], palette[st->cur_bg][2]);
+    st->fg_color =
+        fb_make_color(st, palette[st->cur_fg][0], palette[st->cur_fg][1], palette[st->cur_fg][2]);
+    st->bg_color =
+        fb_make_color(st, palette[st->cur_bg][0], palette[st->cur_bg][1], palette[st->cur_bg][2]);
 }
 
 static void fbcon_newline(struct fbcon_state *st) {
@@ -205,8 +240,8 @@ static void fbcon_putc(struct fbcon_state *st, uint32_t codepoint) {
     if (codepoint == '\b') {
         if (st->cursor_x > 0) {
             st->cursor_x--;
-            fb_fill_rect(st, st->cursor_x * CHAR_WIDTH, st->cursor_y * CHAR_HEIGHT, CHAR_WIDTH, CHAR_HEIGHT,
-                         st->bg_color);
+            fb_fill_rect(st, st->cursor_x * CHAR_WIDTH, st->cursor_y * CHAR_HEIGHT, CHAR_WIDTH,
+                         CHAR_HEIGHT, st->bg_color);
         }
         return;
     }
@@ -247,6 +282,7 @@ static void fbcon_write_bytes(struct fbcon_state *st, const uint8_t *data, size_
 
 static int console_handler(struct ipc_message *msg) {
     uint32_t opcode = msg->regs.data[0];
+
     pthread_mutex_lock(&g_fbcon.lock);
     switch (opcode) {
     case UDM_CONSOLE_PUTC: {
@@ -272,7 +308,8 @@ static int console_handler(struct ipc_message *msg) {
         fb_apply_color(&g_fbcon, 7, 0);
         break;
     case UDM_CONSOLE_CLEAR:
-        fb_fill_rect(&g_fbcon, 0, 0, (int)g_fbcon.fb_width, (int)g_fbcon.fb_height, g_fbcon.bg_color);
+        fb_fill_rect(&g_fbcon, 0, 0, (int)g_fbcon.fb_width, (int)g_fbcon.fb_height,
+                     g_fbcon.bg_color);
         g_fbcon.cursor_x = 0;
         g_fbcon.cursor_y = 0;
         break;
@@ -289,10 +326,10 @@ int main(void) {
     handle_t fb_handle = env_get_handle("fb_mem");
     if (fb_handle == HANDLE_INVALID) {
         if (serial != HANDLE_INVALID) {
-            const char *msg = "[fbcond] fb_mem missing\n";
-            struct ipc_message m = {0};
-            m.regs.data[0] = UDM_CONSOLE_WRITE;
-            m.regs.data[7] = 23;
+            const char        *msg = "[fbcond] fb_mem missing\n";
+            struct ipc_message m   = {0};
+            m.regs.data[0]         = UDM_CONSOLE_WRITE;
+            m.regs.data[7]         = 23;
             memcpy(&m.regs.data[1], msg, 23);
             sys_ipc_send(serial, &m, 100);
         }
@@ -308,31 +345,39 @@ int main(void) {
     }
 
     uint32_t mapped_size = 0;
-    uint8_t *fb_addr = (uint8_t *)sys_mmap_phys(fb_handle, 0, 0, 0x03, &mapped_size);
+    uint8_t *fb_addr     = (uint8_t *)sys_mmap_phys(fb_handle, 0, 0, 0x03, &mapped_size);
     if (!fb_addr || (intptr_t)fb_addr < 0) {
         return 1;
     }
 
     memset(&g_fbcon, 0, sizeof(g_fbcon));
-    g_fbcon.fb_addr          = fb_addr;
-    g_fbcon.fb_width         = pinfo.width;
-    g_fbcon.fb_height        = pinfo.height;
-    g_fbcon.fb_pitch         = pinfo.pitch;
-    g_fbcon.fb_bpp           = pinfo.bpp;
-    g_fbcon.bytes_per_pixel  = (uint8_t)(pinfo.bpp / 8);
-    g_fbcon.red_pos          = pinfo.red_pos;
-    g_fbcon.red_size         = pinfo.red_size;
-    g_fbcon.green_pos        = pinfo.green_pos;
-    g_fbcon.green_size       = pinfo.green_size;
-    g_fbcon.blue_pos         = pinfo.blue_pos;
-    g_fbcon.blue_size        = pinfo.blue_size;
-    g_fbcon.cols             = (int)(g_fbcon.fb_width / CHAR_WIDTH);
-    g_fbcon.rows             = (int)(g_fbcon.fb_height / CHAR_HEIGHT);
-    g_fbcon.cursor_x         = 0;
-    g_fbcon.cursor_y         = 0;
+    g_fbcon.fb_addr         = fb_addr;
+    g_fbcon.fb_width        = pinfo.width;
+    g_fbcon.fb_height       = pinfo.height;
+    g_fbcon.fb_pitch        = pinfo.pitch;
+    g_fbcon.fb_bpp          = pinfo.bpp;
+    g_fbcon.bytes_per_pixel = (uint8_t)(pinfo.bpp / 8);
+    g_fbcon.red_pos         = pinfo.red_pos;
+    g_fbcon.red_size        = pinfo.red_size;
+    g_fbcon.green_pos       = pinfo.green_pos;
+    g_fbcon.green_size      = pinfo.green_size;
+    g_fbcon.blue_pos        = pinfo.blue_pos;
+    g_fbcon.blue_size       = pinfo.blue_size;
+    g_fbcon.cols            = (int)(g_fbcon.fb_width / CHAR_WIDTH);
+    g_fbcon.rows            = (int)(g_fbcon.fb_height / CHAR_HEIGHT);
+    g_fbcon.cursor_x        = 0;
+    g_fbcon.cursor_y        = 0;
     pthread_mutex_init(&g_fbcon.lock, NULL);
     fb_apply_color(&g_fbcon, 7, 0);
-    fb_fill_rect(&g_fbcon, 0, 0, (int)g_fbcon.fb_width, (int)g_fbcon.fb_height, g_fbcon.bg_color);
+
+    /* 不清屏 - 保留内核启动信息,检测内核光标位置 */
+    int last_row = fb_detect_last_row(&g_fbcon);
+    if (last_row >= 0) {
+        g_fbcon.cursor_y = last_row + 1;
+        if (g_fbcon.cursor_y >= g_fbcon.rows) {
+            g_fbcon.cursor_y = g_fbcon.rows - 1;
+        }
+    }
 
     handle_t fbcon_ep = env_get_handle("fbcon_ep");
     if (fbcon_ep == HANDLE_INVALID) {
@@ -349,10 +394,10 @@ int main(void) {
     svc_notify_ready("fbcond");
 
     if (serial != HANDLE_INVALID) {
-        const char *msg = "[fbcond] ready\n";
-        struct ipc_message m = {0};
-        m.regs.data[0] = UDM_CONSOLE_WRITE;
-        m.regs.data[7] = 14;
+        const char        *msg = "[fbcond] ready\n";
+        struct ipc_message m   = {0};
+        m.regs.data[0]         = UDM_CONSOLE_WRITE;
+        m.regs.data[7]         = 14;
         memcpy(&m.regs.data[1], msg, 14);
         sys_ipc_send(serial, &m, 100);
     }

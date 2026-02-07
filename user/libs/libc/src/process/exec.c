@@ -6,6 +6,8 @@
 #include <xnix/errno.h>
 #include <xnix/syscall.h>
 
+#define EXEC_READ_CHUNK 4096
+
 static void derive_proc_name(char out[ABI_PROC_NAME_MAX], const char *path) {
     const char *base = path;
     for (const char *p = path; *p; p++) {
@@ -33,7 +35,10 @@ static void derive_proc_name(char out[ABI_PROC_NAME_MAX], const char *path) {
 }
 
 int sys_exec(struct abi_exec_args *args) {
-    if (!args || args->path[0] != '/') {
+    if (!args) {
+        return -EINVAL;
+    }
+    if (args->path[0] != '/') {
         return -EINVAL;
     }
 
@@ -60,7 +65,11 @@ int sys_exec(struct abi_exec_args *args) {
 
     uint32_t total = 0;
     while (total < st.size) {
-        ssize_t n = vfs_read(fd, (uint8_t *)elf + total, (size_t)(st.size - total));
+        size_t want = (size_t)(st.size - total);
+        if (want > EXEC_READ_CHUNK) {
+            want = EXEC_READ_CHUNK;
+        }
+        ssize_t n = vfs_read(fd, (uint8_t *)elf + total, want);
         if (n < 0) {
             free(elf);
             vfs_close(fd);

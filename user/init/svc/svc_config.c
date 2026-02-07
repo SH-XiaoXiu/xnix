@@ -142,6 +142,13 @@ static bool ini_handler(const char *section, const char *key, const char *value,
             }
             memcpy(cfg->path, value, len);
             cfg->path[len] = '\0';
+        } else if (strcmp(key, "args") == 0) {
+            size_t len = strlen(value);
+            if (len >= sizeof(cfg->args)) {
+                len = sizeof(cfg->args) - 1;
+            }
+            memcpy(cfg->args, value, len);
+            cfg->args[len] = '\0';
         } else if (strcmp(key, "after") == 0) {
             cfg->after_count = parse_dep_list(value, cfg->after, SVC_DEPS_MAX);
         } else if (strcmp(key, "ready") == 0) {

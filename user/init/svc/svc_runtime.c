@@ -94,8 +94,48 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
             exec_args.profile_name[0] = '\0';
         }
 
-        exec_args.argc  = 0;
+        /* 解析args */
+        exec_args.argc = 0;
+        if (cfg->args[0] != '\0') {
+            /* 简单的空格分割解析 */
+            char *args_copy   = cfg->args;
+            char *token_start = args_copy;
+            int   in_arg      = 0;
+
+            for (char *p = args_copy;; p++) {
+                if (*p == ' ' || *p == '\0') {
+                    if (in_arg && exec_args.argc < ABI_EXEC_MAX_ARGS) {
+                        size_t len = p - token_start;
+                        if (len >= ABI_EXEC_MAX_ARG_LEN) {
+                            len = ABI_EXEC_MAX_ARG_LEN - 1;
+                        }
+                        memcpy(exec_args.argv[exec_args.argc], token_start, len);
+                        exec_args.argv[exec_args.argc][len] = '\0';
+                        exec_args.argc++;
+                        in_arg = 0;
+                    }
+                    if (*p == '\0') {
+                        break;
+                    }
+                } else if (!in_arg) {
+                    token_start = p;
+                    in_arg      = 1;
+                }
+            }
+        }
+
         exec_args.flags = 0;
+
+        /* 调试信息:测试文件是否存在 */
+        {
+            struct vfs_stat test_st;
+            int             test_ret = vfs_stat(exec_args.path, &test_st);
+            char            dbg[256];
+            int             len =
+                snprintf(dbg, sizeof(dbg), "[INIT] DEBUG: exec path='%s' vfs_stat=%d size=%u\n",
+                         exec_args.path, test_ret, test_ret >= 0 ? (unsigned)test_st.size : 0);
+            printf("%s", dbg);
+        }
 
         exec_args.handle_count = (uint32_t)cfg->handle_count;
         for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
@@ -160,7 +200,8 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
         extern bool early_console_is_active(void);
         if (early_console_is_active()) {
             char buf[160];
-            snprintf(buf, sizeof(buf), "[INIT] ERROR: failed to start %s\n", cfg->name);
+            snprintf(buf, sizeof(buf), "[INIT] ERROR: failed to start %s (err %d)\n", cfg->name,
+                     pid);
             early_puts(buf);
         } else {
             printf("Failed to start %s: %d\n", cfg->name, pid);

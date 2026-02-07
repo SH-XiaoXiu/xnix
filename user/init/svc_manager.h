@@ -124,6 +124,7 @@ struct svc_config {
     svc_type_t type;                      /* 启动类型 */
     char       module_name[SVC_NAME_MAX]; /* 模块名称(type=MODULE 时) */
     char       path[SVC_PATH_MAX];        /* ELF 路径(type=PATH 时) */
+    char       args[256];                 /* 命令行参数 */
 
     /* 依赖声明 */
     char     after[SVC_DEPS_MAX][SVC_NAME_MAX]; /* 启动顺序依赖 */

@@ -12,8 +12,8 @@
 #include <libs/serial/serial.h> /* 消息类型定义 */
 #include <pthread.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <unistd.h>
 #include <xnix/abi/ipc.h>
 #include <xnix/abi/syscall.h>
@@ -92,7 +92,6 @@ static int vga_color_to_ansi_fg(uint8_t color) {
     return map[color & 0x0F];
 }
 
-
 static void serial_apply_color_attr(uint8_t attr) {
     uint8_t fg = attr & 0x0F;
 
@@ -161,12 +160,20 @@ static int console_handler(struct ipc_message *msg) {
 static void *input_thread(void *arg) {
     (void)arg;
 
-    /* kbd 驱动的 endpoint */
-    const handle_t kbd_ep = env_get_handle("kbd_ep");
-    if (kbd_ep == HANDLE_INVALID) {
-        debug_write("[seriald] kbd_ep not found, input forwarding disabled\n");
+    /* 等待 tty1 endpoint 可用(串口终端) */
+    handle_t tty1_ep = HANDLE_INVALID;
+    for (int retry = 0; retry < 50; retry++) {
+        tty1_ep = env_get_handle("tty1");
+        if (tty1_ep != HANDLE_INVALID) {
+            break;
+        }
+        msleep(100); /* 等待ttyd启动 */
+    }
+    if (tty1_ep == HANDLE_INVALID) {
+        debug_write("[seriald] tty1 not found after retries, input forwarding disabled\n");
         return NULL;
     }
+    debug_write("[seriald] tty1 found, input forwarding enabled\n");
     bool last_was_cr = false;
 
     /* 创建 notification 用于接收中断通知 */
@@ -211,12 +218,12 @@ static void *input_thread(void *arg) {
                     last_was_cr = false;
                 }
 
-                /* 通过 IPC 发送字符给 kbd */
+                /* 通过 IPC 发送字符给 tty1 */
                 struct ipc_message msg = {0};
-                msg.regs.data[0]       = 1; /* CONSOLE_OP_PUTC */
+                msg.regs.data[0]       = 7; /* TTY_OP_INPUT */
                 msg.regs.data[1]       = (uint32_t)c;
 
-                sys_ipc_send(kbd_ep, &msg, 0);
+                sys_ipc_send(tty1_ep, &msg, 0);
             }
         }
     }

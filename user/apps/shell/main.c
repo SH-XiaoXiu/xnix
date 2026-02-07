@@ -441,16 +441,22 @@ static void cmd_pwd(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-
     char line[MAX_LINE];
 
+    /* 解析命令行参数获取tty名称 */
+    const char *tty_name = "tty0"; /* 默认tty0 */
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "--tty=", 6) == 0) {
+            tty_name = argv[i] + 6;
+            break;
+        }
+    }
+
     /* 查找 handles */
-    g_tty_ep = env_get_handle("tty0");
+    g_tty_ep = env_get_handle(tty_name);
     g_vfs_ep = env_get_handle("vfs_ep");
 
-    /* 重新绑定stdio到tty0(libc默认优先tty1) */
+    /* 重新绑定stdio到指定的tty */
     if (g_tty_ep != HANDLE_INVALID) {
         _stdio_set_tty(stdout, g_tty_ep);
         _stdio_set_tty(stderr, g_tty_ep);
@@ -469,24 +475,26 @@ int main(int argc, char **argv) {
     printf("\nXnix Shell\n");
     printf("Type 'help' for available commands.\n\n");
 
+
     while (1) {
         char cwd[256];
-        if (vfs_getcwd(cwd, sizeof(cwd)) >= 0) {
-            termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
+        int cwd_ret = vfs_getcwd(cwd, sizeof(cwd));
+
+        if (cwd_ret >= 0) {
             printf("%s> ", cwd);
             fflush(stdout);
-            termcolor_reset(stdout);
         } else {
-            termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
             printf("> ");
             fflush(stdout);
-            termcolor_reset(stdout);
         }
 
         if (gets_s(line, sizeof(line)) == NULL) {
             msleep(100);
             continue;
         }
+
+
+
 
         /* 防止用户按住回车键时产生输入风暴 */
         if (line[0] == '\0') {

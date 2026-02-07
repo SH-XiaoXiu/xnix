@@ -26,6 +26,16 @@
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
 
+/* Debug write helper */
+static inline void sys_debug_write(const char *buf, size_t len) {
+    int ret;
+    asm volatile("int $0x80"
+                 : "=a"(ret)
+                 : "a"(SYS_DEBUG_WRITE), "b"((uint32_t)(uintptr_t)buf), "c"((uint32_t)len)
+                 : "memory");
+    (void)ret;
+}
+
 /* 行规程模式 */
 enum ldisc_mode {
     LDISC_RAW    = 0, /* 直通:输入直接给应用 */
@@ -127,6 +137,7 @@ static int tty_output_send(struct tty_instance *tty, struct ipc_message *msg) {
     }
 
     int ret = sys_ipc_send(tty->output_ep, msg, TTY_OUTPUT_TIMEOUT_MS);
+
     if (ret == 0) {
         if (tty->output_ep == tty->primary_output_ep) {
             tty->fallback_count = 0;
@@ -383,7 +394,15 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
 
     case TTY_OP_INPUT: {
         /* 从输入设备推送的字符 */
-        char c = (char)msg->regs.data[1];
+        static int input_count = 0;
+        char       c           = (char)msg->regs.data[1];
+        if (input_count < 5) {
+            char dbg[64];
+            int len = snprintf(dbg, sizeof(dbg), "[ttyd] tty%d got INPUT: '%c' (0x%02x)\n", tty->id,
+                               (c >= 32 && c < 127) ? c : '?', (unsigned char)c);
+            sys_debug_write(dbg, len);
+            input_count++;
+        }
         tty_process_input(tty, c);
         msg->regs.data[0] = 0;
         return 0;
@@ -516,7 +535,7 @@ static void tty_init_instance(struct tty_instance *tty, int id, handle_t ep, han
     tty->pending_read       = 0;
     tty->foreground_pid     = 0;
 
-    /* 默认 raw 模式,echo 开启 */
+    /* 默认 raw 模式,echo 关闭(应用层负责回显) */
     tty->ldisc.mode     = LDISC_RAW;
     tty->ldisc.echo     = 0;
     tty->ldisc.line_pos = 0;
@@ -576,6 +595,9 @@ int main(int argc, char **argv) {
 
             tty_init_instance(&g_ttys[1], 0, tty0_ep, output_ep, serial_ep, kbd_ep);
             g_tty_count = 2;
+
+            printf("[ttyd] tty0: output_ep=%d, fallback=%d\n", (int)g_ttys[1].output_ep,
+                   (int)g_ttys[1].fallback_output_ep);
         }
     }
 
