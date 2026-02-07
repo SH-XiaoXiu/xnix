@@ -54,16 +54,16 @@ static int ipc_msg_copy_in(struct ipc_message **out_kmsg, struct ipc_message *us
             kfree(kmsg);
             return -ENOMEM;
         }
-        ret = copy_from_user(kbuf, umsg.buffer.data, umsg.buffer.size);
+        ret = copy_from_user(kbuf, (const void *)(uintptr_t)umsg.buffer.data, umsg.buffer.size);
         if (ret < 0) {
             kfree(kbuf);
             kfree(kmsg);
             return ret;
         }
-        kmsg->buffer.data = kbuf;
+        kmsg->buffer.data = (uint64_t)(uintptr_t)kbuf;
         kmsg->buffer.size = umsg.buffer.size;
     } else {
-        kmsg->buffer.data = NULL;
+        kmsg->buffer.data = 0;
         kmsg->buffer.size = 0;
     }
 
@@ -86,7 +86,7 @@ static int ipc_msg_copy_out(struct ipc_message *user_msg, const struct ipc_messa
             n = user_buf_size;
         }
         if (n) {
-            int ret = copy_to_user(user_buf_ptr, kmsg->buffer.data, n);
+            int ret = copy_to_user(user_buf_ptr, (const void *)(uintptr_t)kmsg->buffer.data, n);
             if (ret < 0) {
                 return ret;
             }
@@ -96,7 +96,7 @@ static int ipc_msg_copy_out(struct ipc_message *user_msg, const struct ipc_messa
     struct ipc_message out;
     memset(&out, 0, sizeof(out));
     memcpy(&out.regs, &kmsg->regs, sizeof(out.regs));
-    out.buffer.data = user_buf_ptr;
+    out.buffer.data = (uint64_t)(uintptr_t)user_buf_ptr;
     out.buffer.size = kmsg->buffer.size;
     memcpy(&out.handles, &kmsg->handles, sizeof(out.handles)); /* 拷贝传递的 handles */
     out.flags      = kmsg->flags;
@@ -113,7 +113,7 @@ static void ipc_msg_free(struct ipc_message *kmsg) {
         return;
     }
     if (kmsg->buffer.data) {
-        kfree(kmsg->buffer.data);
+        kfree((void *)(uintptr_t)kmsg->buffer.data);
     }
     kfree(kmsg);
 }
@@ -129,7 +129,7 @@ static int ipc_msg_alloc_recv(struct ipc_message **out_kmsg, struct ipc_message 
         return ret;
     }
 
-    void  *user_buf_ptr  = umsg.buffer.data;
+    void  *user_buf_ptr  = (void *)(uintptr_t)umsg.buffer.data;
     size_t user_buf_size = umsg.buffer.size;
 
     if (user_buf_size > CFG_IPC_MAX_BUF) {
@@ -149,14 +149,15 @@ static int ipc_msg_alloc_recv(struct ipc_message **out_kmsg, struct ipc_message 
     kmsg->handles.count = 0;
 
     if (user_buf_ptr && user_buf_size) {
-        kmsg->buffer.data = kmalloc(user_buf_size);
-        if (!kmsg->buffer.data) {
+        void *kbuf = kmalloc(user_buf_size);
+        if (!kbuf) {
             kfree(kmsg);
             return -ENOMEM;
         }
+        kmsg->buffer.data = (uint64_t)(uintptr_t)kbuf;
         kmsg->buffer.size = user_buf_size;
     } else {
-        kmsg->buffer.data = NULL;
+        kmsg->buffer.data = 0;
         kmsg->buffer.size = 0;
     }
 

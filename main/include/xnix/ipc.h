@@ -19,8 +19,9 @@ struct ipc_msg_regs {
 };
 
 struct ipc_msg_buffer {
-    void  *data;
-    size_t size;
+    uint64_t data; /* 用户空间指针,使用 uint64_t 保证与 ABI 布局一致 */
+    uint32_t size;
+    uint32_t _pad; /* 填充,保持 16 字节对齐,与 ABI 布局匹配 */
 };
 
 struct ipc_msg_handles {

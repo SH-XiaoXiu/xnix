@@ -200,20 +200,15 @@ int main(int argc, char **argv) {
         if (!serial_initialized && early_console_is_active()) {
             int ttyd_idx = svc_find_by_name(&g_mgr, "ttyd");
             if (ttyd_idx >= 0 && g_mgr.runtime[ttyd_idx].ready) {
-                /* 更新 stdout/stderr 的 tty endpoint(启动时尚未初始化) */
-                handle_t tty_h = sys_handle_find("tty1");
-                if (tty_h != HANDLE_INVALID) {
-                    _stdio_set_tty(stdout, tty_h);
-                    _stdio_set_tty(stderr, tty_h);
-                }
+                early_puts("[INIT] ttyd ready - keeping early console for debugging\n");
 
+                /* TODO: 暂时不切换到 tty1,因为会触发内核崩溃
+                 * 问题:切换后 printf 通过 IPC 发送到 ttyd,内核在处理时访问无效内存
+                 */
                 serial_init();
-                early_console_disable();
                 serial_initialized = true;
-                ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ",
-                          "switched to IPC-based console (pid %d)\n", sys_getpid());
-                ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ",
-                          "system ready, waiting for services...\n");
+
+                early_puts("[INIT] system ready (still using early console)\n");
             }
         }
 

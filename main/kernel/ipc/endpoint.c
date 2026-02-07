@@ -115,7 +115,8 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
     /* 拷贝 Buffer(内核缓冲区之间) */
     if (src_msg->buffer.data && src_msg->buffer.size > 0 && dst_msg->buffer.data &&
         dst_msg->buffer.size >= src_msg->buffer.size) {
-        memcpy(dst_msg->buffer.data, src_msg->buffer.data, src_msg->buffer.size);
+        memcpy((void *)(uintptr_t)dst_msg->buffer.data, (void *)(uintptr_t)src_msg->buffer.data,
+               src_msg->buffer.size);
         dst_msg->buffer.size = src_msg->buffer.size;
     } else {
         dst_msg->buffer.size = 0;
