@@ -2,31 +2,32 @@
 set(SVC_ISO TRUE)           # 打包到 ISO
 set(SVC_INSTALL_DIR "sbin") # 核心服务，安装到 sbin
 
-# 使用 libipc 封装，提供 serial_init/write/putchar/set_color API
-add_executable(seriald.elf
+add_executable(fatfsd.elf
         $<TARGET_OBJECTS:crt0>
+        ata.c
+        diskio.c
+        fatfs_vfs.c
         main.c
-        serial.c
 )
 
-target_compile_options(seriald.elf PRIVATE ${USER_C_FLAGS})
+target_compile_options(fatfsd.elf PRIVATE ${USER_C_FLAGS})
 
-target_include_directories(seriald.elf PRIVATE
+target_include_directories(fatfsd.elf PRIVATE
         ${CMAKE_SOURCE_DIR}/user/libs/libc/include
         ${CMAKE_SOURCE_DIR}/user/libs/libd/include
         ${CMAKE_SOURCE_DIR}/user/libs/libvfs/include
         ${CMAKE_SOURCE_DIR}/user/libs/libpthread/include
+        ${CMAKE_SOURCE_DIR}/user/tplibs/ff16  # fatfs 头文件
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_SOURCE_DIR}/main/include
         ${CMAKE_BINARY_DIR}/include
 )
 
-target_link_libraries(seriald.elf PRIVATE c d vfs pthread)
+target_link_libraries(fatfsd.elf PRIVATE c d vfs pthread fatfs)
 
-target_link_options(seriald.elf PRIVATE
+target_link_options(fatfsd.elf PRIVATE
         -m32 -Wl,-T,${CMAKE_SOURCE_DIR}/user/libs/user.ld -nostdlib
 )
 
-add_custom_command(TARGET seriald.elf POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:seriald.elf> ${CMAKE_BINARY_DIR}/seriald.elf
+add_custom_command(TARGET fatfsd.elf POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:fatfsd.elf> ${CMAKE_BINARY_DIR}/fatfsd.elf
 )

@@ -1,3 +1,7 @@
+# 服务元数据
+set(SVC_ISO TRUE)           # 打包到 ISO
+set(SVC_INSTALL_DIR "sbin") # 核心服务，安装到 sbin
+
 add_executable(fbcond.elf
         $<TARGET_OBJECTS:crt0>
         main.c
