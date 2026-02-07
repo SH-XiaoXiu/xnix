@@ -7,6 +7,7 @@
 #define D_PROTOCOL_SERIAL_H
 
 #include <stdint.h>
+#include <xnix/abi/protocol.h>
 
 /* Helper macros for message parsing */
 #ifndef UDM_MSG_OPCODE

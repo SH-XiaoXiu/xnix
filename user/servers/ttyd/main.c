@@ -117,27 +117,25 @@ static int tty_output_send(struct tty_instance *tty, struct ipc_message *msg) {
 
     /* 每 32 次 fallback 后尝试恢复 primary */
     if (tty->fallback_count > 0 && (tty->fallback_count % 32) == 0 &&
-        tty->primary_output_ep != HANDLE_INVALID &&
-        tty->output_ep != tty->primary_output_ep) {
+        tty->primary_output_ep != HANDLE_INVALID && tty->output_ep != tty->primary_output_ep) {
         int probe = sys_ipc_send(tty->primary_output_ep, msg, TTY_OUTPUT_TIMEOUT_MS);
-        if (probe == IPC_OK) {
+        if (probe == 0) {
             tty->output_ep      = tty->primary_output_ep;
             tty->fallback_count = 0;
-            return IPC_OK;
+            return 0;
         }
     }
 
     int ret = sys_ipc_send(tty->output_ep, msg, TTY_OUTPUT_TIMEOUT_MS);
-    if (ret == IPC_OK) {
+    if (ret == 0) {
         if (tty->output_ep == tty->primary_output_ep) {
             tty->fallback_count = 0;
         }
-        return IPC_OK;
+        return 0;
     }
 
     /* fallback */
-    if (tty->fallback_output_ep != HANDLE_INVALID &&
-        tty->output_ep != tty->fallback_output_ep) {
+    if (tty->fallback_output_ep != HANDLE_INVALID && tty->output_ep != tty->fallback_output_ep) {
         tty->output_ep = tty->fallback_output_ep;
         tty->fallback_count++;
         return sys_ipc_send(tty->output_ep, msg, TTY_OUTPUT_TIMEOUT_MS);
@@ -173,7 +171,7 @@ static void tty_output_write(struct tty_instance *tty, const char *data, int len
         memcpy(&msg.regs.data[1], data, chunk);
         msg.regs.data[7] = (uint32_t)chunk;
 
-        if (tty_output_send(tty, &msg) != IPC_OK) {
+        if (tty_output_send(tty, &msg) < 0) {
             break;
         }
 
@@ -559,7 +557,7 @@ int main(int argc, char **argv) {
             tty0_ep = sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
         }
         if (tty0_ep != HANDLE_INVALID) {
-            handle_t vga_ep    = env_get_handle("vga_ep");
+            handle_t vga_ep = env_get_handle("vga_ep");
 
             /* 调试: 检查 vga_ep 是否有效 */
             printf("[ttyd] vga_ep=%d, serial_ep=%d\n", (int)vga_ep, (int)serial_ep);

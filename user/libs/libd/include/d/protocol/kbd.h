@@ -7,6 +7,7 @@
 #define D_PROTOCOL_KBD_H
 
 #include <stdint.h>
+#include <xnix/abi/protocol.h>
 
 /* 消息解析辅助宏 */
 #ifndef UDM_MSG_OPCODE

@@ -60,13 +60,15 @@ struct abi_ipc_message {
 
 /*
  * IPC 错误码
+ *
+ * IPC 系统调用使用标准 errno(定义在 <xnix/abi/errno.h>):
+ * - EINVAL: 无效句柄/参数
+ * - EPERM:  权限不足
+ * - ETIMEDOUT: 超时
+ * - ESHUTDOWN: endpoint 已关闭
+ * - ENOMEM: 内存不足
+ * - ENOTCONN: endpoint 未连接
  */
-#define ABI_IPC_OK          0
-#define ABI_IPC_ERR_INVALID (-1) /* 无效句柄/参数 */
-#define ABI_IPC_ERR_PERM    (-2) /* 权限不足 */
-#define ABI_IPC_ERR_TIMEOUT (-3) /* 超时 */
-#define ABI_IPC_ERR_CLOSED  (-4) /* endpoint 已关闭 */
-#define ABI_IPC_ERR_NOMEM   (-5) /* 内存不足 */
 
 /*
  * 便捷宏:计算消息寄存器可用的 payload 字节数

@@ -3,6 +3,7 @@
  * @brief IPC 客户端辅助实现
  */
 
+#include <errno.h>
 #include <ipc/client.h>
 #include <string.h>
 #include <xnix/syscall.h>
@@ -10,7 +11,8 @@
 int ipc_call_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t *result,
                     uint32_t timeout) {
     if (ep == HANDLE_INVALID) {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     struct abi_ipc_message msg   = {0};
@@ -21,19 +23,20 @@ int ipc_call_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t *result
 
     int ret = sys_ipc_call(ep, (struct ipc_message *)&msg, (struct ipc_message *)&reply, timeout);
     if (ret < 0) {
-        return IPC_ERR_SEND;
+        return -1; /* errno 已由系统调用包装器设置 */
     }
 
     if (result) {
         *result = reply.regs.data[0];
     }
 
-    return IPC_OK;
+    return 0;
 }
 
 int ipc_send_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout) {
     if (ep == HANDLE_INVALID) {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     struct abi_ipc_message msg = {0};
@@ -43,10 +46,10 @@ int ipc_send_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout
 
     int ret = sys_ipc_send(ep, (struct ipc_message *)&msg, timeout);
     if (ret < 0) {
-        return IPC_ERR_SEND;
+        return -1; /* errno 已由系统调用包装器设置 */
     }
 
-    return IPC_OK;
+    return 0;
 }
 
 void ipc_builder_init(struct ipc_builder *builder, uint32_t opcode) {
@@ -61,17 +64,19 @@ void ipc_builder_init(struct ipc_builder *builder, uint32_t opcode) {
 
 int ipc_builder_add_arg(struct ipc_builder *builder, uint32_t arg) {
     if (!builder) {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     if (builder->arg_count >= IPC_MAX_ARGS) {
-        return IPC_ERR_OVERFLOW;
+        errno = EOVERFLOW;
+        return -1;
     }
 
     builder->msg.regs.data[builder->arg_count + 1] = arg;
     builder->arg_count++;
 
-    return IPC_OK;
+    return 0;
 }
 
 void ipc_builder_set_buffer(struct ipc_builder *builder, const void *data, uint32_t size) {
@@ -86,32 +91,34 @@ void ipc_builder_set_buffer(struct ipc_builder *builder, const void *data, uint3
 int ipc_builder_call(struct ipc_builder *builder, handle_t ep, struct abi_ipc_message *reply,
                      uint32_t timeout) {
     if (!builder || ep == HANDLE_INVALID) {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     if (!reply) {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     int ret =
         sys_ipc_call(ep, (struct ipc_message *)&builder->msg, (struct ipc_message *)reply, timeout);
     if (ret < 0) {
-        return IPC_ERR_SEND;
+        return -1; /* errno 已由系统调用包装器设置 */
     }
 
-    return IPC_OK;
+    return 0;
 }
 
 int ipc_builder_send(struct ipc_builder *builder, handle_t ep, uint32_t timeout) {
     if (!builder || ep == HANDLE_INVALID) {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     int ret = sys_ipc_send(ep, (struct ipc_message *)&builder->msg, timeout);
     if (ret < 0) {
-        return IPC_ERR_SEND;
+        return -1; /* errno 已由系统调用包装器设置 */
     }
 
-    return IPC_OK;
+    return 0;
 }
-

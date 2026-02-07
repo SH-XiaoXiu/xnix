@@ -40,13 +40,19 @@ struct ipc_message {
 #define IPC_FLAG_NO_BLOCK ABI_IPC_FLAG_NONBLOCK
 #define IPC_FLAG_TIMEOUT  ABI_IPC_FLAG_TIMEOUT
 
-/* 错误码 */
-#define IPC_OK          ABI_IPC_OK
-#define IPC_ERR_INVALID ABI_IPC_ERR_INVALID
-#define IPC_ERR_PERM    ABI_IPC_ERR_PERM
-#define IPC_ERR_TIMEOUT ABI_IPC_ERR_TIMEOUT
-#define IPC_ERR_CLOSED  ABI_IPC_ERR_CLOSED
-#define IPC_ERR_NOMEM   ABI_IPC_ERR_NOMEM
+/*
+ * 错误处理
+ *
+ * IPC 函数返回标准 errno 负值:
+ * - 成功返回 0
+ * - 失败返回负值错误码:
+ *   - -EINVAL: 无效参数
+ *   - -EPERM: 权限不足
+ *   - -ETIMEDOUT: 超时
+ *   - -ESHUTDOWN: endpoint 已关闭
+ *   - -ENOMEM: 内存不足
+ *   - -ENOTCONN: endpoint 未连接
+ */
 
 /*
  * IPC 原语

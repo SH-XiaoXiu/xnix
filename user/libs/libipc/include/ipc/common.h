@@ -10,14 +10,16 @@
 #include <xnix/abi/ipc.h>
 #include <xnix/abi/types.h>
 
-/* 错误码 */
-#define IPC_OK           0
-#define IPC_ERR_INVALID  (-1) /* 无效参数 */
-#define IPC_ERR_NOTFOUND (-2) /* Endpoint 未找到 */
-#define IPC_ERR_TIMEOUT  (-3) /* 超时 */
-#define IPC_ERR_OVERFLOW (-4) /* 参数过多 */
-#define IPC_ERR_SEND     (-5) /* 发送失败 */
-#define IPC_ERR_RECV     (-6) /* 接收失败 */
+/*
+ * 错误处理
+ *
+ * libipc 函数失败时返回 -1 并设置 errno(定义在 <errno.h>):
+ * - EINVAL: 无效参数
+ * - ENOENT: Endpoint 未找到
+ * - ETIMEDOUT: 超时
+ * - E2BIG: 参数过多
+ * - EIO: 发送/接收失败
+ */
 
 /* 常量 */
 #define IPC_MAX_ARGS 7 /* 最多 7 个参数(8 个寄存器 - 1 个 opcode) */

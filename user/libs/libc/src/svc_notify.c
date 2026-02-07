@@ -3,6 +3,7 @@
  * @brief 服务通知实现
  */
 
+#include <errno.h>
 #include <string.h>
 #include <xnix/abi/handle.h>
 #include <xnix/ipc.h>
@@ -25,13 +26,14 @@ struct svc_ready_msg {
  */
 int svc_notify_ready(const char *name) {
     if (!name || name[0] == '\0') {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     /* 查找 init_notify endpoint */
     handle_t init_ep = sys_handle_find("init_notify");
     if (init_ep == HANDLE_INVALID) {
-        return IPC_ERR_INVALID;
+        return -1; /* errno 已由系统调用包装器设置 */
     }
 
     struct ipc_message msg = {0};

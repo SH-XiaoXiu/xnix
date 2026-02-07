@@ -38,12 +38,19 @@ struct ipc_message {
     uint32_t               sender_tid; /* 发送者 TID (receive 时填充, 用于延迟回复) */
 };
 
-/* 错误码 */
-#define IPC_OK          ABI_IPC_OK
-#define IPC_ERR_INVALID ABI_IPC_ERR_INVALID
-#define IPC_ERR_PERM    ABI_IPC_ERR_PERM
-#define IPC_ERR_TIMEOUT ABI_IPC_ERR_TIMEOUT
-#define IPC_ERR_CLOSED  ABI_IPC_ERR_CLOSED
-#define IPC_ERR_NOMEM   ABI_IPC_ERR_NOMEM
+/*
+ * 错误处理
+ *
+ * IPC 系统调用使用标准 errno(定义在 <errno.h>):
+ * - 成功返回 0
+ * - 失败返回 -1 并设置 errno:
+ *   - EINVAL: 无效参数
+ *   - EPERM: 权限不足
+ *   - ETIMEDOUT: 超时
+ *   - ESHUTDOWN: endpoint 已关闭
+ *   - ENOMEM: 内存不足
+ *   - ENOTCONN: endpoint 未连接
+ *   - EIO: I/O 错误
+ */
 
 #endif /* _XNIX_IPC_H */

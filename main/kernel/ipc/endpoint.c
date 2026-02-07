@@ -7,6 +7,7 @@
 
 #include <ipc/endpoint.h>
 #include <ipc/notification.h>
+#include <xnix/errno.h>
 #include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
@@ -157,7 +158,7 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
                           struct ipc_message *reply_buf, uint32_t timeout_ms) {
     struct thread *current = sched_current();
     if (!current) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     spin_lock(&ep->lock);
@@ -185,9 +186,9 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
         /* 阻塞等待回复 */
         if (!sched_block_timeout(current, timeout_ms)) {
             pr_debug("[IPC] send reply timeout: sender=%d\n", current->tid);
-            return IPC_ERR_TIMEOUT;
+            return -ETIMEDOUT;
         }
-        return IPC_OK;
+        return 0;
     }
 
     /* 没有接收者,加入发送队列 */
@@ -219,27 +220,27 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
         current->wait_next = NULL;
         spin_unlock(&ep->lock);
         endpoint_unref(ep);
-        return IPC_ERR_TIMEOUT;
+        return -ETIMEDOUT;
     }
 
-    return IPC_OK;
+    return 0;
 }
 
 int ipc_send(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
     struct process     *proc = process_current();
     struct handle_entry entry;
     if (!proc) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     if (handle_acquire(proc, ep_handle, HANDLE_ENDPOINT, &entry) < 0) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     struct ipc_endpoint *ep = entry.object;
     if (entry.perm_send == PERM_ID_INVALID || !perm_check(proc, entry.perm_send)) {
         handle_object_put(entry.type, entry.object);
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     int ret = ipc_send_to_ep(ep, msg, NULL, timeout_ms);
@@ -252,17 +253,17 @@ int ipc_call(handle_t ep_handle, struct ipc_message *request, struct ipc_message
     struct process     *proc = process_current();
     struct handle_entry entry;
     if (!proc) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     if (handle_acquire(proc, ep_handle, HANDLE_ENDPOINT, &entry) < 0) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     struct ipc_endpoint *ep = entry.object;
     if (entry.perm_send == PERM_ID_INVALID || !perm_check(proc, entry.perm_send)) {
         handle_object_put(entry.type, entry.object);
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     int ret = ipc_send_to_ep(ep, request, reply, timeout_ms);
@@ -273,7 +274,7 @@ int ipc_call(handle_t ep_handle, struct ipc_message *request, struct ipc_message
 int ipc_call_direct(struct ipc_endpoint *ep, struct ipc_message *msg, struct ipc_message *reply_buf,
                     uint32_t timeout_ms) {
     if (!ep) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
     return ipc_send_to_ep(ep, msg, reply_buf, timeout_ms);
 }
@@ -285,17 +286,17 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
     struct handle_entry entry;
 
     if (!proc) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     if (handle_acquire(proc, ep_handle, HANDLE_ENDPOINT, &entry) < 0) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     struct ipc_endpoint *ep = entry.object;
     if (entry.perm_recv == PERM_ID_INVALID || !perm_check(proc, entry.perm_recv)) {
         handle_object_put(entry.type, entry.object);
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     current = sched_current();
@@ -322,7 +323,7 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
         /* 注意 不要唤醒 Sender!!!!!!!!!!!!!!!!!!!!!! Sender 继续阻塞等待 Reply */
         /* 只从 send_queue 移除了 Sender, 但它依然在 blocked_list 中 (wait_chan=Sender) */
         handle_object_put(entry.type, entry.object);
-        return IPC_OK;
+        return 0;
     }
 
     /* 没有发送者,加入接收队列 */
@@ -353,12 +354,12 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
         spin_unlock(&ep->lock);
         endpoint_unref(ep);
         handle_object_put(entry.type, entry.object);
-        return IPC_ERR_TIMEOUT;
+        return -ETIMEDOUT;
     }
 
     /* 被唤醒,说明收到消息了 */
     handle_object_put(entry.type, entry.object);
-    return IPC_OK;
+    return 0;
 }
 
 /**
@@ -569,12 +570,12 @@ int ipc_reply(struct ipc_message *reply) {
     tid_t          sender_tid;
 
     if (!current) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     sender_tid = current->ipc_peer;
     if (sender_tid == TID_INVALID) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     /* 查找等待 Reply 的发送者 */
@@ -582,7 +583,7 @@ int ipc_reply(struct ipc_message *reply) {
     sender = sched_lookup_blocked(sender_tid);
     if (!sender) {
         /* 发送者可能已经超时/被杀/不在阻塞状态 */
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     /* 拷贝 Reply: Current(Receiver) -> Sender */
@@ -595,7 +596,7 @@ int ipc_reply(struct ipc_message *reply) {
 
     pr_debug("[IPC] reply: sender=%d receiver=%d\n", current->tid, sender->tid);
 
-    return IPC_OK;
+    return 0;
 }
 
 /**
@@ -604,21 +605,21 @@ int ipc_reply(struct ipc_message *reply) {
  *
  * @param sender_tid 发送者的 TID (从 msg->sender_tid 获取)
  * @param reply      回复消息
- * @return IPC_OK 成功, 其他值表示错误
+ * @return 0 成功, 其他值表示错误
  */
 int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply) {
     struct thread *current = sched_current();
     struct thread *sender;
 
     if (!current || sender_tid == TID_INVALID) {
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     /* 查找等待 Reply 的发送者 */
     sender = sched_lookup_blocked(sender_tid);
     if (!sender) {
         /* 发送者可能已经超时/被杀/不在阻塞状态 */
-        return IPC_ERR_INVALID;
+        return -EINVAL;
     }
 
     /* 拷贝 Reply: Current -> Sender */
@@ -631,7 +632,7 @@ int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply) {
 
     pr_debug("[IPC] reply_to: sender=%d receiver=%d\n", current->tid, sender->tid);
 
-    return IPC_OK;
+    return 0;
 }
 
 void ipc_init(void) {

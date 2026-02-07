@@ -6,6 +6,7 @@
 #include <asm/mmu.h>
 #include <xnix/config.h>
 #include <xnix/debug.h>
+#include <xnix/errno.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
 #include <xnix/stdio.h>

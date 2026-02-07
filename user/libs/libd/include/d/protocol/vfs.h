@@ -10,6 +10,7 @@
 #define UDM_PROTOCOL_VFS_H
 
 #include <stdint.h>
+#include <xnix/abi/protocol.h>
 
 /* VFS Protocol Operation Codes */
 #define UDM_VFS_OPEN     1

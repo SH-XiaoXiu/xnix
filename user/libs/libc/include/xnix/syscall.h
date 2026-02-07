@@ -6,6 +6,7 @@
 #ifndef _XNIX_SYSCALL_H
 #define _XNIX_SYSCALL_H
 
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <xnix/abi/handle.h>
@@ -80,10 +81,15 @@ static inline void sys_exit(int code) {
  * 关闭句柄
  *
  * @param handle 要关闭的 handle
- * @return 0 成功,负数失败
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_handle_close(uint32_t handle) {
-    return syscall1(SYS_HANDLE_CLOSE, handle);
+    int ret = syscall1(SYS_HANDLE_CLOSE, handle);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
@@ -92,58 +98,97 @@ static inline int sys_handle_close(uint32_t handle) {
  * @param src 源 handle
  * @param dst_hint 目标 slot hint
  * @param name 新 handle 名称
- * @return 新 handle 值,负数失败
+ * @return 新 handle 值,-1 失败(设置 errno)
  */
 static inline int sys_handle_duplicate(uint32_t src, uint32_t dst_hint, const char *name) {
-    return syscall3(SYS_HANDLE_DUPLICATE, src, dst_hint, (uint32_t)(uintptr_t)name);
+    int ret = syscall3(SYS_HANDLE_DUPLICATE, src, dst_hint, (uint32_t)(uintptr_t)name);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 检查权限
  *
  * @param perm_id 权限 ID
- * @return 0 有权限,负数无权限
+ * @return 0 有权限,-1 无权限(设置 errno)
  */
 static inline int sys_perm_check(uint32_t perm_id) {
-    return syscall1(SYS_PERM_CHECK, perm_id);
+    int ret = syscall1(SYS_PERM_CHECK, perm_id);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 按名称查找 handle
  *
  * @param name handle 名称
- * @return handle 值,负数失败
+ * @return handle 值,-1 失败(设置 errno)
  */
 static inline handle_t sys_handle_find(const char *name) {
-    return (handle_t)syscall1(SYS_HANDLE_FIND, (uint32_t)(uintptr_t)name);
+    int ret = syscall1(SYS_HANDLE_FIND, (uint32_t)(uintptr_t)name);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return (handle_t)ret;
 }
 
 /**
  * 写 I/O 端口(8 位)
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_ioport_outb(uint16_t port, uint8_t val) {
-    return syscall2(SYS_IOPORT_OUTB, (uint32_t)port, (uint32_t)val);
+    int ret = syscall2(SYS_IOPORT_OUTB, (uint32_t)port, (uint32_t)val);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 读 I/O 端口(8 位)
+ * @return 读取的值(0-255),-1 失败(设置 errno)
  */
 static inline int sys_ioport_inb(uint16_t port) {
-    return syscall1(SYS_IOPORT_INB, (uint32_t)port);
+    int ret = syscall1(SYS_IOPORT_INB, (uint32_t)port);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 写 I/O 端口(16 位)
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_ioport_outw(uint16_t port, uint16_t val) {
-    return syscall2(SYS_IOPORT_OUTW, (uint32_t)port, (uint32_t)val);
+    int ret = syscall2(SYS_IOPORT_OUTW, (uint32_t)port, (uint32_t)val);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 读 I/O 端口(16 位)
+ * @return 读取的值(0-65535),-1 失败(设置 errno)
  */
-static inline uint16_t sys_ioport_inw(uint16_t port) {
-    return syscall1(SYS_IOPORT_INW, (uint32_t)port);
+static inline int sys_ioport_inw(uint16_t port) {
+    int ret = syscall1(SYS_IOPORT_INW, (uint32_t)port);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
@@ -158,19 +203,29 @@ static inline void sys_sleep(uint32_t ms) {
 /**
  * 创建 Endpoint
  *
- * @return Handle 值
+ * @return Handle 值,-1 失败(设置 errno)
  */
 static inline int sys_endpoint_create(const char *name) {
-    return syscall1(SYS_ENDPOINT_CREATE, (uint32_t)name);
+    int ret = syscall1(SYS_ENDPOINT_CREATE, (uint32_t)name);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 创建 Notification
  *
- * @return Handle 值
+ * @return Handle 值,-1 失败(设置 errno)
  */
 static inline int sys_notification_create(void) {
-    return syscall0(SYS_NOTIFICATION_CREATE);
+    int ret = syscall0(SYS_NOTIFICATION_CREATE);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
@@ -188,10 +243,15 @@ static inline uint32_t sys_notification_wait(uint32_t handle) {
  *
  * @param handle Notification handle
  * @param bits   要设置的位
- * @return 0 成功
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_notification_signal(uint32_t handle, uint32_t bits) {
-    return syscall2(SYS_NOTIFICATION_SIGNAL, handle, bits);
+    int ret = syscall2(SYS_NOTIFICATION_SIGNAL, handle, bits);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /*
@@ -201,39 +261,69 @@ struct ipc_message;
 
 /**
  * 发送 IPC 消息
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_ipc_send(uint32_t ep, struct ipc_message *msg, uint32_t timeout_ms) {
-    return syscall3(SYS_IPC_SEND, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
+    int ret = syscall3(SYS_IPC_SEND, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 接收 IPC 消息
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_ipc_receive(uint32_t ep, struct ipc_message *msg, uint32_t timeout_ms) {
-    return syscall3(SYS_IPC_RECV, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
+    int ret = syscall3(SYS_IPC_RECV, ep, (uint32_t)(uintptr_t)msg, timeout_ms);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 发起 IPC 调用(RPC)
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_ipc_call(uint32_t ep, struct ipc_message *req, struct ipc_message *reply,
                                uint32_t timeout_ms) {
-    return syscall4(SYS_IPC_CALL, ep, (uint32_t)(uintptr_t)req, (uint32_t)(uintptr_t)reply,
-                    timeout_ms);
+    int ret = syscall4(SYS_IPC_CALL, ep, (uint32_t)(uintptr_t)req, (uint32_t)(uintptr_t)reply,
+                       timeout_ms);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 回复 IPC 调用
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_ipc_reply(struct ipc_message *reply) {
-    return syscall1(SYS_IPC_REPLY, (uint32_t)(uintptr_t)reply);
+    int ret = syscall1(SYS_IPC_REPLY, (uint32_t)(uintptr_t)reply);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 延迟回复 IPC 调用
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *reply) {
-    return syscall2(SYS_IPC_REPLY_TO, sender_tid, (uint32_t)(uintptr_t)reply);
+    int ret = syscall2(SYS_IPC_REPLY_TO, sender_tid, (uint32_t)(uintptr_t)reply);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /*
@@ -245,16 +335,28 @@ static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *repl
 
 /**
  * 创建新进程(spawn)
+ * @return 进程 PID,-1 失败(设置 errno)
  */
 static inline int sys_spawn(struct spawn_args *args) {
-    return syscall1(SYS_SPAWN, (uint32_t)(uintptr_t)args);
+    int ret = syscall1(SYS_SPAWN, (uint32_t)(uintptr_t)args);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * 等待子进程退出
+ * @return 进程 PID,-1 失败(设置 errno)
  */
 static inline int sys_waitpid(int pid, int *status, int options) {
-    return syscall3(SYS_WAITPID, (uint32_t)pid, (uint32_t)(uintptr_t)status, (uint32_t)options);
+    int ret = syscall3(SYS_WAITPID, (uint32_t)pid, (uint32_t)(uintptr_t)status, (uint32_t)options);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
@@ -273,9 +375,15 @@ static inline int sys_getppid(void) {
 
 /**
  * 发送信号
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_kill(int pid, int sig) {
-    return syscall2(SYS_KILL, (uint32_t)pid, (uint32_t)sig);
+    int ret = syscall2(SYS_KILL, (uint32_t)pid, (uint32_t)sig);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /*
@@ -284,23 +392,42 @@ static inline int sys_kill(int pid, int sig) {
 
 /**
  * @brief 绑定 IRQ 到 Notification
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_irq_bind(uint8_t irq, uint32_t notif_handle, uint32_t bits) {
-    return syscall3(SYS_IRQ_BIND, (uint32_t)irq, notif_handle, bits);
+    int ret = syscall3(SYS_IRQ_BIND, (uint32_t)irq, notif_handle, bits);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * @brief 解除 IRQ 绑定
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_irq_unbind(uint8_t irq) {
-    return syscall1(SYS_IRQ_UNBIND, (uint32_t)irq);
+    int ret = syscall1(SYS_IRQ_UNBIND, (uint32_t)irq);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /**
  * @brief 读取 IRQ 数据
+ * @return 读取的字节数,-1 失败(设置 errno)
  */
 static inline int sys_irq_read(uint8_t irq, void *buf, size_t size, uint32_t flags) {
-    return syscall4(SYS_IRQ_READ, (uint32_t)irq, (uint32_t)(uintptr_t)buf, (uint32_t)size, flags);
+    int ret =
+        syscall4(SYS_IRQ_READ, (uint32_t)irq, (uint32_t)(uintptr_t)buf, (uint32_t)size, flags);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /*
@@ -308,9 +435,15 @@ static inline int sys_irq_read(uint8_t irq, void *buf, size_t size, uint32_t fla
  */
 /**
  * @brief 调整堆大小
+ * @return 新的堆顶地址,(void*)-1 失败(设置 errno)
  */
 static inline void *sys_sbrk(int32_t increment) {
-    return (void *)syscall1(SYS_SBRK, (uint32_t)increment);
+    int ret = syscall1(SYS_SBRK, (uint32_t)increment);
+    if (ret < 0) {
+        errno = -ret;
+        return (void *)-1;
+    }
+    return (void *)ret;
 }
 
 /**
@@ -321,12 +454,16 @@ static inline void *sys_sbrk(int32_t increment) {
  * @param size     映射大小 (0 = 整个区域)
  * @param prot     保护标志
  * @param out_size 可选输出参数: 实际映射的大小
- * @return 用户空间虚拟地址,失败返回 (void*)-1
+ * @return 用户空间虚拟地址,(void*)-1 失败(设置 errno)
  */
 static inline void *sys_mmap_phys(handle_t handle, uint32_t offset, uint32_t size, uint32_t prot,
                                   uint32_t *out_size) {
-    return (void *)syscall5(SYS_MMAP_PHYS, handle, offset, size, prot,
-                            (uint32_t)(uintptr_t)out_size);
+    int ret = syscall5(SYS_MMAP_PHYS, handle, offset, size, prot, (uint32_t)(uintptr_t)out_size);
+    if (ret < 0) {
+        errno = -ret;
+        return (void *)-1;
+    }
+    return (void *)ret;
 }
 
 /**
@@ -353,10 +490,15 @@ struct physmem_info {
  *
  * @param handle HANDLE_PHYSMEM 类型的 handle
  * @param info   输出信息结构
- * @return 0 成功, 负数失败
+ * @return 0 成功,-1 失败(设置 errno)
  */
 static inline int sys_physmem_info(handle_t handle, struct physmem_info *info) {
-    return syscall2(SYS_PHYSMEM_INFO, handle, (uint32_t)(uintptr_t)info);
+    int ret = syscall2(SYS_PHYSMEM_INFO, handle, (uint32_t)(uintptr_t)info);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 /*
@@ -401,9 +543,15 @@ struct proclist_args {
 
 /**
  * @brief 获取进程列表
+ * @return 进程数量,-1 失败(设置 errno)
  */
 static inline int sys_proclist(struct proclist_args *args) {
-    return syscall1(SYS_PROCLIST, (uint32_t)(uintptr_t)args);
+    int ret = syscall1(SYS_PROCLIST, (uint32_t)(uintptr_t)args);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 int sys_exec(struct abi_exec_args *args);
@@ -414,10 +562,15 @@ int sys_exec(struct abi_exec_args *args);
  * @param seq  输入/输出:当前序列号
  * @param buf  输出缓冲区
  * @param size 缓冲区大小
- * @return 读取的字节数,负数为错误
+ * @return 读取的字节数,-1 失败(设置 errno)
  */
 static inline int sys_kmsg_read(uint32_t *seq, char *buf, uint32_t size) {
-    return syscall3(SYS_KMSG_READ, (uint32_t)(uintptr_t)seq, (uint32_t)(uintptr_t)buf, size);
+    int ret = syscall3(SYS_KMSG_READ, (uint32_t)(uintptr_t)seq, (uint32_t)(uintptr_t)buf, size);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
 }
 
 #endif /* _XNIX_SYSCALL_H */

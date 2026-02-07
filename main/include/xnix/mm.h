@@ -135,7 +135,10 @@ void mm_init(void);
  */
 void mm_dump_stats(void);
 
-/* 错误码 */
-#define ENOMEM 12
+/*
+ * 错误码
+ *
+ * 使用标准 errno(定义在 <xnix/errno.h>)
+ */
 
 #endif

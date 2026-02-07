@@ -3,13 +3,15 @@
  * @brief IPC 服务端辅助实现
  */
 
+#include <errno.h>
 #include <ipc/server.h>
 #include <string.h>
 
 int ipc_server_dispatch(const struct ipc_dispatch_entry *table, uint32_t table_size, void *ctx,
                         const struct abi_ipc_message *msg, struct abi_ipc_message *reply) {
     if (!table || !msg || !reply) {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     uint32_t opcode = ipc_msg_get_opcode(msg);
@@ -18,31 +20,35 @@ int ipc_server_dispatch(const struct ipc_dispatch_entry *table, uint32_t table_s
     for (uint32_t i = 0; i < table_size; i++) {
         if (table[i].opcode == opcode) {
             if (!table[i].handler) {
-                return IPC_ERR_INVALID;
+                errno = EINVAL;
+                return -1;
             }
             return table[i].handler(ctx, msg, reply);
         }
     }
 
     /* 未知操作码 */
-    return IPC_ERR_INVALID;
+    errno = EINVAL;
+    return -1;
 }
 
 int ipc_msg_get_buffer(const struct abi_ipc_message *msg, const void **data, uint32_t *size) {
     if (!msg || !data || !size) {
-        return IPC_ERR_INVALID;
+        errno = EINVAL;
+        return -1;
     }
 
     if (msg->buffer.size == 0 || msg->buffer.data == 0) {
         *data = NULL;
         *size = 0;
-        return IPC_ERR_INVALID;
+        errno = ENOENT;
+        return -1;
     }
 
     *data = (const void *)(uintptr_t)msg->buffer.data;
     *size = msg->buffer.size;
 
-    return IPC_OK;
+    return 0;
 }
 
 void ipc_reply_result(struct abi_ipc_message *reply, uint32_t result) {

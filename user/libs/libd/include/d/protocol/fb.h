@@ -8,17 +8,13 @@
 
 #include <stdint.h>
 #include <xnix/abi/framebuffer.h>
+#include <xnix/abi/protocol.h>
 
 /* Helper macros for message parsing */
 #ifndef UDM_MSG_OPCODE
 #define UDM_MSG_OPCODE(msg) ((msg)->regs.data[0])
 #define UDM_MSG_ARG(msg, n) ((msg)->regs.data[(n) + 1])
 #endif
-
-/* Standard response codes */
-#define UDM_OK          0
-#define UDM_ERR_UNKNOWN -1
-#define UDM_ERR_INVALID -2
 
 /**
  * Framebuffer 操作码
