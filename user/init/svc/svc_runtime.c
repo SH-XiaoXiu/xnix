@@ -58,16 +58,6 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     struct svc_config  *cfg = &mgr->configs[idx];
     struct svc_runtime *rt  = &mgr->runtime[idx];
 
-    extern void early_puts(const char *);
-    extern bool early_console_is_active(void);
-    if (early_console_is_active()) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "[INIT] starting %s\n", cfg->name);
-        early_puts(buf);
-    } else {
-        printf("Starting %s...\n", cfg->name);
-    }
-
     rt->state = SVC_STATE_STARTING;
 
     int pid;
@@ -125,17 +115,6 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
         }
 
         exec_args.flags = 0;
-
-        /* 调试信息:测试文件是否存在 */
-        {
-            struct vfs_stat test_st;
-            int             test_ret = vfs_stat(exec_args.path, &test_st);
-            char            dbg[256];
-            int             len =
-                snprintf(dbg, sizeof(dbg), "[INIT] DEBUG: exec path='%s' vfs_stat=%d size=%u\n",
-                         exec_args.path, test_ret, test_ret >= 0 ? (unsigned)test_st.size : 0);
-            printf("%s", dbg);
-        }
 
         exec_args.handle_count = (uint32_t)cfg->handle_count;
         for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {

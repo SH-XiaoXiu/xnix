@@ -17,6 +17,7 @@
 #include <xnix/env.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
+#include <xnix/ulog.h>
 
 static struct fatfs_ctx g_fatfs;
 
@@ -28,19 +29,19 @@ int main(void) {
     /* 获取 endpoint handle (fatfsd provides fatfs_ep) */
     handle_t ep = env_get_handle("fatfs_ep");
     if (ep == HANDLE_INVALID) {
-        printf("[fatfsd] Failed to find fatfs_ep handle\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " Failed to find fatfs_ep handle\n");
         return 1;
     }
 
     /* 初始化 ATA 驱动 */
     if (ata_init() < 0) {
-        printf("[fatfsd] ata init failed\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " ata init failed\n");
         return 1;
     }
 
     /* 初始化 FatFs */
     if (fatfs_init(&g_fatfs) < 0) {
-        printf("[fatfsd] fatfs init failed\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " fatfs init failed\n");
         return 1;
     }
 
@@ -52,7 +53,7 @@ int main(void) {
 
     udm_server_init(&srv);
     svc_notify_ready("fatfsd");
-    printf("[fatfsd] started\n");
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " started\n");
 
     udm_server_run(&srv);
 

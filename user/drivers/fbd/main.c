@@ -15,6 +15,7 @@
 #include <xnix/env.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
+#include <xnix/ulog.h>
 
 /* Framebuffer 状态 */
 static struct abi_fb_info fb_info;
@@ -196,25 +197,24 @@ static int fb_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
-    printf("[fbd] Starting framebuffer driver\n");
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[fbd]", " Starting framebuffer driver\n");
 
     /* 查找 framebuffer physmem handle */
     handle_t fb_handle = sys_handle_find("fb_mem");
     if (fb_handle == HANDLE_INVALID) {
-        printf("[fbd] Failed to find fb_mem handle\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " Failed to find fb_mem handle\n");
         return 1;
     }
-    printf("[fbd] Found fb_mem handle: %u\n", fb_handle);
 
     /* 获取 framebuffer 信息 */
     struct physmem_info pinfo;
     if (sys_physmem_info(fb_handle, &pinfo) < 0) {
-        printf("[fbd] Failed to get physmem info\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " Failed to get physmem info\n");
         return 1;
     }
 
     if (pinfo.type != 1) { /* PHYSMEM_TYPE_FB */
-        printf("[fbd] fb_mem is not a framebuffer type\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " fb_mem is not a framebuffer type\n");
         return 1;
     }
 
@@ -230,24 +230,22 @@ int main(void) {
     fb_info.blue_pos   = pinfo.blue_pos;
     fb_info.blue_size  = pinfo.blue_size;
 
-    printf("[fbd] Framebuffer: %ux%u, %u bpp, pitch=%u\n", fb_info.width, fb_info.height,
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[fbd]", " Framebuffer: %ux%u, %u bpp, pitch=%u\n", fb_info.width, fb_info.height,
            fb_info.bpp, fb_info.pitch);
 
     /* 映射 framebuffer 到用户空间 */
     fb_addr = (uint8_t *)sys_mmap_phys(fb_handle, 0, 0, 0x03, NULL); /* PROT_READ | PROT_WRITE */
     if ((int)(uintptr_t)fb_addr < 0 || fb_addr == NULL) {
-        printf("[fbd] Failed to map framebuffer\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " Failed to map framebuffer\n");
         return 1;
     }
-
-    printf("[fbd] Framebuffer mapped at %p\n", fb_addr);
 
     fb_ready = 1;
 
     /* 获取 endpoint handle (fbd provides fb_ep) */
     handle_t fb_ep = env_get_handle("fb_ep");
     if (fb_ep == HANDLE_INVALID) {
-        printf("[fbd] Failed to find fb_ep handle\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " Failed to find fb_ep handle\n");
         return 1;
     }
 
@@ -260,7 +258,7 @@ int main(void) {
 
     udm_server_init(&srv);
     svc_notify_ready("fbd");
-    printf("[fbd] Ready, serving on endpoint %u\n", fb_ep);
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fbd]", " Ready, serving on endpoint %u\n", fb_ep);
 
     udm_server_run(&srv);
 

@@ -12,6 +12,7 @@
 #include <xnix/env.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
+#include <xnix/ulog.h>
 
 static struct ramfs_ctx g_ramfs;
 
@@ -20,21 +21,16 @@ static int vfs_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
-    printf("[ramfsd] Starting RAM filesystem driver\n");
-
     /* 获取 endpoint handle (ramfsd provides ramfs_ep) */
     handle_t ep = env_get_handle("ramfs_ep");
     if (ep == HANDLE_INVALID) {
-        printf("[ramfsd] Failed to find ramfs_ep handle\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[ramfsd]", " Failed to find ramfs_ep handle\n");
         return 1;
     }
-    printf("[ramfsd] Using endpoint handle %u for 'ramfs_ep'\n", ep);
 
     /* serial_ep 由 init 传递 (requires serial_ep) */
     handle_t serial_ep = env_get_handle("serial_ep");
-    if (serial_ep != HANDLE_INVALID) {
-        printf("[ramfsd] Received 'serial_ep' handle: %u\n", serial_ep);
-    }
+    (void)serial_ep;
 
     ramfs_init(&g_ramfs);
 
@@ -45,7 +41,7 @@ int main(void) {
     };
 
     udm_server_init(&srv);
-    printf("[ramfsd] Ready, serving on endpoint %u\n", ep);
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[ramfsd]", " Ready, serving on endpoint %u\n", ep);
 
     /* 通知 init 服务已就绪 */
     svc_notify_ready("ramfsd");

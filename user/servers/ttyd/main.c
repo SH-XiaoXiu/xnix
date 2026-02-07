@@ -25,6 +25,7 @@
 #include <xnix/ipc/console.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
+#include <xnix/ulog.h>
 
 /* Debug write helper */
 static inline void sys_debug_write(const char *buf, size_t len) {
@@ -394,15 +395,7 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
 
     case TTY_OP_INPUT: {
         /* 从输入设备推送的字符 */
-        static int input_count = 0;
-        char       c           = (char)msg->regs.data[1];
-        if (input_count < 5) {
-            char dbg[64];
-            int len = snprintf(dbg, sizeof(dbg), "[ttyd] tty%d got INPUT: '%c' (0x%02x)\n", tty->id,
-                               (c >= 32 && c < 127) ? c : '?', (unsigned char)c);
-            sys_debug_write(dbg, len);
-            input_count++;
-        }
+        char c = (char)msg->regs.data[1];
         tty_process_input(tty, c);
         msg->regs.data[0] = 0;
         return 0;
@@ -580,10 +573,6 @@ int main(int argc, char **argv) {
             handle_t fbcon_ep = env_get_handle("fbcon_ep");
             handle_t vga_ep   = env_get_handle("vga_ep");
 
-            /* 调试: 检查 endpoint 是否有效 */
-            printf("[ttyd] fbcon_ep=%d, vga_ep=%d, serial_ep=%d\n", (int)fbcon_ep, (int)vga_ep,
-                   (int)serial_ep);
-
             handle_t output_ep;
             if (fbcon_ep != HANDLE_INVALID) {
                 output_ep = fbcon_ep;
@@ -595,9 +584,6 @@ int main(int argc, char **argv) {
 
             tty_init_instance(&g_ttys[1], 0, tty0_ep, output_ep, serial_ep, kbd_ep);
             g_tty_count = 2;
-
-            printf("[ttyd] tty0: output_ep=%d, fallback=%d\n", (int)g_ttys[1].output_ep,
-                   (int)g_ttys[1].fallback_output_ep);
         }
     }
 
@@ -625,7 +611,7 @@ int main(int argc, char **argv) {
 
     svc_notify_ready("ttyd");
 
-    printf("[ttyd] ready (%d ttys)\n", g_tty_count);
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[ttyd]", " ready (%d ttys)\n", g_tty_count);
 
     /* 主线程服务 tty1 (serial) */
     tty_thread(&g_ttys[0]);

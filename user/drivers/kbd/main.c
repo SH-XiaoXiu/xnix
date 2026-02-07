@@ -22,6 +22,7 @@
 #include <xnix/ipc/console.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
+#include <xnix/ulog.h>
 
 #define INPUT_BUF_SIZE 256
 
@@ -211,23 +212,22 @@ static void *keyboard_thread(void *arg) {
 }
 
 int main(void) {
-    printf("[kbd] starting\n");
     pthread_mutex_init(&input_lock, NULL);
     pthread_mutex_init(&pending_lock, NULL);
 
     handle_t kbd_ep = env_get_handle("kbd_ep");
     if (kbd_ep == HANDLE_INVALID) {
-        printf("[kbd] ERROR: 'kbd_ep' handle not found\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[kbd]", " ERROR: 'kbd_ep' handle not found\n");
         return 1;
     }
 
     /* 启动键盘处理线程 */
     pthread_t kbd_tid;
     if (pthread_create(&kbd_tid, NULL, keyboard_thread, NULL) != 0) {
-        printf("[kbd] failed to create keyboard thread\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[kbd]", " failed to create keyboard thread\n");
         return 1;
     }
-    printf("[kbd] started\n");
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[kbd]", " started\n");
 
     /* 启动 IPC 服务器 */
     struct udm_server srv = {

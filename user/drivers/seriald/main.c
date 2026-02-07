@@ -21,30 +21,10 @@
 #include <xnix/ipc.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
+#include <xnix/ulog.h>
 
 /* 保护串口硬件访问的互斥锁 */
 static pthread_mutex_t serial_lock;
-
-static void debug_write(const char *s) {
-    if (!s) {
-        return;
-    }
-
-    uint32_t len = 0;
-    while (s[len] && len < 512) {
-        len++;
-    }
-    if (len == 0) {
-        return;
-    }
-
-    int ret;
-    asm volatile("int $0x80"
-                 : "=a"(ret)
-                 : "a"(SYS_DEBUG_WRITE), "b"((uint32_t)(uintptr_t)s), "c"(len)
-                 : "memory");
-    (void)ret;
-}
 
 static void serial_write_bytes(const char *buf, size_t len) {
     if (!buf || len == 0) {
@@ -170,10 +150,9 @@ static void *input_thread(void *arg) {
         msleep(100); /* 等待ttyd启动 */
     }
     if (tty1_ep == HANDLE_INVALID) {
-        debug_write("[seriald] tty1 not found after retries, input forwarding disabled\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]", " tty1 not found after retries, input forwarding disabled\n");
         return NULL;
     }
-    debug_write("[seriald] tty1 found, input forwarding enabled\n");
     bool last_was_cr = false;
 
     /* 创建 notification 用于接收中断通知 */
@@ -235,28 +214,20 @@ int main(void) {
     /* 初始化串口硬件 (直接访问硬件,基于权限) */
     serial_hw_init();
 
-    /* Early output to confirm we're running */
-    debug_write("[seriald] main() entered\n");
-
     /* 初始化互斥锁 */
     pthread_mutex_init(&serial_lock, NULL);
-    debug_write("[seriald] mutex initialized\n");
 
     /* 使用 init 传递的 endpoint handle (seriald provides serial) */
     handle_t ep = env_get_handle("serial");
     if (ep == HANDLE_INVALID) {
-        debug_write("[seriald] ERROR: 'serial' handle not found\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[seriald]", " ERROR: 'serial' handle not found\n");
         return 1;
     }
-    debug_write("[seriald] found serial endpoint handle\n");
 
     /* 启动输入处理线程 */
-    debug_write("[seriald] creating input thread\n");
     pthread_t tid;
     if (pthread_create(&tid, NULL, input_thread, NULL) != 0) {
-        debug_write("[seriald] ERROR: failed to create input thread\n");
-    } else {
-        debug_write("[seriald] input thread created\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[seriald]", " ERROR: failed to create input thread\n");
     }
 
     struct udm_server srv = {
@@ -266,14 +237,12 @@ int main(void) {
     };
 
     udm_server_init(&srv);
-    debug_write("[seriald] server initialized\n");
 
     /* 通知 init 服务已就绪 */
-    debug_write("[seriald] notifying ready\n");
     svc_notify_ready("seriald");
 
     udm_server_run(&srv);
 
-    debug_write("[seriald] ERROR: server loop exited\n");
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[seriald]", " ERROR: server loop exited\n");
     return 0;
 }
