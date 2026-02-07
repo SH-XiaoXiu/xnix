@@ -52,6 +52,9 @@ cmake "$SCRIPT_DIR" -DCMAKE_BUILD_TYPE=Release -DCFG_DEBUG=OFF
 info "编译..."
 make -j"$(nproc)" iso
 
+info "生成磁盘模板..."
+make disk_template
+
 info "剥离符号表..."
 
 # 保留调试符号，剥离 ELF
@@ -63,14 +66,22 @@ for elf in *.elf; do
     info "  $elf: $(stat -c%s "$elf") bytes"
 done
 
-# 重新生成 ISO（使用剥离后的 ELF）
-info "重新生成 ISO..."
+# 重新生成磁盘模板和 ISO（使用剥离后的 ELF）
+info "重新生成磁盘模板..."
+make disk_template
+
+info "重新打包 ISO..."
 make iso
 
 echo ""
 info "发布版本构建完成"
 echo ""
 echo "产物:"
-[[ -f xnix.iso ]] && echo "  ISO: $BUILD_DIR/xnix.iso ($(stat -c%s xnix.iso) bytes)"
+[[ -f xnix.iso ]] && echo "  ISO:             $BUILD_DIR/xnix.iso ($(du -h xnix.iso | cut -f1))"
+[[ -f disk_template.img ]] && echo "  磁盘模板镜像:     $BUILD_DIR/disk_template.img ($(du -h disk_template.img | cut -f1))"
 echo ""
-echo "运行: qemu-system-i386 -cdrom $BUILD_DIR/xnix.iso -serial stdio"
+echo "使用方法:"
+echo "  Live 测试:  qemu-system-i386 -m 128M -cdrom $BUILD_DIR/xnix.iso -serial stdio"
+echo "  磁盘测试:   qemu-system-i386 -m 128M -hda $BUILD_DIR/disk_template.img -serial stdio"
+echo "  实机安装:   从 ISO 启动后，运行 'installer 0' 安装到 hda"
+echo "  dd 写入:    sudo dd if=$BUILD_DIR/disk_template.img of=/dev/sdX bs=4M status=progress"

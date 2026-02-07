@@ -75,6 +75,21 @@ add_custom_command(
 add_custom_target(initramfs DEPENDS ${INITRAMFS_IMG})
 
 # ============================================
+# disk_template.img 生成 (可引导磁盘模板)
+# ============================================
+set(DISK_TEMPLATE_IMG ${CMAKE_BINARY_DIR}/disk_template.img)
+set(DISK_TEMPLATE_SIZE 128)  # 128MB
+
+add_custom_command(
+        OUTPUT ${DISK_TEMPLATE_IMG}
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/make_disk_template.sh ${DISK_TEMPLATE_SIZE} ${DISK_TEMPLATE_IMG}
+        DEPENDS xnix.elf init.elf initramfs
+        COMMENT "生成可引导磁盘模板 (${DISK_TEMPLATE_SIZE}MB)..."
+)
+
+add_custom_target(disk_template DEPENDS ${DISK_TEMPLATE_IMG})
+
+# ============================================
 # system.img 内容收集 (FAT32)
 # ============================================
 # 使用 app.cmake 收集的全局变量 SYSTEM_IMG_FILES
@@ -116,7 +131,7 @@ add_custom_command(
         # 格式化为 FAT32
         COMMAND mkfs.fat -F 32 ${SYSTEM_IMG}
         # 创建目录
-        COMMAND mmd -i ${SYSTEM_IMG} ::/sbin ::/bin ::/etc ::/drivers || true
+        COMMAND mmd -i ${SYSTEM_IMG} ::/sbin ::/bin ::/etc ::/drivers ::/boot || true
         # 使用 CMake 脚本复制文件
         COMMAND ${CMAKE_COMMAND}
         -DIMG_FILE=${SYSTEM_IMG}
@@ -136,6 +151,8 @@ string(APPEND GRUB_CFG_CONTENT "  multiboot /boot/xnix.elf\n")
 string(APPEND GRUB_CFG_CONTENT "  module /boot/init.elf name=init\n")
 string(APPEND GRUB_CFG_CONTENT "  module /boot/initramfs.img name=initramfs\n")
 string(APPEND GRUB_CFG_CONTENT "  module /boot/system.img name=system\n")
+# 注意：disk_template.img 作为可选模块，如果存在会被 GRUB 加载
+# 但 init 需要检查模块是否存在后再挂载
 string(APPEND GRUB_CFG_CONTENT "}\n")
 
 file(MAKE_DIRECTORY ${ISO_DIR}/boot/grub)
@@ -144,6 +161,8 @@ file(WRITE ${ISO_DIR}/boot/grub/grub.cfg "${GRUB_CFG_CONTENT}")
 # ============================================
 # ISO 构建目标
 # ============================================
+# disk_template 不作为默认依赖（太慢），需要手动 make disk_template
+# 或在 release 脚本中自动构建
 set(ISO_DEPENDS xnix.elf init.elf initramfs system)
 
 # 使用干净的临时目录，避免打包 CMake 生成的文件
@@ -159,6 +178,8 @@ add_custom_target(iso
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/init.elf ${ISO_STAGE_DIR}/boot/init.elf
         COMMAND ${CMAKE_COMMAND} -E copy ${INITRAMFS_IMG} ${ISO_STAGE_DIR}/boot/initramfs.img
         COMMAND ${CMAKE_COMMAND} -E copy ${SYSTEM_IMG} ${ISO_STAGE_DIR}/boot/system.img
+        # 可选：如果 disk_template.img 存在，则复制（用于 release 构建）
+        COMMAND test -f ${DISK_TEMPLATE_IMG} && ${CMAKE_COMMAND} -E copy ${DISK_TEMPLATE_IMG} ${ISO_STAGE_DIR}/boot/disk_template.img || true
 
         # 复制 grub.cfg
         COMMAND ${CMAKE_COMMAND} -E copy ${ISO_DIR}/boot/grub/grub.cfg ${ISO_STAGE_DIR}/boot/grub/grub.cfg
