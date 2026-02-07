@@ -228,7 +228,7 @@ static void try_fulfill_pending_read(struct tty_instance *tty) {
 
     reply.regs.data[0] = (uint32_t)actual_read;
     if (actual_read > 0) {
-        reply.buffer.data = buf;
+        reply.buffer.data = (uint64_t)(uintptr_t)buf;
         reply.buffer.size = (uint32_t)actual_read;
     }
 
@@ -485,7 +485,7 @@ static void *tty_thread(void *arg) {
 
     while (1) {
         memset(&msg, 0, sizeof(msg));
-        msg.buffer.data = recv_buf;
+        msg.buffer.data = (uint64_t)(uintptr_t)recv_buf;
         msg.buffer.size = sizeof(recv_buf);
 
         if (sys_ipc_receive(tty->endpoint, &msg, 0) < 0) {

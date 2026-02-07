@@ -35,7 +35,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         }
         uint32_t flags = UDM_MSG_ARG(msg, 0);
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-            memcpy(g_path_buf, msg->buffer.data, msg->buffer.size);
+            memcpy(g_path_buf, (const void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
             g_path_buf[msg->buffer.size] = '\0';
             result                       = ops->open(ctx, g_path_buf, flags);
         } else {
@@ -85,7 +85,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
             if (size > VFS_BUF_SIZE) {
                 size = VFS_BUF_SIZE;
             }
-            memcpy(g_data_buf, msg->buffer.data, size);
+            memcpy(g_data_buf, (const void *)(uintptr_t)msg->buffer.data, size);
             result = ops->write(ctx, handle, g_data_buf, offset, size);
         } else {
             result = -22;
@@ -98,7 +98,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
             break;
         }
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-            memcpy(g_path_buf, msg->buffer.data, msg->buffer.size);
+            memcpy(g_path_buf, (const void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
             g_path_buf[msg->buffer.size] = '\0';
             result                       = ops->info(ctx, g_path_buf, &g_info_buf);
             if (result == 0) {
@@ -129,7 +129,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
             break;
         }
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-            memcpy(g_path_buf, msg->buffer.data, msg->buffer.size);
+            memcpy(g_path_buf, (const void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
             g_path_buf[msg->buffer.size] = '\0';
             result                       = ops->opendir(ctx, g_path_buf);
         } else {
@@ -157,7 +157,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
             break;
         }
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-            memcpy(g_path_buf, msg->buffer.data, msg->buffer.size);
+            memcpy(g_path_buf, (const void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
             g_path_buf[msg->buffer.size] = '\0';
             result                       = ops->mkdir(ctx, g_path_buf);
         } else {
@@ -171,7 +171,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
             break;
         }
         if (msg->buffer.data && msg->buffer.size > 0 && msg->buffer.size < VFS_PATH_MAX) {
-            memcpy(g_path_buf, msg->buffer.data, msg->buffer.size);
+            memcpy(g_path_buf, (const void *)(uintptr_t)msg->buffer.data, msg->buffer.size);
             g_path_buf[msg->buffer.size] = '\0';
             result                       = ops->del(ctx, g_path_buf);
         } else {
@@ -205,7 +205,7 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         }
         uint32_t old_len = UDM_MSG_ARG(msg, 0);
         if (msg->buffer.data && msg->buffer.size > old_len + 1) {
-            const char *old_path = (const char *)msg->buffer.data;
+            const char *old_path = (const char *)(uintptr_t)msg->buffer.data;
             const char *new_path = old_path + old_len + 1;
             result               = ops->rename(ctx, old_path, new_path);
         } else {

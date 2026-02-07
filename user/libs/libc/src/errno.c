@@ -7,10 +7,10 @@
 #include <stdio.h>
 
 /**
- * 线程局部错误码变量
- * 每个线程有独立的 errno 实例
+ * 全局错误码变量
+ * TODO: 实现 TLS 支持后改为线程局部变量 (__thread)
  */
-__thread int errno = 0;
+int errno = 0;
 
 /**
  * 错误消息字符串表

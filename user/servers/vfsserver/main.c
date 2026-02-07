@@ -405,7 +405,7 @@ static int vfsd_opendir(struct ipc_message *msg, const char *abs_path) {
     struct ipc_message reply = {0};
 
     req.regs.data[0] = UDM_VFS_OPENDIR;
-    req.buffer.data  = rel_path;
+    req.buffer.data  = (uint64_t)(uintptr_t)rel_path;
     req.buffer.size  = (uint32_t)strlen(rel_path);
 
     int ret = sys_ipc_call((uint32_t)backend_ep, &req, &reply, 5000);
@@ -464,7 +464,7 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
     req.regs.data[1] = st->backend_handle;
     req.regs.data[2] = index - st->mount_count;
 
-    reply.buffer.data = &g_reply_dirent;
+    reply.buffer.data = (uint64_t)(uintptr_t)&g_reply_dirent;
     reply.buffer.size = sizeof(g_reply_dirent);
 
     int ret = sys_ipc_call(st->backend_ep, &req, &reply, 5000);
@@ -546,7 +546,7 @@ static int vfsd_handler(struct ipc_message *msg) {
             struct ipc_message stat_req   = {0};
             struct ipc_message stat_reply = {0};
             stat_req.regs.data[0]         = UDM_VFS_INFO;
-            stat_req.buffer.data          = rel_path;
+            stat_req.buffer.data          = (uint64_t)(uintptr_t)rel_path;
             stat_req.buffer.size          = strlen(rel_path);
 
             int ret = sys_ipc_call(fs_ep, &stat_req, &stat_reply, 5000);

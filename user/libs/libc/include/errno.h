@@ -16,10 +16,11 @@ extern "C" {
 #endif
 
 /**
- * 线程局部错误码
+ * 全局错误码
  * 系统调用失败时设置,成功时不修改
+ * TODO: 实现 TLS 支持后改为线程局部变量
  */
-extern __thread int errno;
+extern int errno;
 
 /**
  * 将错误码转换为错误消息字符串
