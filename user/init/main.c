@@ -329,36 +329,30 @@ int main(int argc, char **argv) {
         early_puts(buf);
     }
 
-    /* 将 ramfsd 挂载到根目录 */
+    /* 初始化 VFS 客户端(初始化阶段 - 直连 ramfsd)*/
     early_set_color(10, 0);
     early_puts("[INIT] ");
     early_reset_color();
-    early_puts("mounting ramfsd as root filesystem...\n");
+    early_puts("initializing VFS client (direct mode)...\n");
 
-    /* 首先需要初始化 VFS 客户端 - 使用内置的 ramfs_ep */
-    handle_t vfs_ep = sys_handle_find("vfs_ep");
-    if (vfs_ep == HANDLE_INVALID) {
-        /* VFS 服务还没启动,先使用临时方案:直接挂载 ramfsd */
-        handle_t ramfs_ep = g_ramfsd.endpoint;
-        if (ramfs_ep != HANDLE_INVALID) {
-            /* 初始化 VFS 客户端指向 ramfsd */
-            vfs_client_init((uint32_t)ramfs_ep);
-
-            /* 挂载 ramfsd 到根目录 */
-            ret = vfs_mount("/", ramfs_ep);
-            if (ret < 0) {
-                early_puts("[INIT] FATAL: failed to mount ramfsd\n");
-                while (1) {
-                    msleep(1000);
-                }
-            }
-            early_set_color(10, 0);
-            early_puts("[INIT] ");
-            early_reset_color();
-            early_puts("ramfsd mounted at /\n");
-        }
+    /*
+     * 注意:此时 vfsserver 还未启动
+     * 直接使用 ramfs_ep 作为 VFS endpoint,不需要调用 vfs_mount
+     * (vfs_mount 只在 vfsserver 中处理,ramfsd 不支持 MOUNT 操作)
+     */
+    handle_t ramfs_ep = g_ramfsd.endpoint;
+    if (ramfs_ep != HANDLE_INVALID) {
+        /* 初始化 VFS 客户端指向 ramfsd (临时直连) */
+        vfs_client_init((uint32_t)ramfs_ep);
+        early_set_color(10, 0);
+        early_puts("[INIT] ");
+        early_reset_color();
+        early_puts("VFS client initialized (ramfsd direct mode)\n");
     } else {
-        vfs_client_init((uint32_t)vfs_ep);
+        early_puts("[INIT] FATAL: ramfs_ep is invalid\n");
+        while (1) {
+            msleep(1000);
+        }
     }
 
     /* 创建 init_notify endpoint 用于接收服务就绪通知 */
@@ -384,8 +378,9 @@ int main(int argc, char **argv) {
 
     /* 主循环:先启动核心服务,等待 /sys 可用后加载用户配置 */
     static bool user_config_loaded = false;
-    bool serial_initialized = false;
-    int  loop_count         = 0;
+    static bool vfsserver_migrated = false;
+    bool        serial_initialized = false;
+    int         loop_count         = 0;
 
     while (1) {
         /* 收割子进程 */
@@ -401,6 +396,38 @@ int main(int argc, char **argv) {
         }
 
         drain_ready_notifications(init_notify_ep);
+
+        /* vfsserver 就绪后,迁移到 vfsserver 并重新挂载 ramfsd */
+        if (!vfsserver_migrated) {
+            int vfsserver_idx = svc_find_by_name(&g_mgr, "vfsserver");
+            if (vfsserver_idx >= 0 && g_mgr.runtime[vfsserver_idx].ready) {
+                handle_t vfs_ep = sys_handle_find("vfs_ep");
+                if (vfs_ep != HANDLE_INVALID) {
+                    early_set_color(10, 0);
+                    early_puts("[INIT] ");
+                    early_reset_color();
+                    early_puts("migrating to vfsserver...\n");
+
+                    /* 切换到 vfsserver */
+                    vfs_client_init((uint32_t)vfs_ep);
+
+                    /* 重新挂载 ramfsd 到根目录 */
+                    handle_t ramfs_ep = g_ramfsd.endpoint;
+                    if (ramfs_ep != HANDLE_INVALID) {
+                        ret = vfs_mount("/", ramfs_ep);
+                        if (ret < 0) {
+                            early_puts("[INIT] WARNING: failed to mount ramfsd via vfsserver\n");
+                        } else {
+                            early_set_color(10, 0);
+                            early_puts("[INIT] ");
+                            early_reset_color();
+                            early_puts("ramfsd remounted at / via vfsserver\n");
+                        }
+                    }
+                    vfsserver_migrated = true;
+                }
+            }
+        }
 
         /* 检查是否可以关闭早期控制台(ttyd 就绪后,fbcond 已接管显示) */
         if (!serial_initialized) {
