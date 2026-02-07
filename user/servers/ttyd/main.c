@@ -56,6 +56,19 @@ struct line_discipline {
     int line_ready;
 };
 
+/* ANSI 转义序列解析状态 */
+enum ansi_state {
+    ANSI_STATE_NORMAL = 0,
+    ANSI_STATE_ESC,
+    ANSI_STATE_CSI,
+};
+
+struct ansi_parser {
+    enum ansi_state state;
+    char            param_buf[16];
+    int             param_pos;
+};
+
 /* TTY 实例 */
 struct tty_instance {
     int      id;
@@ -82,6 +95,9 @@ struct tty_instance {
 
     /* 前台进程 */
     int foreground_pid;
+
+    /* ANSI 转义序列解析器 */
+    struct ansi_parser ansi;
 };
 
 #define MAX_TTY               2
@@ -155,6 +171,10 @@ static int tty_output_send(struct tty_instance *tty, struct ipc_message *msg) {
     return ret;
 }
 
+/* 前置声明 */
+static void tty_output_set_color(struct tty_instance *tty, uint8_t fg, uint8_t bg);
+static void tty_output_reset_color(struct tty_instance *tty);
+
 /* 向输出设备写一个字符 */
 static void tty_output_char(struct tty_instance *tty, char c) {
     struct ipc_message msg;
@@ -164,31 +184,149 @@ static void tty_output_char(struct tty_instance *tty, char c) {
     tty_output_send(tty, &msg);
 }
 
-/* 向输出设备写字符串(通过 WRITE 批量发送) */
+/* VGA 颜色映射表: ANSI 颜色码 -> VGA 颜色 */
+static uint8_t ansi_to_vga_color(int ansi_code) {
+    /* 标准 ANSI 颜色 (30-37) */
+    static const uint8_t standard_colors[8] = {
+        0x00, /* 30 black */
+        0x04, /* 31 red */
+        0x02, /* 32 green */
+        0x06, /* 33 yellow */
+        0x01, /* 34 blue */
+        0x05, /* 35 magenta */
+        0x03, /* 36 cyan */
+        0x07, /* 37 white */
+    };
+
+    /* 亮色 ANSI (90-97) */
+    static const uint8_t bright_colors[8] = {
+        0x08, /* 90 bright black (dark grey) */
+        0x0C, /* 91 bright red */
+        0x0A, /* 92 bright green */
+        0x0E, /* 93 bright yellow */
+        0x09, /* 94 bright blue */
+        0x0D, /* 95 bright magenta */
+        0x0B, /* 96 bright cyan */
+        0x0F, /* 97 bright white */
+    };
+
+    if (ansi_code >= 30 && ansi_code <= 37) {
+        return standard_colors[ansi_code - 30];
+    }
+    if (ansi_code >= 90 && ansi_code <= 97) {
+        return bright_colors[ansi_code - 90];
+    }
+    return 0x07; /* 默认白色 */
+}
+
+/* 解析 ANSI CSI 参数并执行颜色设置 */
+static void ansi_execute_csi(struct tty_instance *tty, const char *params) {
+    int code = 0;
+
+    /* 解析参数 */
+    while (*params) {
+        if (*params >= '0' && *params <= '9') {
+            code = code * 10 + (*params - '0');
+        } else if (*params == ';') {
+            /* 多参数暂不支持,使用第一个 */
+            break;
+        }
+        params++;
+    }
+
+    /* 执行 SGR (Select Graphic Rendition) 命令 */
+    if (code == 0) {
+        /* 重置颜色 */
+        tty_output_reset_color(tty);
+    } else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) {
+        /* 前景色 */
+        uint8_t vga_fg = ansi_to_vga_color(code);
+        tty_output_set_color(tty, vga_fg, 0);
+    }
+    /* 背景色 (40-47, 100-107) 暂不支持 */
+}
+
+/* 向输出设备写字符串(通过 WRITE 批量发送,支持 ANSI 转义序列) */
 static void tty_output_write(struct tty_instance *tty, const char *data, int len) {
     if (tty->output_ep == HANDLE_INVALID || len <= 0) {
         return;
     }
 
-    while (len > 0) {
+    struct ansi_parser *parser = &tty->ansi;
+    char                out_buf[UDM_CONSOLE_WRITE_MAX];
+    int                 out_pos = 0;
+
+    for (int i = 0; i < len; i++) {
+        char c = data[i];
+
+        switch (parser->state) {
+        case ANSI_STATE_NORMAL:
+            if (c == '\x1b') {
+                /* 开始转义序列,先 flush 缓冲区 */
+                if (out_pos > 0) {
+                    struct ipc_message msg;
+                    memset(&msg, 0, sizeof(msg));
+                    msg.regs.data[0] = UDM_CONSOLE_WRITE;
+                    memcpy(&msg.regs.data[1], out_buf, out_pos);
+                    msg.regs.data[7] = (uint32_t)out_pos;
+                    tty_output_send(tty, &msg);
+                    out_pos = 0;
+                }
+                parser->state = ANSI_STATE_ESC;
+            } else {
+                /* 普通字符,添加到缓冲区 */
+                out_buf[out_pos++] = c;
+                if (out_pos >= UDM_CONSOLE_WRITE_MAX) {
+                    /* 缓冲区满,发送 */
+                    struct ipc_message msg;
+                    memset(&msg, 0, sizeof(msg));
+                    msg.regs.data[0] = UDM_CONSOLE_WRITE;
+                    memcpy(&msg.regs.data[1], out_buf, out_pos);
+                    msg.regs.data[7] = (uint32_t)out_pos;
+                    tty_output_send(tty, &msg);
+                    out_pos = 0;
+                }
+            }
+            break;
+
+        case ANSI_STATE_ESC:
+            if (c == '[') {
+                /* CSI 序列 */
+                parser->state     = ANSI_STATE_CSI;
+                parser->param_pos = 0;
+            } else {
+                /* 不支持的转义序列,忽略 */
+                parser->state = ANSI_STATE_NORMAL;
+            }
+            break;
+
+        case ANSI_STATE_CSI:
+            if ((c >= '0' && c <= '9') || c == ';') {
+                /* 参数字符 */
+                if (parser->param_pos < (int)sizeof(parser->param_buf) - 1) {
+                    parser->param_buf[parser->param_pos++] = c;
+                }
+            } else if (c == 'm') {
+                /* SGR 结束符 */
+                parser->param_buf[parser->param_pos] = '\0';
+                ansi_execute_csi(tty, parser->param_buf);
+                parser->state = ANSI_STATE_NORMAL;
+            } else {
+                /* 其他结束符,忽略 */
+                parser->state = ANSI_STATE_NORMAL;
+            }
+            break;
+        }
+    }
+
+    /* 发送剩余缓冲区 */
+    if (out_pos > 0) {
         struct ipc_message msg;
         memset(&msg, 0, sizeof(msg));
         msg.regs.data[0] = UDM_CONSOLE_WRITE;
-
-        int chunk = len;
-        if (chunk > UDM_CONSOLE_WRITE_MAX) {
-            chunk = UDM_CONSOLE_WRITE_MAX;
-        }
-
-        memcpy(&msg.regs.data[1], data, chunk);
-        msg.regs.data[7] = (uint32_t)chunk;
-
-        if (tty_output_send(tty, &msg) < 0) {
-            break;
-        }
-
-        data += chunk;
-        len -= chunk;
+        memcpy(&msg.regs.data[1], out_buf, out_pos);
+        msg.regs.data[7] = (uint32_t)out_pos;
+        tty_output_send(tty, &msg);
     }
 }
 
@@ -532,6 +670,10 @@ static void tty_init_instance(struct tty_instance *tty, int id, handle_t ep, han
     tty->ldisc.mode     = LDISC_RAW;
     tty->ldisc.echo     = 0;
     tty->ldisc.line_pos = 0;
+
+    /* 初始化 ANSI 解析器 */
+    tty->ansi.state     = ANSI_STATE_NORMAL;
+    tty->ansi.param_pos = 0;
 
     pthread_mutex_init(&tty->input_lock, NULL);
 }
