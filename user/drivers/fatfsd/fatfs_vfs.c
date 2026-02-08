@@ -378,7 +378,7 @@ static struct vfs_operations g_fatfs_ops = {
 int fatfs_init(struct fatfs_ctx *ctx) {
     memset(ctx, 0, sizeof(*ctx));
 
-    /* 挂载文件系统 */
+    /* 挂载文件系统 (volume "0:", FF_VOLUMES=1) */
     FRESULT res = f_mount(&ctx->fs, "", 1);
     if (res != FR_OK) {
         return fresult_to_errno(res);

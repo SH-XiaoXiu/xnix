@@ -99,7 +99,13 @@ int svc_parse_handles(struct svc_manager *mgr, const char *handles_str,
 
         struct svc_handle_def *def = handle_def_get_or_add(mgr, spec);
         if (def && def->type == SVC_HANDLE_TYPE_NONE) {
-            def->type = SVC_HANDLE_TYPE_ENDPOINT;
+            /* module_*, fb_mem, vga_mem 是内核注入的 handle, 使用 inherit */
+            if (strncmp(spec, "module_", 7) == 0 || strcmp(spec, "fb_mem") == 0 ||
+                strcmp(spec, "vga_mem") == 0) {
+                def->type = SVC_HANDLE_TYPE_INHERIT;
+            } else {
+                def->type = SVC_HANDLE_TYPE_ENDPOINT;
+            }
         }
 
         count++;
@@ -130,6 +136,18 @@ void svc_resolve_handles(struct svc_manager *mgr) {
     }
 }
 
+/**
+ * 检查服务是否已经持有指定名称的 handle
+ */
+static bool svc_has_handle(struct svc_config *cfg, const char *name) {
+    for (int i = 0; i < cfg->handle_count; i++) {
+        if (strcmp(cfg->handles[i].name, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 int svc_resolve_service_discovery(struct svc_manager *mgr) {
     for (int i = 0; i < mgr->count; i++) {
         struct svc_config     *cfg  = &mgr->configs[i];
@@ -137,8 +155,6 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
 
         for (int j = 0; j < node->provides_count; j++) {
             const char *ep_name = node->provides[j];
-
-            printf("Service '%s' provides '%s'\n", cfg->name, ep_name);
 
             struct svc_handle_def *def = handle_def_get_or_add(mgr, ep_name);
             if (!def) {
@@ -150,6 +166,11 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
                 def->type = SVC_HANDLE_TYPE_ENDPOINT;
             }
 
+            /* 跳过已持有的 handle (幂等) */
+            if (svc_has_handle(cfg, ep_name)) {
+                continue;
+            }
+
             if (cfg->handle_count >= SVC_HANDLES_MAX) {
                 printf("ERROR: Service '%s' has too many handles\n", cfg->name);
                 return -1;
@@ -159,8 +180,7 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
             strncpy(h->name, ep_name, SVC_HANDLE_NAME_MAX);
             h->src_handle = HANDLE_INVALID;
 
-            printf("Service '%s' will receive its own handle '%s' (provides)\n", cfg->name,
-                   ep_name);
+            printf("Service '%s' provides '%s'\n", cfg->name, ep_name);
         }
     }
 
@@ -171,12 +191,14 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
         for (int j = 0; j < node->requires_count; j++) {
             const char *ep_name = node->requires[j];
 
-            printf("Service '%s' will receive handle '%s' (requires)\n", cfg->name, ep_name);
-
             struct svc_handle_def *def = handle_def_find(mgr, ep_name);
             if (!def) {
                 printf("ERROR: Service '%s' requires unknown handle '%s'\n", cfg->name, ep_name);
                 return -1;
+            }
+
+            if (svc_has_handle(cfg, ep_name)) {
+                continue;
             }
 
             if (cfg->handle_count >= SVC_HANDLES_MAX) {
@@ -187,6 +209,8 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
             struct svc_handle_desc *h = &cfg->handles[cfg->handle_count++];
             strncpy(h->name, ep_name, SVC_HANDLE_NAME_MAX);
             h->src_handle = HANDLE_INVALID;
+
+            printf("Service '%s' requires '%s'\n", cfg->name, ep_name);
         }
 
         for (int j = 0; j < node->wants_count; j++) {
@@ -194,8 +218,10 @@ int svc_resolve_service_discovery(struct svc_manager *mgr) {
 
             struct svc_handle_def *def = handle_def_find(mgr, ep_name);
             if (!def) {
-                printf("Service '%s' wants optional handle '%s' (not found, skipping)\n", cfg->name,
-                       ep_name);
+                continue;
+            }
+
+            if (svc_has_handle(cfg, ep_name)) {
                 continue;
             }
 

@@ -1,17 +1,16 @@
 #!/bin/bash
 # Xnix 可引导磁盘模板生成脚本
 #
-# 用法: ./scripts/make_disk_template.sh [SIZE_MB] [OUTPUT]
+# 用法: ./scripts/make_disk_template.sh SIZE_MB OUTPUT BUILD_DIR
 #
 # 生成包含 MBR、GRUB、FAT32 分区的完整可引导磁盘镜像
-# 此镜像将被打包进 ISO，供 installer 程序使用
+# 使用 mtools (无需 sudo/mount)
 
 set -e
 
-# 默认参数
 SIZE_MB=${1:-128}
 OUTPUT=${2:-build/disk_template.img}
-BUILD_DIR=$(dirname "$OUTPUT")
+BUILD_DIR=${3:-$(dirname "$OUTPUT")}
 
 # 颜色输出
 RED='\033[0;31m'
@@ -27,14 +26,11 @@ section() { echo -e "${CYAN}==>${NC} $*"; }
 
 # 检查依赖
 check_deps() {
-    local missing=0
-    for cmd in dd mkfs.fat grub-install losetup; do
+    for cmd in dd fdisk mkfs.fat mmd mcopy grub-mkimage; do
         if ! command -v $cmd &>/dev/null; then
-            error "缺少依赖: $cmd (apt install grub-pc-bin dosfstools)"
-            missing=1
+            error "缺少依赖: $cmd"
         fi
     done
-    [ $missing -eq 1 ] && exit 1
 }
 
 # 检查必需文件
@@ -48,6 +44,7 @@ check_files() {
 section "Xnix 可引导磁盘模板生成器"
 info "镜像大小: ${SIZE_MB}MB"
 info "输出文件: $OUTPUT"
+info "构建目录: $BUILD_DIR"
 
 check_deps
 check_files
@@ -66,114 +63,123 @@ section "创建 MBR 分区表"
     echo "n"      # 新建分区
     echo "p"      # 主分区
     echo "1"      # 分区号 1
-    echo ""       # 默认起始扇区
+    echo ""       # 默认起始扇区 (2048)
     echo ""       # 默认结束扇区
     echo "a"      # 设置启动标志
     echo "t"      # 修改分区类型
-    echo "c"      # FAT32 LBA (0x0C)
+    echo "e"      # FAT16 LBA (0x0E)
     echo "w"      # 写入并退出
 } | fdisk "$OUTPUT" >/dev/null 2>&1 || true
 
-# 设置 loop 设备
-section "挂载 loop 设备"
-LOOP=$(sudo losetup -f)
-sudo losetup -P "$LOOP" "$OUTPUT"
-PART="${LOOP}p1"
+# 获取分区偏移
+PART_START=$(fdisk -l "$OUTPUT" 2>/dev/null | awk '/^.*\*/{print $3}')
+if [ -z "$PART_START" ]; then
+    PART_START=2048
+fi
+PART_OFFSET=$((PART_START * 512))
+PART_SECTORS=$((SIZE_MB * 2048 - PART_START))
 
-# 等待分区设备就绪
-sleep 1
-[ -b "$PART" ] || error "分区设备不存在: $PART"
+info "分区起始扇区: $PART_START (偏移 $PART_OFFSET)"
 
-# 格式化为 FAT32
+# 格式化分区为 FAT32 (使用 offset)
 section "格式化 FAT32 文件系统"
-sudo mkfs.fat -F 32 -n "XNIX" "$PART" >/dev/null
+mkfs.fat -F 16 -n "XNIX" --offset $PART_START "$OUTPUT" $PART_SECTORS >/dev/null
 
-# 挂载分区
-MOUNT_POINT=$(mktemp -d)
-info "挂载到: $MOUNT_POINT"
-sudo mount "$PART" "$MOUNT_POINT"
+# 配置 mtools (使用 offset 访问分区)
+MTOOLSRC=$(mktemp)
+cat > "$MTOOLSRC" <<EOF
+drive d:
+    file="$OUTPUT"
+    partition=1
+EOF
+export MTOOLSRC
 
 # 创建目录结构
 section "创建目录结构"
-sudo mkdir -p "$MOUNT_POINT/boot/grub"
-sudo mkdir -p "$MOUNT_POINT/bin"
+mmd d:/boot d:/boot/grub d:/sbin d:/bin d:/etc d:/sys d:/drivers d:/mnt 2>/dev/null || true
 
-# 复制内核和模块
-section "复制系统文件"
-sudo cp "$BUILD_DIR/xnix.elf" "$MOUNT_POINT/boot/" && info "  xnix.elf"
-sudo cp "$BUILD_DIR/init.elf" "$MOUNT_POINT/boot/" && info "  init.elf"
-sudo cp "$BUILD_DIR/initramfs.img" "$MOUNT_POINT/boot/" && info "  initramfs.img"
-sudo cp "$BUILD_DIR/system.img" "$MOUNT_POINT/boot/" && info "  system.img"
+# 复制系统文件 (从 system.img 提取)
+section "从 system.img 复制文件"
 
-# 复制用户程序
-section "复制用户程序"
-copied=0
-for elf in "$BUILD_DIR"/*.elf; do
-    [ -f "$elf" ] || continue
-    name=$(basename "$elf")
-    case "$name" in
-        xnix.elf|init.elf) continue ;;
-        *)
-            sudo cp "$elf" "$MOUNT_POINT/bin/"
-            info "  $name"
-            copied=$((copied + 1))
-            ;;
-    esac
+# 配置 mtools 访问 system.img
+MTOOLSRC_SYS=$(mktemp)
+cat > "$MTOOLSRC_SYS" <<EOF
+drive s:
+    file="$BUILD_DIR/system.img"
+EOF
+
+# 临时目录用于中转
+TMPDIR=$(mktemp -d)
+
+# 复制 system.img 内容到磁盘模板
+# 使用 mcopy 从 system.img 提取文件到临时目录, 再复制到磁盘模板
+for dir in sbin bin etc sys drivers; do
+    MTOOLSRC="$MTOOLSRC_SYS" mcopy -s -n "s:/$dir" "$TMPDIR/" 2>/dev/null || true
 done
-info "共复制 $copied 个程序"
 
-# 生成 GRUB 配置
+export MTOOLSRC="$MTOOLSRC"
+# 再从临时目录复制到磁盘模板
+for dir in sbin bin etc sys drivers; do
+    if [ -d "$TMPDIR/$dir" ]; then
+        for f in "$TMPDIR/$dir"/*; do
+            [ -f "$f" ] || continue
+            MTOOLSRC="$MTOOLSRC" mcopy -o "$f" "d:/$dir/" 2>/dev/null || true
+        done
+    fi
+done
+
+# 复制 boot 文件
+section "复制启动文件"
+MTOOLSRC="$MTOOLSRC" mcopy -o "$BUILD_DIR/xnix.elf" "d:/boot/xnix.elf"
+MTOOLSRC="$MTOOLSRC" mcopy -o "$BUILD_DIR/init.elf" "d:/boot/init.elf"
+MTOOLSRC="$MTOOLSRC" mcopy -o "$BUILD_DIR/initramfs.img" "d:/boot/initramfs.img"
+info "  xnix.elf, init.elf, initramfs.img"
+
+# 生成磁盘启动 grub.cfg (无 system 模块)
 section "生成 GRUB 配置"
-sudo tee "$MOUNT_POINT/boot/grub/grub.cfg" >/dev/null <<'GRUBCFG'
+GRUB_CFG=$(mktemp)
+cat > "$GRUB_CFG" <<'GRUBCFG'
 set timeout=3
 set default=0
 
-menuentry "Xnix Operating System" {
-    echo "Loading Xnix kernel..."
+menuentry "Xnix" {
     multiboot /boot/xnix.elf
-    module /boot/init.elf
-    module /boot/initramfs.img
-    module /boot/system.img
-    boot
-}
-
-menuentry "Xnix (Safe Mode)" {
-    echo "Loading Xnix kernel (safe mode)..."
-    multiboot /boot/xnix.elf safe
-    module /boot/init.elf
-    module /boot/initramfs.img
-    module /boot/system.img
+    module /boot/init.elf name=init
+    module /boot/initramfs.img name=initramfs
     boot
 }
 GRUBCFG
 
+MTOOLSRC="$MTOOLSRC" mcopy -o "$GRUB_CFG" "d:/boot/grub/grub.cfg"
+
 # 安装 GRUB
 section "安装 GRUB bootloader"
-if sudo grub-install --target=i386-pc --boot-directory="$MOUNT_POINT/boot" "$LOOP" 2>&1 | grep -i error; then
-    warn "GRUB 安装遇到警告，尝试强制安装..."
-    sudo grub-install --target=i386-pc --boot-directory="$MOUNT_POINT/boot" --force "$LOOP" >/dev/null 2>&1
-fi
-info "GRUB 安装完成"
+GRUB_CORE=$(mktemp)
 
-# 同步并卸载
-section "同步并卸载"
-sync
-sudo umount "$MOUNT_POINT"
-sudo losetup -d "$LOOP"
-rmdir "$MOUNT_POINT"
+# 生成 GRUB 核心镜像
+grub-mkimage -O i386-pc -o "$GRUB_CORE" \
+    -p "(hd0,msdos1)/boot/grub" \
+    biosdisk part_msdos fat normal multiboot boot configfile 2>/dev/null
+
+# 写入 GRUB boot.img (MBR 前 440 字节)
+GRUB_BOOT="/usr/lib/grub/i386-pc/boot.img"
+if [ -f "$GRUB_BOOT" ]; then
+    dd if="$GRUB_BOOT" of="$OUTPUT" bs=440 count=1 conv=notrunc status=none
+    info "  boot.img 写入 MBR"
+else
+    warn "grub boot.img 未找到, 跳过 MBR 写入"
+fi
+
+# 写入 GRUB 核心镜像 (从扇区 1 开始)
+dd if="$GRUB_CORE" of="$OUTPUT" bs=512 seek=1 conv=notrunc status=none
+info "  core.img 写入扇区 1+"
+
+# 清理
+rm -f "$MTOOLSRC" "$MTOOLSRC_SYS" "$GRUB_CFG" "$GRUB_CORE"
+rm -rf "$TMPDIR"
 
 # 显示结果
 section "磁盘模板生成完成"
 ACTUAL_SIZE=$(du -h "$OUTPUT" | cut -f1)
 info "文件: $OUTPUT"
 info "大小: $ACTUAL_SIZE"
-info ""
-info "此镜像将被打包进 ISO，供 installer 使用"
-
-echo ""
-echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}  测试方法${NC}"
-echo -e "${CYAN}========================================${NC}"
-echo "  QEMU:  qemu-system-i386 -m 128M -hda $OUTPUT"
-echo "  dd:    sudo dd if=$OUTPUT of=/dev/sdX bs=4M status=progress"
-echo ""

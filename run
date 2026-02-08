@@ -2,10 +2,10 @@
 # Xnix 构建运行脚本
 #
 # 用法:
-#   ./run              运行（增量编译）
+#   ./run              ISO 启动（增量编译）
 #   ./run -b           清理重建后运行
-#   ./run -n -b -i     只编译 ISO（不运行）
-#   ./run -i           ISO 模式运行
+#   ./run -n           只编译不运行
+#   ./run --disk       磁盘启动（构建 disk_template）
 #   ./run -d           调试模式
 #
 
@@ -17,13 +17,13 @@ BUILD_DIR="$PROJECT_ROOT/build"
 # 默认配置
 CLEAN_BUILD=false
 NO_RUN=false
-USE_ISO=false
+BOOT_MODE="iso"  # iso | disk
 DEBUG=false
 CONFIG_PATH=""
 QEMU_EXTRA=""
 HDA_FILE=""
 HDA_INSTALL=""
-PACK_BIN=""  # 空表示使用 CMake 默认值
+PACK_BIN=""
 
 # 帮助信息
 show_help() {
@@ -36,21 +36,22 @@ Xnix 构建运行脚本
   -h, --help          显示帮助
   -b, --build         清理重建（删除 build 目录）
   -n, --no-run        只编译不运行
-  -i, --iso           ISO 模式
+  -i, --iso           ISO 模式（默认）
+  --disk              磁盘启动模式（构建 disk_template）
   -d, --debug         调试模式（GDB 端口 1234）
   -c, --config PATH   用户服务配置路径
-  --pack-bin          强制打包 bin 工具到 rootfs.img
+  --pack-bin          强制打包 bin 工具到 system.img
   --no-pack-bin       强制不打包 bin 工具（放到 optional）
   --hda FILE          挂载硬盘镜像
   --install SRC       从源镜像复制到 --hda
   --qemu "ARGS"       额外 QEMU 参数
 
 示例:
-  ./run               # 增量编译 + 运行
-  ./run -b            # 清理重建 + 运行
-  ./run -n -b -i      # 清理重建 ISO（只编译）
-  ./run -i            # ISO 模式运行
-  ./run -d -i         # ISO 调试模式
+  ./run               # 增量编译 + ISO 启动
+  ./run -b            # 清理重建 + ISO 启动
+  ./run -n -b         # 清理重建（只编译）
+  ./run --disk        # 磁盘模式启动
+  ./run -d            # ISO 调试模式
   ./run --qemu "-m 256M -smp 4"
 EOF
 }
@@ -71,7 +72,11 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -i|--iso)
-            USE_ISO=true
+            BOOT_MODE="iso"
+            shift
+            ;;
+        --disk)
+            BOOT_MODE="disk"
             shift
             ;;
         -d|--debug)
@@ -135,20 +140,16 @@ if [ ! -f "CMakeCache.txt" ]; then
     fi
     cmake $CMAKE_OPTS ..
 elif [ -n "$PACK_BIN" ]; then
-    # 已有 CMakeCache，但用户指定了 PACK_BIN，需要重新配置
     echo "重新配置 CMake（PACK_BIN_TO_ROOTFS=$PACK_BIN）..."
     cmake -DPACK_BIN_TO_ROOTFS=$PACK_BIN ..
 fi
 
 # 编译
 echo "编译（$JOBS 核心）..."
-if $USE_ISO; then
+if [ "$BOOT_MODE" = "disk" ]; then
+    cmake --build . -j$JOBS --target disk_template
+elif [ "$BOOT_MODE" = "iso" ]; then
     cmake --build . -j$JOBS --target iso
-    cmake --build . -j$JOBS --target optional
-else
-    cmake --build . -j$JOBS --target xnix.elf --target init.elf
-    # 编译核心服务
-    cmake --build . -j$JOBS --target seriald.elf --target kbd.elf --target shell.elf 2>/dev/null || true
 fi
 
 # 只编译不运行
@@ -164,11 +165,8 @@ if [ -n "$CONFIG_PATH" ]; then
         exit 1
     fi
     echo "部署用户配置: $CONFIG_PATH"
-    # 复制到 generated 目录，会被打包到 rootfs.img
     cp "$CONFIG_PATH" "$BUILD_DIR/generated/services.conf"
-    # 如果使用 ISO，需要重新生成 rootfs
-    if $USE_ISO; then
-        cmake --build . -j$JOBS --target rootfs
+    if [ "$BOOT_MODE" = "iso" ]; then
         cmake --build . -j$JOBS --target iso
     fi
 fi
@@ -214,12 +212,12 @@ if [ -n "$QEMU_EXTRA" ]; then
 fi
 
 # 运行
-if $USE_ISO; then
+if [ "$BOOT_MODE" = "disk" ]; then
+    echo "从磁盘启动..."
+    echo "QEMU: $QEMU_CMD -hda disk_template.img $QEMU_ARGS"
+    $QEMU_CMD -hda disk_template.img $QEMU_ARGS
+elif [ "$BOOT_MODE" = "iso" ]; then
     echo "从 ISO 启动..."
     echo "QEMU: $QEMU_CMD -cdrom xnix.iso -boot d $QEMU_ARGS"
     $QEMU_CMD -cdrom xnix.iso -boot d $QEMU_ARGS
-else
-    echo "启动 Xnix..."
-    echo "QEMU: $QEMU_CMD -kernel xnix.elf $QEMU_ARGS"
-    $QEMU_CMD -kernel xnix.elf $QEMU_ARGS
 fi

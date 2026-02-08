@@ -7,12 +7,13 @@
  * 启动流程:
  *   1. 启动内置 ramfsd 服务线程
  *   2. 提取 initramfs.img 到 ramfs
- *   3. 映射 system.img (FAT32) 到内存
- *   4. 从 ramfs 加载核心服务配置
- *   5. 使用 bootstrap 从 system.img 启动服务(绕过 VFS)
- *   6. 等待 /sys 挂载完成
- *   7. 加载用户配置(可通过引导参数 config=xxx 覆盖)
- *   8. 按配置启动用户服务
+ *   3. 从 ramfs 加载核心服务配置
+ *   4. 使用 bootstrap 从 ramfs 启动核心服务(绕过 VFS)
+ *   5. vfsserver ready -> 迁移到 vfsserver, mount ramfs at "/"
+ *   6. fatfsd ready -> vfs_mount("/", fatfs_ep), vfsserver 执行 remount
+ *      从此所有 VFS 路径解析走 fatfsd (system.img 由 fatfsd 自行挂载)
+ *   7. 从 VFS 读 /etc/user_services.conf -> 启动用户服务
+ *   8. 系统就绪 (shell 可用)
  */
 
 #include "early_console.h"
@@ -41,7 +42,7 @@ static struct svc_manager g_mgr;
 struct ramfsd_service g_ramfsd;
 
 /* 用户配置路径(可通过引导参数覆盖) */
-static const char *g_user_config_path = "/sys/etc/user_services.conf";
+static const char *g_user_config_path = "/etc/user_services.conf";
 
 static void drain_ready_notifications(handle_t init_notify_ep) {
     if (init_notify_ep == HANDLE_INVALID) {
@@ -197,69 +198,12 @@ int main(int argc, char **argv) {
     early_reset_color();
     early_puts("initramfs extracted successfully\n");
 
-    /* 映射 system.img (FAT32) */
-    early_set_color(10, 0);
-    early_puts("[INIT] ");
-    early_reset_color();
-    early_puts("mapping system.img...\n");
-
-    handle_t system_h = sys_handle_find("module_system");
-    if (system_h == HANDLE_INVALID) {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_set_color(14, 0); /* 黄色 */
-        early_puts("WARNING");
-        early_reset_color();
-        early_puts(": system.img module not found, bootstrap disabled\n");
-        g_mgr.system_volume = NULL;
-    } else {
-        uint32_t system_size = 0;
-        void    *system_addr = sys_mmap_phys(system_h, 0, 0, 0x03, &system_size);
-        if (system_addr == NULL || (intptr_t)system_addr < 0) {
-            early_set_color(10, 0);
-            early_puts("[INIT] ");
-            early_reset_color();
-            early_set_color(14, 0);
-            early_puts("WARNING");
-            early_reset_color();
-            early_puts(": failed to map system.img, bootstrap disabled\n");
-            g_mgr.system_volume = NULL;
-        } else {
-            char buf[80];
-            early_set_color(10, 0);
-            early_puts("[INIT] ");
-            early_reset_color();
-            snprintf(buf, sizeof(buf), "system.img mapped at %p, size %u bytes\n", system_addr,
-                     system_size);
-            early_puts(buf);
-
-            /* 挂载 FAT32 卷 */
-            g_mgr.system_volume = fat32_mount(system_addr, system_size);
-            if (g_mgr.system_volume == NULL) {
-                early_set_color(10, 0);
-                early_puts("[INIT] ");
-                early_reset_color();
-                early_set_color(14, 0);
-                early_puts("WARNING");
-                early_reset_color();
-                early_puts(": failed to mount system.img as FAT32, bootstrap disabled\n");
-            } else {
-                early_set_color(10, 0);
-                early_puts("[INIT] ");
-                early_reset_color();
-                early_puts("system.img mounted successfully\n");
-            }
-        }
-    }
-
     /* 从 ramfs 加载核心服务配置 */
     early_set_color(10, 0);
     early_puts("[INIT] ");
     early_reset_color();
     early_puts("loading core services config from ramfs...\n");
 
-    /* 通过 ramfs 直接读取配置文件 */
     int config_fd = ramfs_open(ramfs, "/etc/core_services.conf", VFS_O_RDONLY);
     if (config_fd < 0) {
         early_set_color(10, 0);
@@ -274,7 +218,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* 获取文件大小 */
     struct vfs_info info;
     ret = ramfs_finfo(ramfs, config_fd, &info);
     if (ret < 0) {
@@ -284,7 +227,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* 读取配置内容 */
     char *config_buf = malloc(info.size + 1);
     if (!config_buf) {
         early_puts("[INIT] FATAL: out of memory\n");
@@ -303,7 +245,6 @@ int main(int argc, char **argv) {
     config_buf[info.size] = '\0';
     ramfs_close(ramfs, config_fd);
 
-    /* 加载配置 */
     ret = svc_load_config_string(&g_mgr, config_buf);
     free(config_buf);
     if (ret < 0) {
@@ -329,20 +270,14 @@ int main(int argc, char **argv) {
         early_puts(buf);
     }
 
-    /* 初始化 VFS 客户端(初始化阶段 - 直连 ramfsd)*/
+    /* 初始化 VFS 客户端(直连 ramfsd) */
     early_set_color(10, 0);
     early_puts("[INIT] ");
     early_reset_color();
     early_puts("initializing VFS client (direct mode)...\n");
 
-    /*
-     * 注意:此时 vfsserver 还未启动
-     * 直接使用 ramfs_ep 作为 VFS endpoint,不需要调用 vfs_mount
-     * (vfs_mount 只在 vfsserver 中处理,ramfsd 不支持 MOUNT 操作)
-     */
     handle_t ramfs_ep = g_ramfsd.endpoint;
     if (ramfs_ep != HANDLE_INVALID) {
-        /* 初始化 VFS 客户端指向 ramfsd (临时直连) */
         vfs_client_init((uint32_t)ramfs_ep);
         early_set_color(10, 0);
         early_puts("[INIT] ");
@@ -355,7 +290,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* 创建 init_notify endpoint 用于接收服务就绪通知 */
+    /* 创建 init_notify endpoint */
     handle_t init_notify_ep = sys_endpoint_create("init_notify");
     if (init_notify_ep == HANDLE_INVALID) {
         early_set_color(10, 0);
@@ -376,28 +311,26 @@ int main(int argc, char **argv) {
     early_reset_color();
     early_puts("entering main loop\n");
 
-    /* 主循环:先启动核心服务,等待 /sys 可用后加载用户配置 */
+    /* 主循环 */
     static bool user_config_loaded = false;
     static bool vfsserver_migrated = false;
     bool        serial_initialized = false;
     int         loop_count         = 0;
 
     while (1) {
-        /* 收割子进程 */
         reap_children();
 
         drain_ready_notifications(init_notify_ep);
 
-        /* 服务管理器 tick (并行调度) */
         if (g_mgr.graph_valid) {
             svc_tick_parallel(&g_mgr);
         } else {
-            svc_tick(&g_mgr); /* 回退到旧的 tick */
+            svc_tick(&g_mgr);
         }
 
         drain_ready_notifications(init_notify_ep);
 
-        /* vfsserver 就绪后,迁移到 vfsserver 并重新挂载 ramfsd */
+        /* vfsserver 就绪后,迁移到 vfsserver 并挂载 ramfsd 到 "/" */
         if (!vfsserver_migrated) {
             int vfsserver_idx = svc_find_by_name(&g_mgr, "vfsserver");
             if (vfsserver_idx >= 0 && g_mgr.runtime[vfsserver_idx].ready) {
@@ -408,10 +341,8 @@ int main(int argc, char **argv) {
                     early_reset_color();
                     early_puts("migrating to vfsserver...\n");
 
-                    /* 切换到 vfsserver */
                     vfs_client_init((uint32_t)vfs_ep);
 
-                    /* 重新挂载 ramfsd 到根目录 */
                     handle_t ramfs_ep = g_ramfsd.endpoint;
                     if (ramfs_ep != HANDLE_INVALID) {
                         ret = vfs_mount("/", ramfs_ep);
@@ -421,7 +352,7 @@ int main(int argc, char **argv) {
                             early_set_color(10, 0);
                             early_puts("[INIT] ");
                             early_reset_color();
-                            early_puts("ramfsd remounted at / via vfsserver\n");
+                            early_puts("ramfsd mounted at / via vfsserver\n");
                         }
                     }
                     vfsserver_migrated = true;
@@ -429,7 +360,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        /* 检查是否可以关闭早期控制台(ttyd 就绪后,fbcond 已接管显示) */
+        /* ttyd 就绪后切换到 serial stdio */
         if (!serial_initialized) {
             int ttyd_idx = svc_find_by_name(&g_mgr, "ttyd");
             if (ttyd_idx >= 0 && g_mgr.runtime[ttyd_idx].ready) {
@@ -440,7 +371,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        /* 前几次 tick 输出诊断(early console 关闭后自动停止) */
+        /* 诊断输出 */
         if (loop_count < 5 && early_console_is_active()) {
             char buf[80];
             early_set_color(10, 0);
@@ -455,7 +386,10 @@ int main(int argc, char **argv) {
             early_puts("\n");
         }
 
-        /* 尝试加载用户配置(在 /sys 挂载后) */
+        /*
+         * 加载用户配置
+         * fatfsd remount "/" 后, /etc/user_services.conf 从 system.img 可见
+         */
         if (!user_config_loaded && serial_initialized) {
             int test_fd = vfs_open(g_user_config_path, 0);
             if (test_fd >= 0) {

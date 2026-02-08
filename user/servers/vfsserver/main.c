@@ -261,6 +261,15 @@ static int vfsd_mount(const char *path, uint32_t fs_ep) {
         return -22;
     }
 
+    /* remount: 如果路径已挂载, 替换 fs_ep */
+    for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
+        if (mount_table[i].active && strcmp(mount_table[i].path, path) == 0) {
+            mount_table[i].fs_ep = fs_ep;
+            return 0;
+        }
+    }
+
+    /* 新挂载: 分配空闲 slot */
     for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
         if (!mount_table[i].active) {
             memcpy(mount_table[i].path, path, len + 1);

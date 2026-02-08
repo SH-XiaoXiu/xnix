@@ -184,9 +184,6 @@ struct svc_profile {
     int                   perm_count;
 };
 
-/* 前向声明 */
-struct fat32_volume;
-
 /**
  * 服务管理器
  */
@@ -210,8 +207,6 @@ struct svc_manager {
     /* Permission profiles */
     struct svc_profile profiles[SVC_MAX_PROFILES];
     int                profile_count;
-
-    struct fat32_volume *system_volume;
 };
 
 /**

@@ -18,8 +18,9 @@ void path_init(void) {
     path_clear();
 
     /* 默认搜索路径 */
-    path_add("/sys/bin"); /* 系统工具 */
-    path_add("/mnt/bin"); /* 用户工具 */
+    path_add("/bin");     /* 用户程序 */
+    path_add("/sbin");    /* 系统服务 */
+    path_add("/mnt/bin"); /* 外部存储设备 */
 }
 
 bool path_add(const char *dir) {

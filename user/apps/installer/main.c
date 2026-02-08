@@ -4,6 +4,10 @@
  *
  * 将预制的磁盘镜像写入到物理磁盘
  *
+ * 镜像来源:
+ *   - 优先: module_disk_template (multiboot 模块, mmap)
+ *   - 备选: /sys/disk_template.img (VFS 路径)
+ *
  * 用法: installer <目标磁盘号>
  * 示例: installer 0    # 安装到主盘 (hda)
  *       installer 1    # 安装到从盘 (hdb)
@@ -45,21 +49,14 @@
 #define ATA_SR_DRQ  0x08
 #define ATA_SR_ERR  0x01
 
-static uint8_t g_buffer[BUFFER_SECTORS * ATA_SECTOR_SIZE] __attribute__((aligned(4)));
-
 static void ata_wait_bsy(void) {
-    while (sys_ioport_inb(ATA_STATUS) & ATA_SR_BSY)
-        ;
+    while (sys_ioport_inb(ATA_STATUS) & ATA_SR_BSY);
 }
 
 static void ata_wait_drq(void) {
-    while (!(sys_ioport_inb(ATA_STATUS) & ATA_SR_DRQ))
-        ;
+    while (!(sys_ioport_inb(ATA_STATUS) & ATA_SR_DRQ));
 }
 
-/**
- * 检查磁盘是否就绪
- */
 static bool ata_is_ready(uint8_t drive) {
     sys_ioport_outb(ATA_DRIVE_HEAD, (drive == 0 ? 0xA0 : 0xB0));
     sys_ioport_inb(ATA_STATUS);
@@ -69,9 +66,6 @@ static bool ata_is_ready(uint8_t drive) {
     return (sys_ioport_inb(ATA_STATUS) & ATA_SR_DRDY) != 0;
 }
 
-/**
- * 获取磁盘扇区数
- */
 static uint32_t ata_get_sector_count(uint8_t drive) {
     uint16_t buf[256];
 
@@ -88,13 +82,9 @@ static uint32_t ata_get_sector_count(uint8_t drive) {
         buf[i] = sys_ioport_inw(ATA_DATA);
     }
 
-    /* 字 60-61 是 28-bit LBA 扇区数 */
     return (uint32_t)buf[60] | ((uint32_t)buf[61] << 16);
 }
 
-/**
- * 写入扇区
- */
 static int ata_write(uint8_t drive, uint32_t lba, uint32_t count, const void *buffer) {
     const uint16_t *buf = (const uint16_t *)buffer;
 
@@ -126,9 +116,6 @@ static int ata_write(uint8_t drive, uint32_t lba, uint32_t count, const void *bu
     return 0;
 }
 
-/**
- * 打印进度条
- */
 static void print_progress(uint32_t current, uint32_t total) {
     int percent   = (int)((current * 100) / total);
     int bar_width = 50;
@@ -146,6 +133,67 @@ static void print_progress(uint32_t current, uint32_t total) {
     fflush(stdout);
 }
 
+/**
+ * 从内存写入到磁盘
+ */
+static int write_from_memory(uint8_t drive, const uint8_t *data, uint32_t size) {
+    uint32_t total_sectors = (size + ATA_SECTOR_SIZE - 1) / ATA_SECTOR_SIZE;
+    uint32_t current_lba   = 0;
+    uint32_t remaining     = size;
+    uint8_t  buffer[BUFFER_SECTORS * ATA_SECTOR_SIZE] __attribute__((aligned(4)));
+
+    while (remaining > 0) {
+        uint32_t chunk = BUFFER_SECTORS * ATA_SECTOR_SIZE;
+        if (chunk > remaining) {
+            chunk = remaining;
+        }
+
+        uint32_t sectors = (chunk + ATA_SECTOR_SIZE - 1) / ATA_SECTOR_SIZE;
+        memcpy(buffer, data, chunk);
+        if (chunk % ATA_SECTOR_SIZE != 0) {
+            memset(buffer + chunk, 0, sectors * ATA_SECTOR_SIZE - chunk);
+        }
+
+        if (ata_write(drive, current_lba, sectors, buffer) < 0) {
+            printf("\n错误: 写入扇区 %u 失败\n", current_lba);
+            return -1;
+        }
+
+        data += chunk;
+        remaining -= chunk;
+        current_lba += sectors;
+        print_progress(current_lba, total_sectors);
+    }
+
+    return 0;
+}
+
+/**
+ * 从 VFS 文件写入到磁盘
+ */
+static int write_from_file(uint8_t drive, int fd, uint32_t total_sectors) {
+    uint32_t current_lba = 0;
+    ssize_t  nread;
+    uint8_t  buffer[BUFFER_SECTORS * ATA_SECTOR_SIZE] __attribute__((aligned(4)));
+
+    while ((nread = vfs_read(fd, buffer, sizeof(buffer))) > 0) {
+        uint32_t sectors = (nread + ATA_SECTOR_SIZE - 1) / ATA_SECTOR_SIZE;
+        if (nread % ATA_SECTOR_SIZE != 0) {
+            memset(buffer + nread, 0, sectors * ATA_SECTOR_SIZE - nread);
+        }
+
+        if (ata_write(drive, current_lba, sectors, buffer) < 0) {
+            printf("\n错误: 写入扇区 %u 失败\n", current_lba);
+            return -1;
+        }
+
+        current_lba += sectors;
+        print_progress(current_lba, total_sectors);
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         printf("用法: installer <目标磁盘号>\n");
@@ -155,7 +203,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* 简单解析数字 */
     uint8_t target_drive = 0;
     if (argv[1][0] >= '0' && argv[1][0] <= '9') {
         target_drive = (uint8_t)(argv[1][0] - '0');
@@ -190,41 +237,58 @@ int main(int argc, char **argv) {
     uint32_t disk_mb = disk_sectors / 2048;
     printf("磁盘容量: %u MB (%u 扇区)\n", disk_mb, disk_sectors);
 
-    /* 打开镜像文件 */
-    const char *image_path = "/sys/disk_template.img";
-    printf("\n打开系统镜像: %s\n", image_path);
+    /* 尝试获取镜像: 优先 module_disk_template, 备选 VFS */
+    uint32_t image_h    = sys_handle_find("module_disk_template");
+    void    *image_data = NULL;
+    uint32_t image_size = 0;
+    int      image_fd   = -1;
 
-    int fd = vfs_open(image_path, FS_O_RDONLY);
-    if (fd < 0) {
-        printf("错误: 无法打开镜像文件 (返回值 %d)\n", fd);
-        printf("提示: 请确保从 Xnix ISO 启动\n");
-        return 1;
+    if (image_h != (uint32_t)-1) {
+        /* 内存模式: mmap module */
+        image_data = sys_mmap_phys(image_h, 0, 0, 0x03, &image_size);
+        if (image_data == NULL || (intptr_t)image_data < 0) {
+            printf("错误: 无法映射 disk_template 模块\n");
+            return 1;
+        }
+        printf("镜像来源: module_disk_template (mmap)\n");
+    } else {
+        /* VFS 模式: 从文件读取 */
+        const char *image_path = "/sys/disk_template.img";
+        printf("镜像来源: %s\n", image_path);
+
+        image_fd = vfs_open(image_path, FS_O_RDONLY);
+        if (image_fd < 0) {
+            printf("错误: 无法打开镜像文件 (返回值 %d)\n", image_fd);
+            printf("提示: 请确保从 Xnix Installer ISO 启动\n");
+            return 1;
+        }
+
+        struct vfs_stat st;
+        vfs_close(image_fd);
+        if (vfs_stat(image_path, &st) < 0) {
+            printf("错误: 无法获取镜像大小\n");
+            return 1;
+        }
+        image_size = st.size;
+
+        image_fd = vfs_open(image_path, FS_O_RDONLY);
+        if (image_fd < 0) {
+            printf("错误: 无法重新打开镜像文件\n");
+            return 1;
+        }
     }
 
-    /* 获取镜像大小 */
-    struct vfs_stat st;
-    vfs_close(fd);
-    if (vfs_stat(image_path, &st) < 0) {
-        printf("错误: 无法获取镜像大小\n");
-        return 1;
-    }
-
-    /* 重新打开文件 */
-    fd = vfs_open(image_path, FS_O_RDONLY);
-    if (fd < 0) {
-        printf("错误: 无法重新打开镜像文件\n");
-        return 1;
-    }
-
-    uint32_t image_sectors = (st.size + ATA_SECTOR_SIZE - 1) / ATA_SECTOR_SIZE;
-    uint32_t image_mb      = (st.size + 1024 * 1024 - 1) / (1024 * 1024);
+    uint32_t image_sectors = (image_size + ATA_SECTOR_SIZE - 1) / ATA_SECTOR_SIZE;
+    uint32_t image_mb      = (image_size + 1024 * 1024 - 1) / (1024 * 1024);
 
     printf("镜像大小: %u MB (%u 扇区)\n", image_mb, image_sectors);
 
     if (image_sectors > disk_sectors) {
         printf("错误: 目标磁盘空间不足 (需要 %u 扇区, 仅有 %u 扇区)\n", image_sectors,
                disk_sectors);
-        vfs_close(fd);
+        if (image_fd >= 0) {
+            vfs_close(image_fd);
+        }
         return 1;
     }
 
@@ -234,8 +298,8 @@ int main(int argc, char **argv) {
     fflush(stdout);
 
     char confirm[16];
-    int i = 0;
-    int c;
+    int  i = 0;
+    int  c;
     while (i < (int)sizeof(confirm) - 1) {
         c = getchar();
         if (c == EOF || c == '\n') {
@@ -247,35 +311,26 @@ int main(int argc, char **argv) {
 
     if (strcmp(confirm, "YES") != 0) {
         printf("\n安装已取消\n");
-        vfs_close(fd);
+        if (image_fd >= 0) {
+            vfs_close(image_fd);
+        }
         return 1;
     }
 
     /* 开始安装 */
     printf("\n开始安装系统...\n");
 
-    uint32_t current_lba = 0;
-    ssize_t  nread;
-
-    while ((nread = vfs_read(fd, g_buffer, sizeof(g_buffer))) > 0) {
-        uint32_t sectors_to_write = (nread + ATA_SECTOR_SIZE - 1) / ATA_SECTOR_SIZE;
-
-        /* 不足一个扇区时补零 */
-        if (nread % ATA_SECTOR_SIZE != 0) {
-            memset(g_buffer + nread, 0, sectors_to_write * ATA_SECTOR_SIZE - nread);
-        }
-
-        if (ata_write(target_drive, current_lba, sectors_to_write, g_buffer) < 0) {
-            printf("\n错误: 写入扇区 %u 失败\n", current_lba);
-            vfs_close(fd);
-            return 1;
-        }
-
-        current_lba += sectors_to_write;
-        print_progress(current_lba, image_sectors);
+    int ret;
+    if (image_data != NULL) {
+        ret = write_from_memory(target_drive, (const uint8_t *)image_data, image_size);
+    } else {
+        ret = write_from_file(target_drive, image_fd, image_sectors);
+        vfs_close(image_fd);
     }
 
-    vfs_close(fd);
+    if (ret < 0) {
+        return 1;
+    }
 
     printf("\n\n安装完成!\n");
     printf("\n");

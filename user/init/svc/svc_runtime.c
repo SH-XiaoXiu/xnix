@@ -1,4 +1,6 @@
 #include "early_console.h"
+#include "ramfs.h"
+#include "ramfsd_service.h"
 #include "svc_internal.h"
 
 #include <d/protocol/vfs.h>
@@ -13,6 +15,9 @@
 #include <xnix/syscall.h>
 
 #include "bootstrap/bootstrap.h"
+
+/* 外部定义: init/main.c */
+extern struct ramfsd_service g_ramfsd;
 
 static bool probe_fs_ready(uint32_t ep, uint32_t timeout_ms) {
     uint32_t       elapsed        = 0;
@@ -29,12 +34,7 @@ static bool probe_fs_ready(uint32_t ep, uint32_t timeout_ms) {
 
         int ret = sys_ipc_call(ep, &msg, &reply, 500);
         if (ret == 0) {
-            printf("  Probe succeeded!\n");
             return true;
-        }
-
-        if (elapsed < 200) {
-            printf("  Probe attempt (elapsed=%ums) failed: ret=%d\n", elapsed, ret);
         }
 
         msleep(probe_interval);
@@ -57,6 +57,139 @@ static int do_mount(struct svc_config *cfg) {
     return ret;
 }
 
+/**
+ * 解析 args 字符串, 填充 exec_args->argv 和 argc
+ */
+static void build_argv(struct abi_exec_args *exec_args, char *args) {
+    exec_args->argc = 0;
+    if (args[0] == '\0') {
+        return;
+    }
+
+    char *p      = args;
+    int   in_arg = 0;
+    char *start  = p;
+
+    for (;; p++) {
+        if (*p == ' ' || *p == '\0') {
+            if (in_arg && exec_args->argc < ABI_EXEC_MAX_ARGS) {
+                size_t len = p - start;
+                if (len >= ABI_EXEC_MAX_ARG_LEN) {
+                    len = ABI_EXEC_MAX_ARG_LEN - 1;
+                }
+                memcpy(exec_args->argv[exec_args->argc], start, len);
+                exec_args->argv[exec_args->argc][len] = '\0';
+                exec_args->argc++;
+                in_arg = 0;
+            }
+            if (*p == '\0') {
+                break;
+            }
+        } else if (!in_arg) {
+            start  = p;
+            in_arg = 1;
+        }
+    }
+}
+
+/**
+ * 从 ramfs 加载 ELF 并使用 bootstrap_exec 启动
+ */
+static int start_via_bootstrap(struct svc_manager *mgr, struct svc_config *cfg) {
+    struct ramfs_ctx *ramfs = ramfsd_service_get_ramfs(&g_ramfsd);
+
+    int fd = ramfs_open(ramfs, cfg->path, VFS_O_RDONLY);
+    if (fd < 0) {
+        return -1;
+    }
+
+    struct vfs_info info;
+    if (ramfs_finfo(ramfs, fd, &info) < 0) {
+        ramfs_close(ramfs, fd);
+        return -1;
+    }
+
+    void *elf_data = malloc(info.size);
+    if (!elf_data) {
+        ramfs_close(ramfs, fd);
+        return -1;
+    }
+
+    int nread = ramfs_read(ramfs, fd, elf_data, 0, info.size);
+    ramfs_close(ramfs, fd);
+    if (nread < 0) {
+        free(elf_data);
+        return -1;
+    }
+
+    /* 准备 handles */
+    struct spawn_handle handles[ABI_EXEC_MAX_HANDLES];
+    int                 handle_count = 0;
+
+    for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
+        handles[handle_count].src = cfg->handles[i].src_handle;
+        snprintf(handles[handle_count].name, sizeof(handles[handle_count].name), "%s",
+                 cfg->handles[i].name);
+        handle_count++;
+    }
+
+    if (mgr->init_notify_ep != HANDLE_INVALID && handle_count < ABI_EXEC_MAX_HANDLES) {
+        handles[handle_count].src = mgr->init_notify_ep;
+        snprintf(handles[handle_count].name, sizeof(handles[handle_count].name), "%s",
+                 "init_notify");
+        handle_count++;
+    }
+
+    int pid = bootstrap_exec(elf_data, (size_t)nread, cfg->name, NULL, handles, handle_count,
+                             cfg->profile[0] ? cfg->profile : NULL);
+
+    free(elf_data);
+    return pid;
+}
+
+/**
+ * 通过 sys_exec (VFS) 启动
+ */
+static int start_via_exec(struct svc_manager *mgr, struct svc_config *cfg) {
+    struct abi_exec_args exec_args;
+    memset(&exec_args, 0, sizeof(exec_args));
+
+    size_t path_len = strlen(cfg->path);
+    if (path_len >= ABI_EXEC_PATH_MAX) {
+        path_len = ABI_EXEC_PATH_MAX - 1;
+    }
+    memcpy(exec_args.path, cfg->path, path_len);
+    exec_args.path[path_len] = '\0';
+
+    if (cfg->profile[0] != '\0') {
+        size_t profile_len = strlen(cfg->profile);
+        if (profile_len >= ABI_SPAWN_PROFILE_LEN) {
+            profile_len = ABI_SPAWN_PROFILE_LEN - 1;
+        }
+        memcpy(exec_args.profile_name, cfg->profile, profile_len);
+        exec_args.profile_name[profile_len] = '\0';
+    }
+
+    build_argv(&exec_args, cfg->args);
+    exec_args.flags = 0;
+
+    exec_args.handle_count = (uint32_t)cfg->handle_count;
+    for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
+        exec_args.handles[i].src = cfg->handles[i].src_handle;
+        snprintf(exec_args.handles[i].name, sizeof(exec_args.handles[i].name), "%s",
+                 cfg->handles[i].name);
+    }
+
+    if (mgr->init_notify_ep != HANDLE_INVALID && exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
+        int n                    = (int)exec_args.handle_count;
+        exec_args.handles[n].src = mgr->init_notify_ep;
+        snprintf(exec_args.handles[n].name, sizeof(exec_args.handles[n].name), "%s", "init_notify");
+        exec_args.handle_count++;
+    }
+
+    return sys_exec(&exec_args);
+}
+
 int svc_start_service(struct svc_manager *mgr, int idx) {
     struct svc_config  *cfg = &mgr->configs[idx];
     struct svc_runtime *rt  = &mgr->runtime[idx];
@@ -66,149 +199,27 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     int pid;
 
     if (cfg->type == SVC_TYPE_PATH) {
-        /* 检查是否从 system.img 加载(使用 bootstrap) */
-        /* 路径以 /sbin/ 或 /bin/ 开头时从 system.img 读取 */
-        bool use_bootstrap = false;
-        if (mgr->system_volume != NULL) {
-            if (strncmp(cfg->path, "/sbin/", 6) == 0 || strncmp(cfg->path, "/bin/", 5) == 0 ||
-                strncmp(cfg->path, "/drivers/", 9) == 0 || strncmp(cfg->path, "/etc/", 5) == 0) {
-                use_bootstrap = true;
-            }
-        }
-
-        if (use_bootstrap) {
-            /* 从 system.img 读取 ELF */
-            const void *elf_data = NULL;
-            size_t      elf_size = 0;
-
-            if (fat32_open(mgr->system_volume, cfg->path, &elf_data, &elf_size) < 0) {
-                if (early_console_is_active()) {
-                    char buf[160];
-                    snprintf(buf, sizeof(buf), "[INIT] ERROR: failed to load %s from system.img\n",
-                             cfg->path);
-                    early_puts(buf);
-                } else {
-                    printf("Failed to load %s from system.img\n", cfg->path);
-                }
-                rt->state = SVC_STATE_FAILED;
-                return -1;
-            }
-
-            /* 准备 handles */
-            struct spawn_handle handles[ABI_EXEC_MAX_HANDLES];
-            int                 handle_count = 0;
-
-            for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
-                handles[handle_count].src = cfg->handles[i].src_handle;
-                snprintf(handles[handle_count].name, sizeof(handles[handle_count].name), "%s",
-                         cfg->handles[i].name);
-                handle_count++;
-            }
-
-            if (mgr->init_notify_ep != HANDLE_INVALID && handle_count < ABI_EXEC_MAX_HANDLES) {
-                handles[handle_count].src = mgr->init_notify_ep;
-                snprintf(handles[handle_count].name, sizeof(handles[handle_count].name), "%s",
-                         "init_notify");
-                handle_count++;
-            }
-
-            /* 使用 bootstrap_exec */
-            pid = bootstrap_exec(elf_data, elf_size, cfg->name, NULL, handles, handle_count,
-                                 cfg->profile[0] ? cfg->profile : NULL);
-
-            /* 释放 ELF 数据 */
-            free((void *)elf_data);
+        if (cfg->builtin) {
+            /* 核心服务: 从 ramfs 加载 (bootstrap) */
+            pid = start_via_bootstrap(mgr, cfg);
         } else {
-            /* 回退到标准 sys_exec(需要 VFS) */
-            struct abi_exec_args exec_args;
-            memset(&exec_args, 0, sizeof(exec_args));
-
-            size_t path_len = strlen(cfg->path);
-            if (path_len >= ABI_EXEC_PATH_MAX) {
-                path_len = ABI_EXEC_PATH_MAX - 1;
-            }
-            memcpy(exec_args.path, cfg->path, path_len);
-            exec_args.path[path_len] = '\0';
-
-            if (cfg->profile[0] != '\0') {
-                size_t profile_len = strlen(cfg->profile);
-                if (profile_len >= ABI_SPAWN_PROFILE_LEN) {
-                    profile_len = ABI_SPAWN_PROFILE_LEN - 1;
-                }
-                memcpy(exec_args.profile_name, cfg->profile, profile_len);
-                exec_args.profile_name[profile_len] = '\0';
-            } else {
-                exec_args.profile_name[0] = '\0';
-            }
-
-            /* 解析args */
-            exec_args.argc = 0;
-            if (cfg->args[0] != '\0') {
-                /* 简单的空格分割解析 */
-                char *args_copy   = cfg->args;
-                char *token_start = args_copy;
-                int   in_arg      = 0;
-
-                for (char *p = args_copy;; p++) {
-                    if (*p == ' ' || *p == '\0') {
-                        if (in_arg && exec_args.argc < ABI_EXEC_MAX_ARGS) {
-                            size_t len = p - token_start;
-                            if (len >= ABI_EXEC_MAX_ARG_LEN) {
-                                len = ABI_EXEC_MAX_ARG_LEN - 1;
-                            }
-                            memcpy(exec_args.argv[exec_args.argc], token_start, len);
-                            exec_args.argv[exec_args.argc][len] = '\0';
-                            exec_args.argc++;
-                            in_arg = 0;
-                        }
-                        if (*p == '\0') {
-                            break;
-                        }
-                    } else if (!in_arg) {
-                        token_start = p;
-                        in_arg      = 1;
-                    }
-                }
-            }
-
-            exec_args.flags = 0;
-
-            exec_args.handle_count = (uint32_t)cfg->handle_count;
-            for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
-                exec_args.handles[i].src = cfg->handles[i].src_handle;
-                snprintf(exec_args.handles[i].name, sizeof(exec_args.handles[i].name), "%s",
-                         cfg->handles[i].name);
-            }
-
-            if (mgr->init_notify_ep != HANDLE_INVALID &&
-                exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
-                int n                    = (int)exec_args.handle_count;
-                exec_args.handles[n].src = mgr->init_notify_ep;
-                snprintf(exec_args.handles[n].name, sizeof(exec_args.handles[n].name), "%s",
-                         "init_notify");
-                exec_args.handle_count++;
-            }
-
-            pid = sys_exec(&exec_args);
+            /* 用户服务: 通过 VFS 加载 (sys_exec) */
+            pid = start_via_exec(mgr, cfg);
         }
     } else {
-        /* type=module is no longer supported (sys_spawn removed) */
         if (early_console_is_active()) {
             char buf[160];
-            snprintf(buf, sizeof(buf),
-                     "[INIT] ERROR: type=module no longer supported for %s (use type=path)\n",
+            snprintf(buf, sizeof(buf), "[INIT] ERROR: type=module no longer supported for %s\n",
                      cfg->name);
             early_puts(buf);
         } else {
-            printf("ERROR: type=module no longer supported for %s (use type=path)\n", cfg->name);
+            printf("ERROR: type=module no longer supported for %s\n", cfg->name);
         }
         rt->state = SVC_STATE_FAILED;
         return -1;
     }
 
     if (pid < 0) {
-        extern void early_puts(const char *);
-        extern bool early_console_is_active(void);
         if (early_console_is_active()) {
             char buf[160];
             snprintf(buf, sizeof(buf), "[INIT] ERROR: failed to start %s (err %d)\n", cfg->name,
@@ -222,8 +233,7 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     }
 
     if (early_console_is_active()) {
-        extern void early_puts(const char *);
-        char        buf[160];
+        char buf[160];
         snprintf(buf, sizeof(buf), "[INIT] started %s (pid %d)\n", cfg->name, pid);
         early_puts(buf);
     } else {
@@ -237,7 +247,6 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     rt->mounted        = false;
     rt->ready          = false;
 
-    /* 如果启动的是shell,立即抑制诊断输出,避免与shell输出混乱 */
     if (strcmp(cfg->name, "shell") == 0) {
         svc_suppress_diagnostics();
     }
@@ -280,7 +289,6 @@ int svc_try_mount_service(struct svc_manager *mgr, int idx) {
         return -1;
     }
 
-    printf("Probing %s readiness (ep=%u for '%s')...\n", cfg->name, cfg->mount_ep, ep_name);
     if (!probe_fs_ready(cfg->mount_ep, 5000)) {
         printf("Timeout: %s did not respond to probes\n", cfg->name);
         rt->state = SVC_STATE_FAILED;
