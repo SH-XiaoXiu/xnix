@@ -21,6 +21,7 @@ set(ARCH_DIR "${CMAKE_SOURCE_DIR}/main/arch/${ARCH}")
 set(CMAKE_C_FLAGS "-m32 -ffreestanding -fno-stack-protector -fno-pie -nostdlib -nostartfiles -Wall -Wextra")
 set(CMAKE_C_FLAGS_DEBUG "-g -O0")
 set(CMAKE_C_FLAGS_RELEASE "-O2")
+# ASM_FLAGS 需要包含头文件路径，以便汇编预处理器能找到 boot_config.h
 set(CMAKE_ASM_FLAGS "-m32 -g")
 set(CMAKE_EXE_LINKER_FLAGS "-m32 -T${ARCH_DIR}/boot/kernel.ld -nostdlib -no-pie -Wl,--build-id=none")
 
@@ -75,7 +76,26 @@ set(CFG_MAX_BOOT_RESOURCES 32 CACHE STRING "Max boot resources collected for ini
 # 内存配置
 # ============================================
 set(CFG_THREAD_STACK_SIZE 4096 CACHE STRING "Thread kernel stack size (bytes)")
-set(CFG_KERNEL_DIRECT_MAP_MB 64 CACHE STRING "Kernel direct mapping size (MB)")
+set(CFG_KERNEL_DIRECT_MAP_MB 512 CACHE STRING "Kernel direct mapping size (MB)")
+
+# ============================================
+# 启动参数计算（Multiboot 页表）
+# ============================================
+# x86 32位: 每个页表映射 4MB, 每个页表 1024 项, 每项 4 字节
+math(EXPR BOOT_PAGE_TABLE_COUNT "${CFG_KERNEL_DIRECT_MAP_MB} / 4")
+math(EXPR BOOT_PAGE_TABLE_ENTRIES "${BOOT_PAGE_TABLE_COUNT} * 1024")
+math(EXPR BOOT_PAGE_TABLE_SIZE "${BOOT_PAGE_TABLE_COUNT} * 4096")
+
+message(STATUS "Kernel direct map: ${CFG_KERNEL_DIRECT_MAP_MB}MB")
+message(STATUS "  Page tables needed: ${BOOT_PAGE_TABLE_COUNT}")
+message(STATUS "  Total entries: ${BOOT_PAGE_TABLE_ENTRIES}")
+message(STATUS "  Total size: ${BOOT_PAGE_TABLE_SIZE} bytes")
+
+# 生成启动配置头文件
+configure_file(
+        ${CMAKE_SOURCE_DIR}/main/arch/x86/boot/boot_config.h.in
+        ${CMAKE_BINARY_DIR}/include/asm/boot_config.h
+)
 
 # ============================================
 # CPU 配置

@@ -1,0 +1,19 @@
+/**
+ * 启动配置（CMake 自动生成）
+ *
+ * 此文件由 CMake 根据 CFG_KERNEL_DIRECT_MAP_MB 自动生成
+ * 请勿手动修改，修改 CMakeLists.txt 中的配置即可
+ */
+
+#ifndef _ASM_BOOT_CONFIG_H
+#define _ASM_BOOT_CONFIG_H
+
+/* 直接映射大小 (MB) */
+#define BOOT_DIRECT_MAP_MB @CFG_KERNEL_DIRECT_MAP_MB@
+
+/* 页表计算结果 */
+#define BOOT_PAGE_TABLE_COUNT @BOOT_PAGE_TABLE_COUNT@      /* 需要的页表数量 */
+#define BOOT_PAGE_TABLE_ENTRIES @BOOT_PAGE_TABLE_ENTRIES@  /* 总页表项数 */
+#define BOOT_PAGE_TABLE_SIZE @BOOT_PAGE_TABLE_SIZE@        /* 页表总字节数 */
+
+#endif /* _ASM_BOOT_CONFIG_H */

@@ -1,6 +1,8 @@
 # Multiboot header 让QEMU/GRUB直接加载内核
 # 使用GAS语法，可以直接用gcc编译
 
+#include <asm/boot_config.h>
+
 .set ALIGN,      1<<0             # 对齐加载的模块
 .set MEMINFO,    1<<1             # 提供内存映射
 .set VIDEO_MODE, 1<<2             # 请求视频模式
@@ -25,7 +27,7 @@ multiboot_header:
 .long 32                         # bpp: 32 位色深
 
 # 启动阶段临时页表（.boot.data 段，链接到低物理地址）
-# 映射 64MB: 16个页表 + 1个页目录 + 1个低地址页表 = 72KB
+# 映射大小由 CMake 配置: BOOT_DIRECT_MAP_MB MB
 .section .boot.data, "aw", @progbits
 .align 4096
 
@@ -35,9 +37,9 @@ boot_page_directory:
 boot_page_table_low:     # 映射低 4MB (0x0 -> 0x0)
 .skip 4096
 
-# 高地址映射：16个页表，映射 64MB (0xC0000000 -> 0x0)
+# 高地址映射：BOOT_PAGE_TABLE_COUNT 个页表
 boot_page_tables_high:
-.skip 65536              # 16 * 4096 = 65536 字节
+.skip BOOT_PAGE_TABLE_SIZE
 
 # 入口点
 .section .text
@@ -63,11 +65,11 @@ _start:
     add $4, %edi
     loop 1b
 
-    # 初始化高地址页表（映射 64MB: 0xC0000000-0xC3FFFFFF -> 0x0-0x3FFFFFF）
+    # 初始化高地址页表（映射大小由配置决定）
     mov $boot_page_tables_high, %edi
     sub $KERNEL_VIRT_BASE, %edi
     xor %esi, %esi
-    mov $16384, %ecx                  # 16个页表 * 1024项 = 16384项
+    mov $BOOT_PAGE_TABLE_ENTRIES, %ecx  # 配置生成的总页表项数
 2:
     mov %esi, %eax
     or $0x003, %eax
@@ -93,11 +95,11 @@ _start:
     or $0x003, %eax
     mov %eax, (%edi)
 
-    # PDE[768-783] -> 16个高地址页表
+    # PDE[768-...] -> BOOT_PAGE_TABLE_COUNT 个高地址页表
     mov $boot_page_tables_high, %eax
     sub $KERNEL_VIRT_BASE, %eax
     lea 3072(%edi), %edx              # &PDE[768] = edi + 768*4
-    mov $16, %ecx
+    mov $BOOT_PAGE_TABLE_COUNT, %ecx
 3:
     mov %eax, %esi
     or $0x003, %esi
