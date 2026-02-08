@@ -111,8 +111,12 @@ else
     fi
     PART_SECTORS=$((SIZE_MB * 2048 - PART_START))
 
-    # 格式化分区
-    mkfs.fat -F 16 -n "XNIX" --offset $PART_START "$OUTPUT" $PART_SECTORS >/dev/null
+    # 创建独立分区镜像并格式化, 再写回磁盘 (避免 --offset 兼容性问题)
+    PART_IMG=$(mktemp)
+    dd if=/dev/zero of="$PART_IMG" bs=512 count=$PART_SECTORS status=none
+    mkfs.fat -F 16 -n "XNIX" "$PART_IMG" >/dev/null
+    dd if="$PART_IMG" of="$OUTPUT" bs=512 seek=$PART_START conv=notrunc status=none
+    rm -f "$PART_IMG"
 
     # mtools 配置: 通过 partition 访问
     MTOOLSRC=$(mktemp)

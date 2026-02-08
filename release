@@ -54,15 +54,10 @@ cd "$BUILD_DIR"
 info "配置 CMake (Release)..."
 cmake "$SCRIPT_DIR" -DCMAKE_BUILD_TYPE=Release -DCFG_DEBUG=OFF
 
-info "编译 installer ISO..."
-make -j"$(nproc)" iso_installer
-
-info "编译 optional..."
-make -j"$(nproc)" optional 2>/dev/null || true
+info "编译所有 ELF (并行)..."
+make -j"$(nproc)"
 
 info "剥离符号表..."
-
-# 保留调试符号，剥离 ELF
 for elf in *.elf; do
     [[ -f "$elf" ]] || continue
     [[ "$elf" == *".debug" ]] && continue
@@ -71,12 +66,11 @@ for elf in *.elf; do
     info "  $elf: $(stat -c%s "$elf") bytes"
 done
 
-# 重新生成镜像（使用剥离后的 ELF）
-info "重新生成磁盘模板..."
-make disk_template
+info "编译 installer ISO (使用剥离后的 ELF)..."
+make -j"$(nproc)" iso_installer
 
-info "重新打包 installer ISO..."
-make iso_installer
+info "编译 optional..."
+make -j"$(nproc)" optional 2>/dev/null || true
 
 echo ""
 info "发布版本构建完成"

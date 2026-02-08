@@ -72,7 +72,7 @@ section "创建 MBR 分区表"
 } | fdisk "$OUTPUT" >/dev/null 2>&1 || true
 
 # 获取分区偏移
-PART_START=$(fdisk -l "$OUTPUT" 2>/dev/null | awk '/^.*\*/{print $3}')
+PART_START=$(fdisk -l "$OUTPUT" 2>/dev/null | awk '$2=="*"{print $3}')
 if [ -z "$PART_START" ]; then
     PART_START=2048
 fi
@@ -81,11 +81,16 @@ PART_SECTORS=$((SIZE_MB * 2048 - PART_START))
 
 info "分区起始扇区: $PART_START (偏移 $PART_OFFSET)"
 
-# 格式化分区为 FAT32 (使用 offset)
-section "格式化 FAT32 文件系统"
-mkfs.fat -F 16 -n "XNIX" --offset $PART_START "$OUTPUT" $PART_SECTORS >/dev/null
+# 创建独立分区镜像并格式化, 再写回磁盘 (避免 --offset 兼容性问题)
+section "格式化 FAT16 文件系统"
+PART_IMG=$(mktemp)
+PART_SIZE_BYTES=$((PART_SECTORS * 512))
+dd if=/dev/zero of="$PART_IMG" bs=512 count=$PART_SECTORS status=none
+mkfs.fat -F 16 -n "XNIX" "$PART_IMG" >/dev/null
+dd if="$PART_IMG" of="$OUTPUT" bs=512 seek=$PART_START conv=notrunc status=none
+rm -f "$PART_IMG"
 
-# 配置 mtools (使用 offset 访问分区)
+# 配置 mtools (使用 partition 访问分区)
 MTOOLSRC=$(mktemp)
 cat > "$MTOOLSRC" <<EOF
 drive d:
@@ -108,23 +113,17 @@ drive s:
     file="$BUILD_DIR/system.img"
 EOF
 
-# 临时目录用于中转
+# 临时目录用于中转（批量复制减少 mcopy 调用次数）
 TMPDIR=$(mktemp -d)
 
-# 复制 system.img 内容到磁盘模板
-# 使用 mcopy 从 system.img 提取文件到临时目录, 再复制到磁盘模板
-for dir in sbin bin etc sys drivers; do
-    MTOOLSRC="$MTOOLSRC_SYS" mcopy -s -n "s:/$dir" "$TMPDIR/" 2>/dev/null || true
-done
+# 一次性从 system.img 提取所有目录
+MTOOLSRC="$MTOOLSRC_SYS" mcopy -s -n "s::/*" "$TMPDIR/" 2>/dev/null || true
 
 export MTOOLSRC="$MTOOLSRC"
-# 再从临时目录复制到磁盘模板
+# 批量复制到磁盘模板
 for dir in sbin bin etc sys drivers; do
     if [ -d "$TMPDIR/$dir" ]; then
-        for f in "$TMPDIR/$dir"/*; do
-            [ -f "$f" ] || continue
-            MTOOLSRC="$MTOOLSRC" mcopy -o "$f" "d:/$dir/" 2>/dev/null || true
-        done
+        MTOOLSRC="$MTOOLSRC" mcopy -s -o "$TMPDIR/$dir" "d:/" 2>/dev/null || true
     fi
 done
 
