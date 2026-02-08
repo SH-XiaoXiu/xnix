@@ -156,7 +156,7 @@ file(WRITE ${INSTALLER_FILELIST} "${INSTALLER_FILES_CONTENT}")
 
 add_custom_command(
         OUTPUT ${SYSTEM_INSTALLER_IMG}
-        COMMAND ${CMAKE_COMMAND} -E env dd if=/dev/zero of=${SYSTEM_INSTALLER_IMG} bs=1M count=8 status=none
+        COMMAND ${CMAKE_COMMAND} -E env dd if=/dev/zero of=${SYSTEM_INSTALLER_IMG} bs=1M count=16 status=none
         COMMAND mkfs.fat -F 16 ${SYSTEM_INSTALLER_IMG}
         COMMAND mmd -i ${SYSTEM_INSTALLER_IMG} ::/sbin ::/bin ::/etc || true
         COMMAND ${CMAKE_COMMAND}
@@ -164,7 +164,7 @@ add_custom_command(
         -DFILELIST=${INSTALLER_FILELIST}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/copy_system_files.cmake
         DEPENDS shell.elf installer.elf ${INITRAMFS_DEPENDS}
-        COMMENT "生成 system_installer.img (FAT32, 8MB)..."
+        COMMENT "生成 system_installer.img (FAT16, 16MB)..."
 )
 
 add_custom_target(system_installer DEPENDS ${SYSTEM_INSTALLER_IMG})
