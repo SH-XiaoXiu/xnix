@@ -62,35 +62,52 @@ static int vfs_handler(struct ipc_message *msg) {
     return vfs_dispatch(fatfs_get_ops(), &g_fatfs, msg);
 }
 
-int main(void) {
-    handle_t ep = env_get_handle("fatfs_ep");
+int main(int argc, char **argv) {
+    /* 解析参数: --ata 强制 ATA 模式 */
+    bool force_ata = false;
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "--ata") == 0) {
+            force_ata = true;
+        }
+    }
+
+    const char *ep_name  = force_ata ? "fatfs_ata_ep" : "fatfs_ep";
+    const char *svc_name = force_ata ? "fatfsd_ata" : "fatfsd";
+
+    handle_t ep = env_get_handle(ep_name);
     if (ep == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to find fatfs_ep handle\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to find %s handle\n", ep_name);
         return 1;
     }
 
-    /* 检测模式: module_system 存在则为内存模式 */
-    handle_t system_h = sys_handle_find("module_system");
-    if (system_h != HANDLE_INVALID) {
-        /* 内存模式 */
-        uint32_t system_size = 0;
-        void    *system_addr = sys_mmap_phys(system_h, 0, 0, 0x03, &system_size);
-        if (system_addr == NULL || (intptr_t)system_addr < 0) {
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to mmap module_system\n");
-            return 1;
-        }
+    bool use_ata = force_ata;
 
-        disk_init_memory(system_addr, system_size);
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " memory mode (size=%u)\n",
-                  system_size);
-    } else {
-        /* ATA 模式 */
+    if (!force_ata) {
+        /* 自动检测: module_system 存在则为内存模式 */
+        handle_t system_h = sys_handle_find("module_system");
+        if (system_h != HANDLE_INVALID) {
+            uint32_t system_size = 0;
+            void    *system_addr = sys_mmap_phys(system_h, 0, 0, 0x03, &system_size);
+            if (system_addr == NULL || (intptr_t)system_addr < 0) {
+                ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]",
+                          " failed to mmap module_system\n");
+                return 1;
+            }
+
+            disk_init_memory(system_addr, system_size);
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " memory mode (size=%u)\n",
+                      system_size);
+        } else {
+            use_ata = true;
+        }
+    }
+
+    if (use_ata) {
         if (ata_init() < 0) {
             ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " ata init failed\n");
             return 1;
         }
 
-        /* 读取 MBR */
         uint8_t mbr[512];
         if (ata_read(0, 0, 1, mbr) < 0) {
             ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to read MBR\n");
@@ -99,13 +116,13 @@ int main(void) {
 
         uint32_t base_lba = 0;
         if (parse_mbr_first_partition(mbr, &base_lba) < 0) {
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " no valid MBR partition found\n");
-            return 1;
+            /* 无有效 MBR, 视为裸磁盘 (无分区表, base_lba=0) */
+            base_lba = 0;
         }
 
         disk_init_ata(0, base_lba);
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]",
-                  " ATA mode (drive=0, partition LBA=%u)\n", base_lba);
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " ATA mode (drive=0, base_lba=%u)\n",
+                  base_lba);
     }
 
     /* 初始化 FatFs */
@@ -117,12 +134,12 @@ int main(void) {
     struct udm_server srv = {
         .endpoint = ep,
         .handler  = vfs_handler,
-        .name     = "fatfsd",
+        .name     = svc_name,
     };
 
     udm_server_init(&srv);
-    svc_notify_ready("fatfsd");
-    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " started\n");
+    svc_notify_ready(svc_name);
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " %s started\n", svc_name);
 
     udm_server_run(&srv);
 

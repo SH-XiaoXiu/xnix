@@ -455,7 +455,7 @@ int main(int argc, char **argv) {
 
     /* 解析命令行参数获取tty名称 */
     const char *tty_name = "tty0"; /* 默认tty0 */
-    for (int i = 1; i < argc; i++) {
+    for (int i = 0; i < argc; i++) {
         if (strncmp(argv[i], "--tty=", 6) == 0) {
             tty_name = argv[i] + 6;
             break;
