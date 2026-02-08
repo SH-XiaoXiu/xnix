@@ -11,6 +11,16 @@ static struct {
 
 /**
  * 初始化 Profile 系统
+ *
+ * TODO: 完善多用户权限系统
+ * 当前简化设计: 预定义静态 profile (init/driver/default)
+ *
+ * 未来需要实现:
+ * - 用户/组管理 (uid/gid, /etc/passwd, /etc/group)
+ * - 文件系统权限 (rwx, setuid/setgid, ACL)
+ * - 动态权限调整 (sudo, su, capabilities)
+ * - 权限审计与日志
+ * - 安全策略框架
  */
 void perm_profile_init(void) {
     spin_init(&g_profiles.lock);

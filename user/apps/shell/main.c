@@ -137,8 +137,18 @@ static void run_external(const char *path, int argc, char **argv, int background
     struct abi_exec_args exec_args;
     memset(&exec_args, 0, sizeof(exec_args));
 
-    /* TODO: 应由 init 创建 app profile,shell 从配置或环境变量获取 */
-    memcpy(exec_args.profile_name, "default", 8);
+    /*
+     * TODO: 完善权限传递机制
+     * 当前简化设计: shell 有 init profile (xnix.*), 子进程继承完全权限
+     *
+     * 未来需要实现:
+     * - 用户权限系统 (uid/gid)
+     * - 文件权限 (rwx, owner/group)
+     * - 权限提升机制 (sudo/setuid)
+     * - 进程权限降级 (drop privileges)
+     * - 按需权限分配 (根据可执行文件属性或 policy)
+     */
+    memcpy(exec_args.profile_name, "init", 5);
 
     /* 复制路径 */
     size_t path_len = strlen(path);
