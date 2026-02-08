@@ -71,6 +71,12 @@ static void acpi_map_range(paddr_t phys, size_t len) {
     }
 }
 
+static __attribute__((noinline)) uint16_t acpi_read_u16(paddr_t phys) {
+    uint16_t v;
+    memcpy(&v, (const void *)(uintptr_t)phys, sizeof(v));
+    return v;
+}
+
 static const struct acpi_rsdp *acpi_find_rsdp_in_range(paddr_t start, paddr_t end) {
     acpi_map_range(start, end - start);
     for (paddr_t addr = start; addr < end; addr += 16) {
@@ -98,7 +104,7 @@ static const struct acpi_rsdp *acpi_find_rsdp(void) {
     const paddr_t bios_rom_end   = 0x100000;
 
     acpi_map_range(ebda_ptr_addr, 2);
-    uint16_t ebda_seg = *(uint16_t *)ebda_ptr_addr;
+    uint16_t ebda_seg = acpi_read_u16(ebda_ptr_addr);
     if (ebda_seg) {
         paddr_t                 ebda_base = (paddr_t)ebda_seg << 4;
         const struct acpi_rsdp *rsdp      = acpi_find_rsdp_in_range(ebda_base, ebda_base + 1024);

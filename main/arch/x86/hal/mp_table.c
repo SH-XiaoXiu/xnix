@@ -29,6 +29,12 @@ static uint8_t checksum(const void *data, size_t len) {
     return sum;
 }
 
+static __attribute__((noinline)) uint16_t mp_read_u16(paddr_t phys) {
+    uint16_t v;
+    memcpy(&v, (const void *)(uintptr_t)phys, sizeof(v));
+    return v;
+}
+
 /**
  * 在指定内存范围内搜索 MP 浮点结构
  *
@@ -72,7 +78,7 @@ static const struct mp_fps *mp_find_fps(void) {
     const struct mp_fps *fps = NULL;
 
     /* 尝试从 EBDA 搜索 */
-    uint16_t ebda_seg = *(uint16_t *)EBDA_PTR_ADDR;
+    uint16_t ebda_seg = mp_read_u16(EBDA_PTR_ADDR);
     if (ebda_seg) {
         paddr_t ebda_base = (paddr_t)ebda_seg << 4;
         fps               = mp_search_range(ebda_base, ebda_base + 1024);
