@@ -15,7 +15,7 @@
 #define SVC_NAME_MAX        16
 #define SVC_PATH_MAX        64
 #define SVC_HANDLE_NAME_MAX 32
-#define SVC_HANDLES_MAX     8
+#define SVC_HANDLES_MAX     16
 #define SVC_DEPS_MAX        8
 #define SVC_MAX_SERVICES    16
 #define SVC_MAX_HANDLE_DEFS 32
@@ -318,6 +318,11 @@ void svc_tick_parallel(struct svc_manager *mgr);
  * 用于在 shell 启动后停止诊断日志输出
  */
 void svc_suppress_diagnostics(void);
+
+/**
+ * 检查是否已抑制信息输出(shell 启动后为 true)
+ */
+bool svc_is_quiet(void);
 
 /**
  * 处理服务就绪通知(IPC 消息)

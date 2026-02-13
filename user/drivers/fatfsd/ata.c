@@ -34,20 +34,58 @@
 #define ATA_SR_IDX  0x02 /* Index */
 #define ATA_SR_ERR  0x01 /* Error */
 
-static void ata_wait_bsy(void) {
-    while (sys_ioport_inb(ATA_STATUS) & ATA_SR_BSY);
+/* 等待超时(迭代次数, 每次含 syscall 开销约 ~1us, 总计约数百毫秒) */
+#define ATA_TIMEOUT_LOOPS 500000
+
+/**
+ * 等待 BSY 位清除(带超时)
+ * @return 0 成功, -1 超时
+ */
+static int ata_wait_bsy(void) {
+    for (int i = 0; i < ATA_TIMEOUT_LOOPS; i++) {
+        if (!(sys_ioport_inb(ATA_STATUS) & ATA_SR_BSY)) {
+            return 0;
+        }
+    }
+    return -1;
 }
 
-static void ata_wait_drq(void) {
-    while (!(sys_ioport_inb(ATA_STATUS) & ATA_SR_DRQ));
+/**
+ * 等待 DRQ 位置位(带超时)
+ * @return 0 成功, -1 超时或错误
+ */
+static int ata_wait_drq(void) {
+    for (int i = 0; i < ATA_TIMEOUT_LOOPS; i++) {
+        uint8_t status = sys_ioport_inb(ATA_STATUS);
+        if (status & ATA_SR_DRQ) {
+            return 0;
+        }
+        if (status & (ATA_SR_ERR | ATA_SR_DF)) {
+            return -1;
+        }
+    }
+    return -1;
 }
 
 int ata_init(void) {
-    /*
-     * 简单的复位/检测逻辑
-     * 实际初始化可能需要更复杂的流程,这里假设 BIOS/QEMU 已初始化好
-     */
     sys_ioport_outb(ATA_CTRL_COMMAND, 0x02); /* 禁用中断 */
+
+    /* 浮动总线检测: 无设备时端口读回 0xFF */
+    uint8_t status = sys_ioport_inb(ATA_STATUS);
+    if (status == 0xFF) {
+        return -1;
+    }
+
+    /* 等待 BSY 清除(驱动器可能正在复位) */
+    if (ata_wait_bsy() < 0) {
+        return -1;
+    }
+
+    /* 验证主盘就绪 */
+    if (!ata_is_ready(0)) {
+        return -1;
+    }
+
     return 0;
 }
 
@@ -63,7 +101,9 @@ bool ata_is_ready(uint8_t drive) {
 int ata_read(uint8_t drive, uint32_t lba, uint32_t count, void *buffer) {
     uint16_t *buf = (uint16_t *)buffer;
 
-    ata_wait_bsy();
+    if (ata_wait_bsy() < 0) {
+        return -1;
+    }
     sys_ioport_outb(ATA_DRIVE_HEAD, 0xE0 | (drive << 4) | ((lba >> 24) & 0x0F));
     sys_ioport_outb(ATA_SECTOR_COUNT, (uint8_t)count);
     sys_ioport_outb(ATA_LBA_LOW, (uint8_t)lba);
@@ -72,8 +112,12 @@ int ata_read(uint8_t drive, uint32_t lba, uint32_t count, void *buffer) {
     sys_ioport_outb(ATA_COMMAND, ATA_CMD_READ_PIO);
 
     for (uint32_t i = 0; i < count; i++) {
-        ata_wait_bsy();
-        ata_wait_drq();
+        if (ata_wait_bsy() < 0) {
+            return -1;
+        }
+        if (ata_wait_drq() < 0) {
+            return -1;
+        }
         for (int j = 0; j < 256; j++) {
             buf[i * 256 + j] = sys_ioport_inw(ATA_DATA);
         }
@@ -85,7 +129,9 @@ int ata_read(uint8_t drive, uint32_t lba, uint32_t count, void *buffer) {
 int ata_write(uint8_t drive, uint32_t lba, uint32_t count, const void *buffer) {
     const uint16_t *buf = (const uint16_t *)buffer;
 
-    ata_wait_bsy();
+    if (ata_wait_bsy() < 0) {
+        return -1;
+    }
     sys_ioport_outb(ATA_DRIVE_HEAD, 0xE0 | (drive << 4) | ((lba >> 24) & 0x0F));
     sys_ioport_outb(ATA_SECTOR_COUNT, (uint8_t)count);
     sys_ioport_outb(ATA_LBA_LOW, (uint8_t)lba);
@@ -94,13 +140,19 @@ int ata_write(uint8_t drive, uint32_t lba, uint32_t count, const void *buffer) {
     sys_ioport_outb(ATA_COMMAND, ATA_CMD_WRITE_PIO);
 
     for (uint32_t i = 0; i < count; i++) {
-        ata_wait_bsy();
-        ata_wait_drq();
+        if (ata_wait_bsy() < 0) {
+            return -1;
+        }
+        if (ata_wait_drq() < 0) {
+            return -1;
+        }
         for (int j = 0; j < 256; j++) {
             sys_ioport_outw(ATA_DATA, buf[i * 256 + j]);
         }
         sys_ioport_outb(ATA_COMMAND, ATA_CMD_CACHE_FLUSH);
-        ata_wait_bsy();
+        if (ata_wait_bsy() < 0) {
+            return -1;
+        }
     }
 
     return 0;
@@ -109,8 +161,9 @@ int ata_write(uint8_t drive, uint32_t lba, uint32_t count, const void *buffer) {
 uint32_t ata_get_sector_count(uint8_t drive) {
     uint16_t identify_data[256];
 
-    /* 等待驱动器不忙 */
-    ata_wait_bsy();
+    if (ata_wait_bsy() < 0) {
+        return 0;
+    }
 
     /* 选择驱动器 */
     sys_ioport_outb(ATA_DRIVE_HEAD, drive == 0 ? 0xA0 : 0xB0);
@@ -118,18 +171,19 @@ uint32_t ata_get_sector_count(uint8_t drive) {
     /* 发送 IDENTIFY 命令 */
     sys_ioport_outb(ATA_COMMAND, ATA_CMD_IDENTIFY);
 
-    /* 等待驱动器响应 */
-    ata_wait_bsy();
+    if (ata_wait_bsy() < 0) {
+        return 0;
+    }
 
     /* 检查状态 */
     uint8_t status = sys_ioport_inb(ATA_STATUS);
     if (status == 0 || (status & ATA_SR_ERR)) {
-        /* 驱动器不存在或命令失败 */
         return 0;
     }
 
-    /* 等待数据就绪 */
-    ata_wait_drq();
+    if (ata_wait_drq() < 0) {
+        return 0;
+    }
 
     /* 读取 IDENTIFY 数据(256 个 16 位字) */
     for (int i = 0; i < 256; i++) {

@@ -230,8 +230,8 @@ int main(void) {
     fb_info.blue_pos   = pinfo.blue_pos;
     fb_info.blue_size  = pinfo.blue_size;
 
-    ulog_tagf(stdout, TERM_COLOR_WHITE, "[fbd]", " Framebuffer: %ux%u, %u bpp, pitch=%u\n", fb_info.width, fb_info.height,
-           fb_info.bpp, fb_info.pitch);
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[fbd]", " Framebuffer: %ux%u, %u bpp, pitch=%u\n",
+              fb_info.width, fb_info.height, fb_info.bpp, fb_info.pitch);
 
     /* 映射 framebuffer 到用户空间 */
     fb_addr = (uint8_t *)sys_mmap_phys(fb_handle, 0, 0, 0x03, NULL); /* PROT_READ | PROT_WRITE */

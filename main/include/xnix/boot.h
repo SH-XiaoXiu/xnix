@@ -117,16 +117,4 @@ int boot_get_framebuffer(struct boot_framebuffer_info *info);
  */
 void boot_handles_collect(void);
 
-/**
- * 为 init 进程直接创建 boot handles
- *
- * 在 init 进程的 handle 表中创建硬件资源 handles(如 framebuffer).
- * 应该在 spawn_core 中 creator == NULL 时调用.
- *
- * @param proc init 进程
- * @return 0 成功, <0 失败
- */
-struct process;
-int boot_handles_create_for_init(struct process *proc);
-
 #endif

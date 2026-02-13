@@ -42,8 +42,8 @@ size_t utf8_decode_next(const uint8_t *s, size_t len, uint32_t *codepoint) {
             *codepoint = 0xFFFDu;
             return 1;
         }
-        uint32_t cp = ((uint32_t)(b0 & 0x0Fu) << 12) | ((uint32_t)(b1 & 0x3Fu) << 6) |
-                      (uint32_t)(b2 & 0x3Fu);
+        uint32_t cp =
+            ((uint32_t)(b0 & 0x0Fu) << 12) | ((uint32_t)(b1 & 0x3Fu) << 6) | (uint32_t)(b2 & 0x3Fu);
         if (cp < 0x800u || (cp >= 0xD800u && cp <= 0xDFFFu)) {
             *codepoint = 0xFFFDu;
             return 1;
@@ -77,4 +77,3 @@ size_t utf8_decode_next(const uint8_t *s, size_t len, uint32_t *codepoint) {
     *codepoint = 0xFFFDu;
     return 1;
 }
-

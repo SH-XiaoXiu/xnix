@@ -1,6 +1,7 @@
 #include <xnix/perm.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
+#include <xnix/string.h>
 
 /**
  * 检查进程是否拥有权限(热路径)
@@ -94,4 +95,53 @@ bool perm_check_name(struct process *proc, const char *node) {
         return false;
     }
     return perm_check(proc, id);
+}
+
+/**
+ * 检查 profile 的所有 GRANT 权限是否都在 parent_state 中也是 GRANT
+ *
+ * 用于强制"子进程权限 ⊆ 父进程权限"的降级约束.
+ * 遍历 profile(含继承链)中的所有 GRANT 规则,
+ * 逐一检查 parent_state 中是否也授予了相应权限.
+ *
+ * 特例:如果 parent 拥有 xnix.*(全通配)则任何 profile 都是其子集.
+ */
+bool perm_profile_is_subset(struct perm_profile *profile, struct perm_state *parent_state) {
+    if (!profile || !parent_state) {
+        return true;
+    }
+
+    /* 确保 parent 的位图是最新的 */
+    if (parent_state->dirty) {
+        perm_resolve(parent_state);
+    }
+
+    /* 检查 parent 是否有 xnix.* (全通配) */
+    perm_id_t wildcard_id = perm_lookup("xnix.*");
+    if (wildcard_id != PERM_ID_INVALID && perm_check_bitmap(parent_state, wildcard_id)) {
+        return true;
+    }
+
+    /* 遍历 profile 继承链 */
+    struct perm_profile *p = profile;
+    while (p) {
+        for (uint32_t i = 0; i < p->perm_count; i++) {
+            if (p->perms[i].value != PERM_GRANT) {
+                continue;
+            }
+            /* profile 中有 GRANT, 检查 parent 是否也有 */
+            perm_id_t id = perm_lookup(p->perms[i].node);
+            if (id == PERM_ID_INVALID) {
+                /* 节点尚未注册,保守处理:允许 */
+                continue;
+            }
+            if (!perm_check_bitmap(parent_state, id)) {
+                pr_debug("[PERM] subset check failed: %s (id=%u)\n", p->perms[i].node, id);
+                return false;
+            }
+        }
+        p = p->parent;
+    }
+
+    return true;
 }

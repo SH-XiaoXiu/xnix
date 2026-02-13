@@ -11,6 +11,7 @@
 #include <vfs_client.h>
 #include <xnix/abi/handle.h>
 #include <xnix/abi/process.h>
+#include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
 
@@ -93,6 +94,36 @@ static void build_argv(struct abi_exec_args *exec_args, char *args) {
 }
 
 /**
+ * 查找服务配置中的 tty handle,返回其 src_handle
+ */
+static uint32_t find_tty_handle(struct svc_config *cfg) {
+    for (int i = 0; i < cfg->handle_count; i++) {
+        if (strncmp(cfg->handles[i].name, "tty", 3) == 0 &&
+            cfg->handles[i].src_handle != HANDLE_INVALID) {
+            return cfg->handles[i].src_handle;
+        }
+    }
+    return HANDLE_INVALID;
+}
+
+/**
+ * 向 handle 数组追加标准 stdio handles(stdin/stdout/stderr → tty)
+ */
+static int inject_stdio_handles(struct spawn_handle *handles, int count, int max,
+                                uint32_t tty_handle) {
+    if (tty_handle == HANDLE_INVALID || count >= max) {
+        return count;
+    }
+    const char *names[] = {HANDLE_STDIO_STDIN, HANDLE_STDIO_STDOUT, HANDLE_STDIO_STDERR};
+    for (int i = 0; i < 3 && count < max; i++) {
+        handles[count].src = tty_handle;
+        snprintf(handles[count].name, sizeof(handles[count].name), "%s", names[i]);
+        count++;
+    }
+    return count;
+}
+
+/**
  * 从 ramfs 加载 ELF 并使用 bootstrap_exec 启动
  */
 static int start_via_bootstrap(struct svc_manager *mgr, struct svc_config *cfg) {
@@ -133,12 +164,17 @@ static int start_via_bootstrap(struct svc_manager *mgr, struct svc_config *cfg) 
         handle_count++;
     }
 
+    /* 注入 init_notify(优先于 stdio 确保 ready 通知可达) */
     if (mgr->init_notify_ep != HANDLE_INVALID && handle_count < ABI_EXEC_MAX_HANDLES) {
         handles[handle_count].src = mgr->init_notify_ep;
         snprintf(handles[handle_count].name, sizeof(handles[handle_count].name), "%s",
                  "init_notify");
         handle_count++;
     }
+
+    /* 注入标准 stdio handles */
+    uint32_t tty_h = find_tty_handle(cfg);
+    handle_count   = inject_stdio_handles(handles, handle_count, ABI_EXEC_MAX_HANDLES, tty_h);
 
     int pid = bootstrap_exec(elf_data, (size_t)nread, cfg->name, NULL, handles, handle_count,
                              cfg->profile[0] ? cfg->profile : NULL);
@@ -173,19 +209,27 @@ static int start_via_exec(struct svc_manager *mgr, struct svc_config *cfg) {
     build_argv(&exec_args, cfg->args);
     exec_args.flags = 0;
 
-    exec_args.handle_count = (uint32_t)cfg->handle_count;
+    int hcount = 0;
     for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
-        exec_args.handles[i].src = cfg->handles[i].src_handle;
-        snprintf(exec_args.handles[i].name, sizeof(exec_args.handles[i].name), "%s",
+        exec_args.handles[hcount].src = cfg->handles[i].src_handle;
+        snprintf(exec_args.handles[hcount].name, sizeof(exec_args.handles[hcount].name), "%s",
                  cfg->handles[i].name);
+        hcount++;
     }
 
-    if (mgr->init_notify_ep != HANDLE_INVALID && exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
-        int n                    = (int)exec_args.handle_count;
-        exec_args.handles[n].src = mgr->init_notify_ep;
-        snprintf(exec_args.handles[n].name, sizeof(exec_args.handles[n].name), "%s", "init_notify");
-        exec_args.handle_count++;
+    /* 注入 init_notify(优先于 stdio 确保 ready 通知可达) */
+    if (mgr->init_notify_ep != HANDLE_INVALID && hcount < ABI_EXEC_MAX_HANDLES) {
+        exec_args.handles[hcount].src = mgr->init_notify_ep;
+        snprintf(exec_args.handles[hcount].name, sizeof(exec_args.handles[hcount].name), "%s",
+                 "init_notify");
+        hcount++;
     }
+
+    /* 注入标准 stdio handles */
+    uint32_t tty_h = find_tty_handle(cfg);
+    hcount         = inject_stdio_handles(exec_args.handles, hcount, ABI_EXEC_MAX_HANDLES, tty_h);
+
+    exec_args.handle_count = (uint32_t)hcount;
 
     return sys_exec(&exec_args);
 }

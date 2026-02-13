@@ -49,7 +49,8 @@
 #define SYS_HANDLE_DUPLICATE 403 /* 复制 handle: ebx=src, ecx=dst_hint, edx=name */
 
 /* 权限 (420-439) */
-#define SYS_PERM_CHECK 420 /* 检查权限: ebx=perm_id */
+#define SYS_PERM_CHECK          420 /* 检查权限: ebx=perm_id */
+#define SYS_PERM_PROFILE_CREATE 421 /* 创建权限 profile: ebx=abi_profile_create_args* */
 
 /* 硬件访问 (500-519) - 基于权限 */
 #define SYS_IOPORT_OUTB 500 /* 写端口 8位: ebx=port, ecx=val (需 xnix.io.port.<port> 权限) */

@@ -289,4 +289,16 @@ int perm_profile_inherit(struct perm_profile *child, struct perm_profile *parent
  */
 struct perm_profile *perm_profile_find(const char *name);
 
+/**
+ * @brief 检查 profile 是否为 parent_state 的子集
+ *
+ * 用于权限降级约束:子进程 profile 的所有 GRANT 权限
+ * 必须在父进程的权限状态中也存在.
+ *
+ * @param profile       待检查的 profile
+ * @param parent_state  父进程的权限状态
+ * @return true 如果 profile 是子集,false 否则
+ */
+bool perm_profile_is_subset(struct perm_profile *profile, struct perm_state *parent_state);
+
 #endif /* XNIX_PERM_H */

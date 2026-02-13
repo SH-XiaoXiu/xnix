@@ -8,6 +8,8 @@
 #ifndef XNIX_ABI_PERM_H
 #define XNIX_ABI_PERM_H
 
+#include <xnix/abi/stdint.h>
+
 /* Permission node name constants (for userspace reference) */
 
 /* IPC 发送权限 */
@@ -34,5 +36,21 @@
 /* Limits */
 /* 权限节点名称最大长度 */
 #define PERM_NODE_NAME_MAX 128
+
+/* Profile 动态创建参数 */
+#define ABI_PERM_RULE_MAX    16   /* 单个 profile 最多 16 条规则 */
+#define ABI_PERM_NODE_MAX    64   /* 权限节点名最大长度 */
+
+struct abi_perm_rule {
+    char     node[ABI_PERM_NODE_MAX]; /* 如 "xnix.ipc.*" */
+    uint32_t value;                   /* 0=DENY, 1=GRANT */
+};
+
+struct abi_profile_create_args {
+    char                 name[32];                      /* Profile 名称 */
+    char                 parent[32];                    /* 父 profile 名(空=无继承)*/
+    uint32_t             rule_count;
+    struct abi_perm_rule rules[ABI_PERM_RULE_MAX];
+};
 
 #endif /* XNIX_ABI_PERM_H */

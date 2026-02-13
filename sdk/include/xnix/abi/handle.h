@@ -48,4 +48,11 @@ struct spawn_handle {
     char     name[HANDLE_NAME_MAX]; /* 子进程中的 handle 名称 */
 };
 
+/**
+ * @brief 标准 Handle 名称
+ */
+#define HANDLE_STDIO_STDIN   "stdin"
+#define HANDLE_STDIO_STDOUT  "stdout"
+#define HANDLE_STDIO_STDERR  "stderr"
+
 #endif /* XNIX_ABI_HANDLE_H */

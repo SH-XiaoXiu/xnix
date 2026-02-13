@@ -9,6 +9,7 @@
 #include <stdio_internal.h>
 #include <string.h>
 #include <unistd.h>
+#include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
@@ -29,7 +30,7 @@ static inline void _debug_write(const void *buf, size_t len) {
     (void)ret;
 }
 
-/* 查找 tty endpoint */
+/* 查找 tty endpoint (优先 tty1/serial,保证服务默认 stdio 走串口) */
 static handle_t find_tty_ep(void) {
     handle_t h;
 
@@ -46,21 +47,47 @@ static handle_t find_tty_ep(void) {
     return HANDLE_INVALID;
 }
 
+/* 查找标准流 handle, 回退到 tty */
+static handle_t find_stdio_ep(const char *stdio_name) {
+    handle_t h = env_get_handle(stdio_name);
+    if (h != HANDLE_INVALID) {
+        return h;
+    }
+    return HANDLE_INVALID;
+}
+
 void _libc_stdio_init(void) {
-    handle_t tty = find_tty_ep();
+    /* 优先查找标准 handle 名称 (stdin/stdout/stderr) */
+    handle_t stdin_ep  = find_stdio_ep(HANDLE_STDIO_STDIN);
+    handle_t stdout_ep = find_stdio_ep(HANDLE_STDIO_STDOUT);
+    handle_t stderr_ep = find_stdio_ep(HANDLE_STDIO_STDERR);
+
+    /* 回退到 tty handle */
+    if (stdin_ep == HANDLE_INVALID || stdout_ep == HANDLE_INVALID || stderr_ep == HANDLE_INVALID) {
+        handle_t tty = find_tty_ep();
+        if (stdin_ep == HANDLE_INVALID) {
+            stdin_ep = tty;
+        }
+        if (stdout_ep == HANDLE_INVALID) {
+            stdout_ep = tty;
+        }
+        if (stderr_ep == HANDLE_INVALID) {
+            stderr_ep = tty;
+        }
+    }
 
     memset(&_stdin_file, 0, sizeof(_stdin_file));
-    _stdin_file.tty_ep   = tty;
+    _stdin_file.tty_ep   = stdin_ep;
     _stdin_file.buf_mode = _IONBF;
     _stdin_file.flags    = _FILE_READ;
 
     memset(&_stdout_file, 0, sizeof(_stdout_file));
-    _stdout_file.tty_ep   = tty;
+    _stdout_file.tty_ep   = stdout_ep;
     _stdout_file.buf_mode = _IOLBF;
     _stdout_file.flags    = _FILE_WRITE;
 
     memset(&_stderr_file, 0, sizeof(_stderr_file));
-    _stderr_file.tty_ep   = tty;
+    _stderr_file.tty_ep   = stderr_ep;
     _stderr_file.buf_mode = _IONBF;
     _stderr_file.flags    = _FILE_WRITE;
 }

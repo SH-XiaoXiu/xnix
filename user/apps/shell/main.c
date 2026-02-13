@@ -137,18 +137,11 @@ static void run_external(const char *path, int argc, char **argv, int background
     struct abi_exec_args exec_args;
     memset(&exec_args, 0, sizeof(exec_args));
 
-    /*
-     * TODO: 完善权限传递机制
-     * 当前简化设计: shell 有 init profile (xnix.*), 子进程继承完全权限
-     *
-     * 未来需要实现:
-     * - 用户权限系统 (uid/gid)
-     * - 文件权限 (rwx, owner/group)
-     * - 权限提升机制 (sudo/setuid)
-     * - 进程权限降级 (drop privileges)
-     * - 按需权限分配 (根据可执行文件属性或 policy)
-     */
-    memcpy(exec_args.profile_name, "init", 5);
+    /* 使用继承标志:自动继承有名称的 handles + stdio */
+    exec_args.flags = ABI_EXEC_INHERIT_NAMED | ABI_EXEC_INHERIT_STDIO;
+
+    /* profile_name 留空 → 继承父进程 profile(权限降级)*/
+    exec_args.profile_name[0] = '\0';
 
     /* 复制路径 */
     size_t path_len = strlen(path);
@@ -173,24 +166,8 @@ static void run_external(const char *path, int argc, char **argv, int background
         exec_args.argv[i][len] = '\0';
     }
 
-    /* 传递 handles */
+    /* 不需要手动列举 handles:INHERIT_NAMED 自动继承 */
     exec_args.handle_count = 0;
-    if (g_vfs_ep != HANDLE_INVALID && exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
-        exec_args.handles[exec_args.handle_count].src = g_vfs_ep;
-        strncpy(exec_args.handles[exec_args.handle_count].name, "vfs_ep",
-                sizeof(exec_args.handles[exec_args.handle_count].name) - 1);
-        exec_args.handles[exec_args.handle_count]
-            .name[sizeof(exec_args.handles[exec_args.handle_count].name) - 1] = '\0';
-        exec_args.handle_count++;
-    }
-    if (g_tty_ep != HANDLE_INVALID && exec_args.handle_count < ABI_EXEC_MAX_HANDLES) {
-        exec_args.handles[exec_args.handle_count].src = g_tty_ep;
-        strncpy(exec_args.handles[exec_args.handle_count].name, "tty0",
-                sizeof(exec_args.handles[exec_args.handle_count].name) - 1);
-        exec_args.handles[exec_args.handle_count]
-            .name[sizeof(exec_args.handles[exec_args.handle_count].name) - 1] = '\0';
-        exec_args.handle_count++;
-    }
 
     /* 执行 */
     int pid = sys_exec(&exec_args);

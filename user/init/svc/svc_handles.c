@@ -99,13 +99,9 @@ int svc_parse_handles(struct svc_manager *mgr, const char *handles_str,
 
         struct svc_handle_def *def = handle_def_get_or_add(mgr, spec);
         if (def && def->type == SVC_HANDLE_TYPE_NONE) {
-            /* module_*, fb_mem, vga_mem 是内核注入的 handle, 使用 inherit */
-            if (strncmp(spec, "module_", 7) == 0 || strcmp(spec, "fb_mem") == 0 ||
-                strcmp(spec, "vga_mem") == 0) {
-                def->type = SVC_HANDLE_TYPE_INHERIT;
-            } else {
-                def->type = SVC_HANDLE_TYPE_ENDPOINT;
-            }
+            /* handle 类型由配置文件中的 [handle.*] 段显式声明.
+             * 未声明的 handle 默认为 endpoint. */
+            def->type = SVC_HANDLE_TYPE_ENDPOINT;
         }
 
         count++;

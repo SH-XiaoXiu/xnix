@@ -12,42 +12,15 @@ static struct {
 /**
  * 初始化 Profile 系统
  *
- * TODO: 完善多用户权限系统
- * 当前简化设计: 预定义静态 profile (init/driver/default)
+ * Profile 定义已移至用户态配置(core_services.conf 的 [profile.*] 段).
+ * init 进程的权限在 process_spawn_init() 中通过 perm_grant(state, "xnix.*") 设置,
+ * 不需要命名 profile.
  *
- * 未来需要实现:
- * - 用户/组管理 (uid/gid, /etc/passwd, /etc/group)
- * - 文件系统权限 (rwx, setuid/setgid, ACL)
- * - 动态权限调整 (sudo, su, capabilities)
- * - 权限审计与日志
- * - 安全策略框架
+ * init 启动后通过 SYS_PERM_PROFILE_CREATE 注册所有 profile.
  */
 void perm_profile_init(void) {
     spin_init(&g_profiles.lock);
     g_profiles.count = 0;
-
-    /* 创建内置 Profile */
-    struct perm_profile *init_profile = perm_profile_create("init");
-    perm_profile_set(init_profile, "xnix.*", PERM_GRANT);
-
-    struct perm_profile *driver_profile = perm_profile_create("driver");
-    perm_profile_set(driver_profile, "xnix.ipc.*", PERM_GRANT);
-    perm_profile_set(driver_profile, PERM_NODE_HANDLE_GRANT, PERM_GRANT);
-    perm_profile_set(driver_profile, PERM_NODE_MM_MMAP, PERM_GRANT);
-    perm_profile_set(driver_profile, "xnix.debug.console", PERM_GRANT);
-
-    struct perm_profile *io_driver_profile = perm_profile_create("io_driver");
-    perm_profile_inherit(io_driver_profile, driver_profile);
-    perm_profile_set(io_driver_profile, PERM_NODE_IO_PORT_ALL, PERM_GRANT);
-    perm_profile_set(io_driver_profile, "xnix.irq.all", PERM_GRANT);
-    perm_profile_set(io_driver_profile, "xnix.debug.console", PERM_GRANT);
-
-    struct perm_profile *default_profile = perm_profile_create("default");
-    perm_profile_set(default_profile, PERM_NODE_IPC_SEND, PERM_GRANT);
-    perm_profile_set(default_profile, PERM_NODE_IPC_RECV, PERM_GRANT);
-    perm_profile_set(default_profile, PERM_NODE_PROCESS_EXEC, PERM_GRANT);
-    perm_profile_set(default_profile, "xnix.ipc.endpoint.*", PERM_GRANT);
-    perm_profile_set(default_profile, "xnix.debug.console", PERM_GRANT);
 }
 
 /**

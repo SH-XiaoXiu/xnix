@@ -203,11 +203,71 @@ static void user_thread_entry_with_args(void *arg) {
 }
 
 /**
+ * 按名称列表继承 handles
+ */
+static void spawn_inherit_by_names(struct process *dst, struct process *src, const char *names[],
+                                   uint32_t count) {
+    if (!src || !src->handles || !dst) {
+        return;
+    }
+    struct handle_table *table = src->handles;
+    for (uint32_t n = 0; n < count; n++) {
+        for (uint32_t i = 0; i < table->capacity; i++) {
+            if (table->entries[i].type != HANDLE_NONE && table->entries[i].name[0] != '\0' &&
+                strcmp(table->entries[i].name, names[n]) == 0) {
+                /* 目标中不存在同名 handle 才传递 */
+                if (handle_find(dst, names[n]) == HANDLE_INVALID) {
+                    handle_transfer(src, (handle_t)i, dst, names[n], HANDLE_INVALID);
+                }
+                break;
+            }
+        }
+    }
+}
+
+/**
+ * 继承所有有名称的 handles
+ */
+static void spawn_inherit_named_handles(struct process *dst, struct process *src) {
+    if (!src || !src->handles || !dst) {
+        return;
+    }
+    struct handle_table *table = src->handles;
+    for (uint32_t i = 0; i < table->capacity; i++) {
+        if (table->entries[i].type != HANDLE_NONE && table->entries[i].name[0] != '\0') {
+            if (handle_find(dst, table->entries[i].name) == HANDLE_INVALID) {
+                handle_transfer(src, (handle_t)i, dst, table->entries[i].name, HANDLE_INVALID);
+            }
+        }
+    }
+}
+
+/**
+ * 继承所有 handles
+ */
+static void spawn_inherit_all_handles(struct process *dst, struct process *src) {
+    if (!src || !src->handles || !dst) {
+        return;
+    }
+    struct handle_table *table = src->handles;
+    for (uint32_t i = 0; i < table->capacity; i++) {
+        if (table->entries[i].type != HANDLE_NONE) {
+            const char *name = table->entries[i].name[0] != '\0' ? table->entries[i].name : NULL;
+            if (name && handle_find(dst, name) != HANDLE_INVALID) {
+                continue;
+            }
+            handle_transfer(src, (handle_t)i, dst, name, HANDLE_INVALID);
+        }
+    }
+}
+
+/**
  * 内部核心 spawn 函数
  */
 static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
                         const struct spawn_handle *handles, uint32_t handle_count,
-                        struct perm_profile *profile, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN]) {
+                        struct perm_profile *profile, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
+                        uint32_t flags) {
     struct process *proc = (struct process *)process_create(name, profile);
     if (!proc) {
         pr_err("Failed to create process");
@@ -225,10 +285,15 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
         }
     }
 
-    /* 对于 init 进程(由内核进程创建),直接创建 boot handles */
-    /* 注意: process_get_current() 返回 kernel_process 而非 NULL */
-    if (creator && creator->pid == 0) {
-        boot_handles_create_for_init(proc);
+    /* Handle 继承策略 */
+    if (flags & ABI_EXEC_INHERIT_STDIO) {
+        const char *stdio_names[] = {HANDLE_STDIO_STDIN, HANDLE_STDIO_STDOUT, HANDLE_STDIO_STDERR};
+        spawn_inherit_by_names(proc, creator, stdio_names, 3);
+    }
+    if (flags & ABI_EXEC_INHERIT_ALL) {
+        spawn_inherit_all_handles(proc, creator);
+    } else if (flags & ABI_EXEC_INHERIT_NAMED) {
+        spawn_inherit_named_handles(proc, creator);
     }
 
     /* 加载 ELF */
@@ -289,36 +354,46 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
  */
 
 pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
-    struct perm_profile *profile = perm_profile_find("init");
-    return spawn_core("init", elf_data, elf_size, NULL, 0, profile, 0, NULL);
+    /* init 进程不使用 named profile, 直接使用 NULL profile.
+     * spawn_core 创建进程后, init 的 perm_state 通过 perm_grant("xnix.*") 获得全权限.
+     * 详见 boot_start_services() */
+    return spawn_core("init", elf_data, elf_size, NULL, 0, NULL, 0, NULL, ABI_EXEC_INHERIT_ALL);
 }
 
 pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size,
                            struct perm_profile *profile) {
-    return spawn_core(name, elf_data, elf_size, NULL, 0, profile, 0, NULL);
+    return spawn_core(name, elf_data, elf_size, NULL, 0, profile, 0, NULL, 0);
 }
 
 pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
                               const struct spawn_handle *handles, uint32_t handle_count,
                               struct perm_profile *profile) {
-    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, 0, NULL);
+    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, 0, NULL, 0);
 }
 
 pid_t process_spawn_module_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
                                         const struct spawn_handle *handles, uint32_t handle_count,
                                         struct perm_profile *profile, int argc,
                                         char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv);
+    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv, 0);
 }
 
 pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf_size, int argc,
                                   char argv[][ABI_EXEC_MAX_ARG_LEN], struct perm_profile *profile) {
-    return spawn_core(name, elf_data, elf_size, NULL, 0, profile, argc, argv);
+    return spawn_core(name, elf_data, elf_size, NULL, 0, profile, argc, argv, 0);
 }
 
 pid_t process_spawn_elf_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
                                      const struct spawn_handle *handles, uint32_t handle_count,
                                      struct perm_profile *profile, int argc,
                                      char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv);
+    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv, 0);
+}
+
+pid_t process_spawn_elf_ex_with_args_flags(const char *name, void *elf_data, uint32_t elf_size,
+                                           const struct spawn_handle *handles,
+                                           uint32_t handle_count, struct perm_profile *profile,
+                                           int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
+                                           uint32_t flags) {
+    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv, flags);
 }

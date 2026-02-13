@@ -187,6 +187,15 @@ pid_t process_spawn_elf_ex_with_args(const char *name, void *elf_data, uint32_t 
                                      char argv[][ABI_EXEC_MAX_ARG_LEN]);
 
 /**
+ * 从 ELF 创建进程(带 handle 传递,argv 和继承标志)
+ */
+pid_t process_spawn_elf_ex_with_args_flags(const char *name, void *elf_data, uint32_t elf_size,
+                                           const struct spawn_handle *handles,
+                                           uint32_t handle_count, struct perm_profile *profile,
+                                           int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
+                                           uint32_t flags);
+
+/**
  * 终止当前进程
  * 用于处理用户态异常,会终止进程的所有线程
  * @param signal 导致终止的信号号(用于日志和 exit_code)

@@ -6,9 +6,12 @@
  * 输入队列,行规程和前台进程.
  *
  * 架构:
- *   kbd → TTY_OP_INPUT → ttyd(tty0) → fbd (输出)
+ *   kbd → input_listener → TTY_OP_INPUT → ttyd(tty0) → fbcon/vga (输出)
  *   seriald → TTY_OP_INPUT → ttyd(tty1) → seriald (输出)
  *   shell → TTY_OP_WRITE/READ → ttyd(ttyN) → 设备驱动
+ *
+ * 每个 tty 的所有状态修改(输入队列/行规程/pending_read)均在
+ * 该 tty 的服务线程中执行,input_listener 通过 IPC 投递字符.
  */
 
 #include <d/protocol/serial.h>
@@ -591,10 +594,12 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
 }
 
 /**
- * 输入监听线程:从 kbd 读取字符并转发到 tty
+ * 输入监听线程:从 kbd 读取字符并转发到 tty0
  *
- * seriald 将 UART 输入转发给 kbd,所以 kbd 是所有输入的汇聚点.
- * 此线程通过 CONSOLE_OP_GETC 阻塞读取 kbd,收到字符后交给行规程处理.
+ * 此线程通过 CONSOLE_OP_GETC 阻塞读取 kbd,收到字符后直接调用
+ * tty_process_input 处理(包括行规程和 pending_read 回复).
+ *
+ * 串口输入由 seriald 直接发送 TTY_OP_INPUT 给 tty1,不经过此线程.
  */
 static void *input_listener_thread(void *arg) {
     struct tty_instance *tty = (struct tty_instance *)arg;
@@ -729,7 +734,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* 启动输入监听线程 */
+    /* 启动输入监听线程(仅 tty0/VGA,串口输入由 seriald 直接发送) */
     if (kbd_ep != HANDLE_INVALID) {
         struct tty_instance *input_tty = NULL;
         for (int i = 0; i < g_tty_count; i++) {
@@ -738,11 +743,13 @@ int main(int argc, char **argv) {
                 break;
             }
         }
-        if (!input_tty) {
-            input_tty = &g_ttys[0];
+        if (input_tty) {
+            pthread_t input_tid;
+            pthread_create(&input_tid, NULL, input_listener_thread, input_tty);
+        } else {
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[ttyd]",
+                      " WARNING: tty0 not available, keyboard input disabled\n");
         }
-        pthread_t input_tid;
-        pthread_create(&input_tid, NULL, input_listener_thread, input_tty);
     }
 
     /* 为每个 tty 创建服务线程(跳过 index 0,主线程负责) */

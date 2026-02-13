@@ -150,7 +150,8 @@ static void *input_thread(void *arg) {
         msleep(100); /* 等待ttyd启动 */
     }
     if (tty1_ep == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]", " tty1 not found after retries, input forwarding disabled\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]",
+                  " tty1 not found after retries, input forwarding disabled\n");
         return NULL;
     }
     bool last_was_cr = false;
@@ -227,7 +228,8 @@ int main(void) {
     /* 启动输入处理线程 */
     pthread_t tid;
     if (pthread_create(&tid, NULL, input_thread, NULL) != 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[seriald]", " ERROR: failed to create input thread\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[seriald]",
+                  " ERROR: failed to create input thread\n");
     }
 
     struct udm_server srv = {

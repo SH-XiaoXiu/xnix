@@ -158,15 +158,33 @@ static int32_t sys_exec(const uint32_t *args) {
         argc = ABI_EXEC_MAX_ARGS;
     }
 
-    /* 查找 Profile */
-    struct perm_profile *profile = perm_profile_find(kargs->profile_name);
-    if (!profile && kargs->profile_name[0] != '\0') {
-        kprintf("[sys_exec] WARNING: Profile '%s' not found for process '%s'\n",
-                kargs->profile_name, kargs->name);
+    uint32_t flags = kargs->flags;
+
+    /* 权限处理 */
+    struct perm_profile *profile;
+    if (flags & ABI_EXEC_INHERIT_PERM) {
+        /* 继承父进程 profile */
+        profile = proc->perms ? proc->perms->profile : NULL;
+    } else if (kargs->profile_name[0] != '\0') {
+        profile = perm_profile_find(kargs->profile_name);
+        if (!profile) {
+            kprintf("[sys_exec] WARNING: Profile '%s' not found for process '%s'\n",
+                    kargs->profile_name, kargs->name);
+        }
+        /* 权限降级检查:子进程 profile 不能超过父进程权限 */
+        if (profile && proc->perms && !perm_profile_is_subset(profile, proc->perms)) {
+            free_pages(elf_paddr, page_count);
+            kfree(kargs);
+            return -EPERM;
+        }
+    } else {
+        /* profile_name 为空:继承父进程 profile */
+        profile = proc->perms ? proc->perms->profile : NULL;
     }
 
-    pid_t pid = process_spawn_elf_ex_with_args(kargs->name, elf_paddr, kargs->elf_size, handles,
-                                               handle_count, profile, argc, kargs->argv);
+    pid_t pid =
+        process_spawn_elf_ex_with_args_flags(kargs->name, elf_paddr, kargs->elf_size, handles,
+                                             handle_count, profile, argc, kargs->argv, flags);
     free_pages(elf_paddr, page_count);
     kfree(kargs);
 
@@ -175,7 +193,6 @@ static int32_t sys_exec(const uint32_t *args) {
     }
     return (int32_t)pid;
 }
-
 
 /* SYS_PROCLIST: ebx=proclist_args* */
 static int32_t sys_proclist(const uint32_t *args) {

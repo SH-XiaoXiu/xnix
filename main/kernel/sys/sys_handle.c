@@ -92,16 +92,22 @@ static int32_t sys_handle_find(const uint32_t *args) {
     struct process *proc = (struct process *)process_current();
 
     char name_buf[HANDLE_NAME_MAX];
-    if (name) {
-        int ret = copy_from_user(name_buf, name, sizeof(name_buf));
-        if (ret < 0) {
-            pr_warn("copy_from_user failed for '%s': %d\n", proc->name, ret);
-            return ret;
-        }
-        name_buf[HANDLE_NAME_MAX - 1] = '\0';
-    } else {
+    if (!name) {
         return -EINVAL;
     }
+    /* 逐字节拷贝直到 '\0' 或达到上限,避免跨页越界 */
+    for (size_t i = 0; i < HANDLE_NAME_MAX; i++) {
+        char ch;
+        int  ret = copy_from_user(&ch, name + i, 1);
+        if (ret < 0) {
+            return ret;
+        }
+        name_buf[i] = ch;
+        if (ch == '\0') {
+            break;
+        }
+    }
+    name_buf[HANDLE_NAME_MAX - 1] = '\0';
 
     handle_t h = handle_find(proc, name_buf);
     if (h == HANDLE_INVALID) {

@@ -1,6 +1,7 @@
 #include "svc_internal.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <vfs_client.h>
 #include <xnix/ulog.h>
 
@@ -10,6 +11,25 @@ static bool     g_suppress_diagnostics = false;
 
 #define SVC_READY_TIMEOUT_MS 5000
 #define SVC_DIAG_INTERVAL_MS 2000
+
+/**
+ * 检查是否有其他服务依赖此服务的就绪状态
+ */
+static bool svc_is_ready_depended(struct svc_manager *mgr, int idx) {
+    const char *name = mgr->configs[idx].name;
+    for (int i = 0; i < mgr->count; i++) {
+        if (i == idx) {
+            continue;
+        }
+        struct svc_config *other = &mgr->configs[i];
+        for (int j = 0; j < other->ready_count; j++) {
+            if (strcmp(other->ready[j], name) == 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 static void svc_check_ready_timeouts(struct svc_manager *mgr) {
     for (int i = 0; i < mgr->count; i++) {
@@ -22,6 +42,12 @@ static void svc_check_ready_timeouts(struct svc_manager *mgr) {
 
         uint32_t elapsed = g_ticks - rt->start_ticks;
         if (elapsed < SVC_READY_TIMEOUT_MS) {
+            continue;
+        }
+
+        /* 无其他服务依赖其就绪状态时,静默标记为就绪 */
+        if (!svc_is_ready_depended(mgr, i)) {
+            rt->ready = true;
             continue;
         }
 
@@ -250,4 +276,8 @@ void svc_tick_parallel(struct svc_manager *mgr) {
 
 void svc_suppress_diagnostics(void) {
     g_suppress_diagnostics = true;
+}
+
+bool svc_is_quiet(void) {
+    return g_suppress_diagnostics;
 }

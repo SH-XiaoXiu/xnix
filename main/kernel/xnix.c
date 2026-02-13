@@ -188,16 +188,21 @@ static void boot_start_services(void) {
         }
     }
 
-    pid_t                init_pid     = PID_INVALID;
-    struct perm_profile *init_profile = perm_profile_find("init");
-    if (!init_profile) {
-        pr_warn("Init profile not found, spawning init without profile");
-    }
+    pid_t init_pid = PID_INVALID;
     if (init_argc > 0) {
-        init_pid = process_spawn_module_ex_with_args("init", mod_addr, mod_size, NULL, 0,
-                                                     init_profile, init_argc, init_argv);
+        init_pid = process_spawn_elf_ex_with_args_flags("init", mod_addr, mod_size, NULL, 0, NULL,
+                                                        init_argc, init_argv, ABI_EXEC_INHERIT_ALL);
     } else {
-        init_pid = process_spawn_module_ex("init", mod_addr, mod_size, NULL, 0, init_profile);
+        init_pid = process_spawn_elf_ex_with_args_flags("init", mod_addr, mod_size, NULL, 0, NULL,
+                                                        0, NULL, ABI_EXEC_INHERIT_ALL);
+    }
+
+    /* 为 init 直接授予全权限(不依赖 named profile) */
+    if (init_pid != PID_INVALID) {
+        struct process *init_proc = process_find_by_pid(init_pid);
+        if (init_proc && init_proc->perms) {
+            perm_grant(init_proc->perms, "xnix.*");
+        }
     }
 
     if (init_pid == PID_INVALID) {

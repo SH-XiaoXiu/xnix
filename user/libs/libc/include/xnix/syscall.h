@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <xnix/abi/handle.h>
 #include <xnix/abi/irq.h>
+#include <xnix/abi/perm.h>
 #include <xnix/abi/process.h>
 #include <xnix/abi/syscall.h>
 
@@ -338,7 +339,6 @@ static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *repl
  */
 #define spawn_args abi_spawn_args
 
-
 /**
  * 等待子进程退出
  * @return 进程 PID,-1 失败(设置 errno)
@@ -559,6 +559,21 @@ int sys_exec(struct abi_exec_args *args);
  */
 static inline int sys_kmsg_read(uint32_t *seq, char *buf, uint32_t size) {
     int ret = syscall3(SYS_KMSG_READ, (uint32_t)(uintptr_t)seq, (uint32_t)(uintptr_t)buf, size);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
+/**
+ * 创建权限 Profile
+ *
+ * @param args  profile 创建参数
+ * @return 0 成功, -1 失败(设置 errno)
+ */
+static inline int sys_perm_profile_create(struct abi_profile_create_args *args) {
+    int ret = syscall1(SYS_PERM_PROFILE_CREATE, (uint32_t)(uintptr_t)args);
     if (ret < 0) {
         errno = -ret;
         return -1;

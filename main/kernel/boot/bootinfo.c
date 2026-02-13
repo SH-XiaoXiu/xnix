@@ -2,7 +2,8 @@
  * @file kernel/boot/bootinfo.c
  * @brief Boot 资源信息收集
  *
- * 收集启动时的硬件资源信息,创建 boot handles 传给 init
+ * 收集启动时的硬件资源信息,在内核进程中预创建 boot handles.
+ * init 通过 INHERIT_ALL 标志继承这些 handles.
  */
 
 #include "boot_internal.h"
@@ -12,6 +13,7 @@
 #include <xnix/abi/handle.h>
 #include <xnix/boot.h>
 #include <xnix/physmem.h>
+#include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/types.h>
 
@@ -73,50 +75,29 @@ void boot_handles_collect(void) {
     }
 
     pr_info("boot: collected %u boot resources", g_boot_resources.count);
-}
 
-/**
- * 为 init 进程创建 boot handles
- *
- * 在 init 进程中直接创建硬件资源的 handles:
- * - framebuffer (fb_mem)
- * - 每个 Multiboot 模块 (module_<name>)
- *
- * 这个函数应该在 spawn_core 中 creator == NULL 时调用.
- *
- * @param proc init 进程
- * @return 0 成功, <0 失败
- */
-int boot_handles_create_for_init(struct process *proc) {
-    if (!proc) {
-        return -1;
-    }
+    /* 在内核进程中预创建 boot handles,init 通过 INHERIT_ALL 继承 */
+    extern struct process kernel_process;
+    struct process       *kproc = &kernel_process;
 
-    /* 创建 framebuffer handle */
-    handle_t fb_handle = physmem_create_fb_handle_for_proc(proc, "fb_mem");
+    handle_t fb_handle = physmem_create_fb_handle_for_proc(kproc, "fb_mem");
     if (fb_handle != HANDLE_INVALID) {
-        pr_info("boot_handles: created fb_mem handle %u for init", fb_handle);
+        pr_info("boot_handles: created fb_mem handle %u in kernel", fb_handle);
     }
 
-    /* 创建 VGA text buffer handle (0xB8000, 4KB) */
-    handle_t vga_handle = physmem_create_handle_for_proc(proc, 0xB8000, 0x1000, "vga_mem");
+    handle_t vga_handle = physmem_create_handle_for_proc(kproc, 0xB8000, 0x1000, "vga_mem");
     if (vga_handle != HANDLE_INVALID) {
-        pr_info("boot_handles: created vga_mem handle %u for init", vga_handle);
+        pr_info("boot_handles: created vga_mem handle %u in kernel", vga_handle);
     }
 
-    /* 为每个 Multiboot 模块创建 physmem handle */
     for (uint32_t i = 0; i < g_boot_resources.count; i++) {
         struct boot_resource *res = &g_boot_resources.resources[i];
-
-        /* 构建 handle 名称: "module_<name>" */
-        char handle_name[32];
+        char                  handle_name[32];
         snprintf(handle_name, sizeof(handle_name), "module_%s", res->name);
 
-        handle_t h = physmem_create_handle_for_proc(proc, res->phys_addr, res->size, handle_name);
+        handle_t h = physmem_create_handle_for_proc(kproc, res->phys_addr, res->size, handle_name);
         if (h != HANDLE_INVALID) {
             pr_info("boot_handles: created %s handle %u (%u bytes)", handle_name, h, res->size);
         }
     }
-
-    return 0;
 }

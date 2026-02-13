@@ -69,7 +69,8 @@ int main(void) {
     /* 映射VGA缓冲区 */
     void *addr = sys_mmap_phys(vga_mem, 0, 0x1000, 0x03, NULL);
     if (!addr || (intptr_t)addr < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[vgad]", " ERROR: failed to map VGA buffer (%d)\n", (int)(intptr_t)addr);
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[vgad]", " ERROR: failed to map VGA buffer (%d)\n",
+                  (int)(intptr_t)addr);
         return 1;
     }
 
