@@ -186,7 +186,7 @@ fi
 
 # 构建 QEMU 命令
 QEMU_CMD="qemu-system-i386"
-QEMU_ARGS="-serial stdio -no-reboot -m 128M -smp 2"
+QEMU_ARGS="-serial stdio -no-reboot -m 4096M -smp 2"
 
 # 硬盘
 if [ -n "$HDA_FILE" ]; then
