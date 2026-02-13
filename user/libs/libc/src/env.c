@@ -4,6 +4,7 @@
  */
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include <xnix/abi/handle.h>
 #include <xnix/env.h>
@@ -21,6 +22,9 @@ struct handle_cache {
 /* Handle 缓存 */
 static struct handle_cache g_handle_cache[16];
 static int                 g_cache_size = 0;
+
+/* 进程显示名(用于 env_require 错误消息) */
+static char g_env_name[16] = "?";
 
 /**
  * 初始化环境 handle 映射(预留接口,暂未使用)
@@ -65,4 +69,41 @@ uint32_t env_get_handle(const char *name) {
     }
 
     return (uint32_t)h;
+}
+
+void env_set_name(const char *name) {
+    size_t len = strlen(name);
+    if (len >= sizeof(g_env_name)) {
+        len = sizeof(g_env_name) - 1;
+    }
+    memcpy(g_env_name, name, len);
+    g_env_name[len] = '\0';
+}
+
+uint32_t env_require(const char *name) {
+    uint32_t h = env_get_handle(name);
+    if (h == HANDLE_INVALID) {
+        printf("%s: required handle '%s' not found\n", g_env_name, name);
+    }
+    return h;
+}
+
+void *env_mmap_resource(const char *name, uint32_t *out_size) {
+    handle_t h = sys_handle_find(name);
+    if (h == HANDLE_INVALID) {
+        printf("%s: handle '%s' not found\n", g_env_name, name);
+        return NULL;
+    }
+
+    uint32_t size = 0;
+    void    *addr = sys_mmap_phys(h, 0, 0, 0x03, &size);
+    if (!addr || (intptr_t)addr < 0) {
+        printf("%s: failed to map '%s'\n", g_env_name, name);
+        return NULL;
+    }
+
+    if (out_size) {
+        *out_size = size;
+    }
+    return addr;
 }
