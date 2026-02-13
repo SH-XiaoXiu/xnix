@@ -13,9 +13,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>
-#include <xnix/abi/process.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
+#include <xnix/proc.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
 #include <xnix/termcolor.h>
@@ -135,45 +135,16 @@ static const struct builtin_cmd *find_builtin(const char *name) {
  * @param background 是否后台运行
  */
 static void run_external(const char *path, int argc, char **argv, int background) {
-    struct abi_exec_args exec_args;
-    memset(&exec_args, 0, sizeof(exec_args));
+    struct proc_builder b;
+    proc_new(&b, path);
+    proc_inherit_named(&b);
 
-    /* 使用继承标志:自动继承有名称的 handles + stdio */
-    exec_args.flags = ABI_EXEC_INHERIT_NAMED | ABI_EXEC_INHERIT_STDIO;
-
-    /* profile_name 留空 → 继承父进程 profile(权限降级)*/
-    exec_args.profile_name[0] = '\0';
-
-    /* 复制路径 */
-    size_t path_len = strlen(path);
-    if (path_len >= ABI_EXEC_PATH_MAX) {
-        path_len = ABI_EXEC_PATH_MAX - 1;
-    }
-    memcpy(exec_args.path, path, path_len);
-    exec_args.path[path_len] = '\0';
-
-    /* 复制参数 */
-    exec_args.argc = argc;
-    if (exec_args.argc > ABI_EXEC_MAX_ARGS) {
-        exec_args.argc = ABI_EXEC_MAX_ARGS;
+    for (int i = 0; i < argc; i++) {
+        proc_add_arg(&b, argv[i]);
     }
 
-    for (int i = 0; i < exec_args.argc; i++) {
-        size_t len = strlen(argv[i]);
-        if (len >= ABI_EXEC_MAX_ARG_LEN) {
-            len = ABI_EXEC_MAX_ARG_LEN - 1;
-        }
-        memcpy(exec_args.argv[i], argv[i], len);
-        exec_args.argv[i][len] = '\0';
-    }
-
-    /* 不需要手动列举 handles:INHERIT_NAMED 自动继承 */
-    exec_args.handle_count = 0;
-
-    /* 执行 */
-    int pid = sys_exec(&exec_args);
+    int pid = proc_spawn(&b);
     if (pid > 0) {
-        /* 复制CWD到子进程 */
         vfs_copy_cwd_to_child(pid);
     }
     if (pid < 0) {

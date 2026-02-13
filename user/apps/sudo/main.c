@@ -13,9 +13,9 @@
 #include <string.h>
 #include <vfs_client.h>
 #include <xnix/abi/handle.h>
-#include <xnix/abi/process.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
+#include <xnix/proc.h>
 #include <xnix/syscall.h>
 
 /* 简单的 PATH 搜索 */
@@ -80,10 +80,6 @@ int main(int argc, char **argv) {
         vfs_client_init(vfs_ep);
     }
 
-    /* 构建 exec_args */
-    struct abi_exec_args exec_args;
-    memset(&exec_args, 0, sizeof(exec_args));
-
     /* 路径解析 */
     char path[ABI_EXEC_PATH_MAX];
     if (find_in_path(argv[cmd_start], path, sizeof(path)) < 0) {
@@ -91,43 +87,20 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    size_t path_len = strlen(path);
-    if (path_len >= ABI_EXEC_PATH_MAX) {
-        path_len = ABI_EXEC_PATH_MAX - 1;
+    /* 使用 proc_builder 构建 exec_args */
+    struct proc_builder b;
+    proc_new(&b, path);
+    proc_set_profile(&b, profile);
+    proc_inherit_named(&b);
+    for (int i = cmd_start; i < argc; i++) {
+        proc_add_arg(&b, argv[i]);
     }
-    memcpy(exec_args.path, path, path_len);
-    exec_args.path[path_len] = '\0';
-
-    /* 设置 profile */
-    size_t prof_len = strlen(profile);
-    if (prof_len >= ABI_SPAWN_PROFILE_LEN) {
-        prof_len = ABI_SPAWN_PROFILE_LEN - 1;
-    }
-    memcpy(exec_args.profile_name, profile, prof_len);
-    exec_args.profile_name[prof_len] = '\0';
-
-    /* 设置 flags */
-    exec_args.flags = ABI_EXEC_INHERIT_STDIO | ABI_EXEC_INHERIT_NAMED;
-
-    /* 设置 argv */
-    exec_args.argc = 0;
-    for (int i = cmd_start; i < argc && exec_args.argc < ABI_EXEC_MAX_ARGS; i++) {
-        size_t len = strlen(argv[i]);
-        if (len >= ABI_EXEC_MAX_ARG_LEN) {
-            len = ABI_EXEC_MAX_ARG_LEN - 1;
-        }
-        memcpy(exec_args.argv[exec_args.argc], argv[i], len);
-        exec_args.argv[exec_args.argc][len] = '\0';
-        exec_args.argc++;
-    }
-
-    exec_args.handle_count = 0;
 
     /* 通过 IPC 发送请求给 sudod */
     struct ipc_message msg = {0};
     msg.regs.data[0]       = SUDO_OP_EXEC;
-    msg.buffer.data        = (uint64_t)(uintptr_t)&exec_args;
-    msg.buffer.size        = sizeof(exec_args);
+    msg.buffer.data        = (uint64_t)(uintptr_t)&b.args;
+    msg.buffer.size        = sizeof(b.args);
 
     struct ipc_message reply = {0};
     int                ret   = sys_ipc_call(sudo_ep, &msg, &reply, 5000);
