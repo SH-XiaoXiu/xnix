@@ -3,6 +3,7 @@
  * @brief 动态显示进程信息
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <xnix/syscall.h>
@@ -90,7 +91,7 @@ int main(int argc, char **argv) {
         count = sys_proclist(&args);
         if (count < 0) {
             printf(SHOW_CURSOR);
-            printf("top: failed to get process list: %d\n", count);
+            printf("top: failed to get process list: %s\n", strerror(-count));
             return 1;
         }
 

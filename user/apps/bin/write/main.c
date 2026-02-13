@@ -10,6 +10,7 @@
  */
 
 #include <d/protocol/vfs.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>
@@ -54,7 +55,7 @@ int main(int argc, char **argv) {
     /* 打开文件 */
     int fd = vfs_open(path, flags);
     if (fd < 0) {
-        printf("write: cannot open '%s': error %d\n", path, fd);
+        printf("write: cannot open '%s': %s\n", path, strerror(-fd));
         return 1;
     }
 
@@ -68,7 +69,7 @@ int main(int argc, char **argv) {
                 /* 参数之间加空格 */
                 int ret = vfs_write(fd, " ", 1);
                 if (ret < 0) {
-                    printf("write: error writing: %d\n", ret);
+                    printf("write: error writing: %s\n", strerror(-ret));
                     vfs_close(fd);
                     return 1;
                 }
@@ -116,7 +117,7 @@ int main(int argc, char **argv) {
             if (pos >= (int)sizeof(buf) - 1 || c == '\n') {
                 int ret = vfs_write(fd, buf, pos);
                 if (ret < 0) {
-                    printf("\nwrite: error writing: %d\n", ret);
+                    printf("\nwrite: error writing: %s\n", strerror(-ret));
                     vfs_close(fd);
                     return 1;
                 }

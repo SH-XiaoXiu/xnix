@@ -3,6 +3,7 @@
  * @brief 创建目录
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <vfs_client.h>
 #include <xnix/syscall.h>
@@ -17,7 +18,7 @@ int main(int argc, char **argv) {
 
     int ret = vfs_mkdir(path);
     if (ret < 0) {
-        printf("mkdir: cannot create '%s': error %d\n", path, ret);
+        printf("mkdir: cannot create '%s': %s\n", path, strerror(-ret));
         return 1;
     }
 

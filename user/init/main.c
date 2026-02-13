@@ -22,6 +22,7 @@
 #include "ramfsd_service.h"
 #include "svc_manager.h"
 
+#include <errno.h>
 #include <libs/serial/serial.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,8 +73,8 @@ static void create_profiles_from_config(struct svc_manager *mgr) {
             early_set_color(10, 0);
             early_puts("[INIT] ");
             early_reset_color();
-            snprintf(buf, sizeof(buf), "WARNING: profile '%s' create failed (%d)\n", prof->name,
-                     ret);
+            snprintf(buf, sizeof(buf), "WARNING: profile '%s' create failed: %s\n", prof->name,
+                     strerror(-ret));
             early_puts(buf);
         } else {
             char buf[64];

@@ -8,6 +8,7 @@
  */
 
 #include <d/protocol/sudo.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>
@@ -131,13 +132,13 @@ int main(int argc, char **argv) {
     struct ipc_message reply = {0};
     int                ret   = sys_ipc_call(sudo_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        printf("sudo: request failed (%d)\n", ret);
+        printf("sudo: request failed: %s\n", strerror(-ret));
         return 1;
     }
 
     int pid = (int)reply.regs.data[1];
     if (pid < 0) {
-        printf("sudo: exec failed (%d)\n", pid);
+        printf("sudo: exec failed: %s\n", strerror(-pid));
         return 1;
     }
 

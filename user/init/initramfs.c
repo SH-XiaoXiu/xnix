@@ -8,6 +8,7 @@
 
 #include "initramfs.h"
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -111,7 +112,7 @@ static int fat12_read_file(struct ramfs_ctx *ctx, const char *path, const uint8_
     /* 创建文件 */
     int fd = ramfs_open(ctx, path, VFS_O_CREAT | VFS_O_WRONLY);
     if (fd < 0) {
-        printf("[initramfs] Failed to create file %s: %d\n", path, fd);
+        printf("[initramfs] Failed to create file %s: %s\n", path, strerror(-fd));
         return fd;
     }
 
@@ -140,7 +141,7 @@ static int fat12_read_file(struct ramfs_ctx *ctx, const char *path, const uint8_
         /* 写入 ramfs */
         int ret = ramfs_write(ctx, fd, data, offset, chunk_size);
         if (ret < 0) {
-            printf("[initramfs] Write failed for %s: %d\n", path, ret);
+            printf("[initramfs] Write failed for %s: %s\n", path, strerror(-ret));
             ramfs_close(ctx, fd);
             return ret;
         }
@@ -201,7 +202,7 @@ static int process_directory(struct ramfs_ctx *ctx, const uint8_t *img,
             printf("[initramfs] Creating directory: %s\n", fullpath);
             int ret = ramfs_mkdir(ctx, fullpath);
             if (ret < 0 && ret != -EEXIST) {
-                printf("[initramfs] mkdir failed: %d\n", ret);
+                printf("[initramfs] mkdir failed: %s\n", strerror(-ret));
                 return ret;
             }
 

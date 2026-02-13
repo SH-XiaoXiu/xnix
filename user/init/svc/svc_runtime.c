@@ -4,6 +4,7 @@
 #include "svc_internal.h"
 
 #include <d/protocol/vfs.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,7 +54,7 @@ static int do_mount(struct svc_config *cfg) {
     printf("Mounting %s on %s (ep=%u)\n", cfg->name, cfg->mount, cfg->mount_ep);
     int ret = vfs_mount(cfg->mount, cfg->mount_ep);
     if (ret < 0) {
-        printf("Failed to mount %s: %d\n", cfg->mount, ret);
+        printf("Failed to mount %s: %s\n", cfg->mount, strerror(-ret));
     }
     return ret;
 }
@@ -253,11 +254,11 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     if (pid < 0) {
         if (early_console_is_active()) {
             char buf[160];
-            snprintf(buf, sizeof(buf), "[INIT] ERROR: failed to start %s (err %d)\n", cfg->name,
-                     pid);
+            snprintf(buf, sizeof(buf), "[INIT] ERROR: failed to start %s: %s\n", cfg->name,
+                     strerror(-pid));
             early_puts(buf);
         } else {
-            printf("Failed to start %s: %d\n", cfg->name, pid);
+            printf("Failed to start %s: %s\n", cfg->name, strerror(-pid));
         }
         rt->state = SVC_STATE_FAILED;
         return pid;

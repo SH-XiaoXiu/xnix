@@ -9,6 +9,7 @@
  */
 
 #include <d/protocol/vfs.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>
@@ -56,7 +57,7 @@ int main(int argc, char **argv) {
     /* 打开文件 */
     int fd = vfs_open(path, VFS_O_RDONLY);
     if (fd < 0) {
-        printf("read: cannot open '%s': error %d\n", path, fd);
+        printf("read: cannot open '%s': %s\n", path, strerror(-fd));
         return 1;
     }
 

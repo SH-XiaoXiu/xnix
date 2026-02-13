@@ -5,6 +5,7 @@
 
 #include "initramfs.h"
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -100,7 +101,7 @@ int initramfs_extract(struct ramfs_ctx *ctx, const void *img_addr, uint32_t img_
             printf("[initramfs] Creating directory: %s\n", fullpath);
             int ret = ramfs_mkdir(ctx, fullpath);
             if (ret < 0 && ret != -EEXIST) {
-                printf("[initramfs] mkdir failed: %d\n", ret);
+                printf("[initramfs] mkdir failed: %s\n", strerror(-ret));
                 return ret;
             }
 
@@ -115,7 +116,7 @@ int initramfs_extract(struct ramfs_ctx *ctx, const void *img_addr, uint32_t img_
             /* 创建文件 */
             int fd = ramfs_open(ctx, fullpath, VFS_O_CREAT | VFS_O_WRONLY);
             if (fd < 0) {
-                printf("[initramfs] Failed to create file %s: %d\n", fullpath, fd);
+                printf("[initramfs] Failed to create file %s: %s\n", fullpath, strerror(-fd));
                 return fd;
             }
 
@@ -124,7 +125,7 @@ int initramfs_extract(struct ramfs_ctx *ctx, const void *img_addr, uint32_t img_
                 const uint8_t *data = img + offset + TAR_BLOCK_SIZE;
                 int            ret  = ramfs_write(ctx, fd, data, 0, file_size);
                 if (ret < 0) {
-                    printf("[initramfs] Write failed for %s: %d\n", fullpath, ret);
+                    printf("[initramfs] Write failed for %s: %s\n", fullpath, strerror(-ret));
                     ramfs_close(ctx, fd);
                     return ret;
                 }

@@ -4,6 +4,7 @@
  */
 
 #include <d/protocol/vfs.h>
+#include <errno.h>
 #include <stdio.h>
 #include <vfs_client.h>
 #include <xnix/syscall.h>
@@ -20,7 +21,7 @@ int main(int argc, char **argv) {
 
     int fd = vfs_open(path, VFS_O_RDONLY);
     if (fd < 0) {
-        printf("cat: cannot open '%s': error %d\n", path, fd);
+        printf("cat: cannot open '%s': %s\n", path, strerror(-fd));
         return 1;
     }
 
@@ -34,7 +35,7 @@ int main(int argc, char **argv) {
     }
 
     if (n < 0) {
-        printf("cat: read error: %d\n", n);
+        printf("cat: read error: %s\n", strerror(-n));
         vfs_close(fd);
         return 1;
     }

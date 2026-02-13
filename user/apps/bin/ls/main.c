@@ -4,6 +4,7 @@
  */
 
 #include <d/protocol/vfs.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>
@@ -122,7 +123,7 @@ int main(int argc, char **argv) {
 
     int fd = vfs_opendir(path);
     if (fd < 0) {
-        printf("ls: cannot open '%s': error %d\n", path, fd);
+        printf("ls: cannot open '%s': %s\n", path, strerror(-fd));
         return 1;
     }
 

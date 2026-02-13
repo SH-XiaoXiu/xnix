@@ -8,6 +8,7 @@
 
 #include <d/protocol/tty.h>
 #include <d/protocol/vfs.h>
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
@@ -176,25 +177,7 @@ static void run_external(const char *path, int argc, char **argv, int background
         vfs_copy_cwd_to_child(pid);
     }
     if (pid < 0) {
-        const char *err_msg;
-        switch (pid) {
-        case -1:
-            err_msg = "permission denied (EPERM)";
-            break;
-        case -2:
-            err_msg = "file not found (ENOENT)";
-            break;
-        case -12:
-            err_msg = "out of memory (ENOMEM)";
-            break;
-        case -22:
-            err_msg = "invalid executable (EINVAL)";
-            break;
-        default:
-            err_msg = "unknown error";
-            break;
-        }
-        printf("%s: %s (code %d)\n", argv[0], err_msg, pid);
+        printf("%s: %s\n", argv[0], strerror(-pid));
         return;
     }
 
@@ -313,7 +296,7 @@ static void cmd_kill(int argc, char **argv) {
 
     int ret = sys_kill(pid, SIGTERM);
     if (ret < 0) {
-        printf("Failed to kill pid %d (error %d)\n", pid, ret);
+        printf("Failed to kill pid %d: %s\n", pid, strerror(-ret));
     } else {
         printf("Sent SIGTERM to pid %d\n", pid);
     }
@@ -363,28 +346,7 @@ static void cmd_cd(int argc, char **argv) {
 
     int ret = vfs_chdir(path);
     if (ret < 0) {
-        const char *err_msg;
-        switch (ret) {
-        case -2:
-            err_msg = "No such directory";
-            break;
-        case -5:
-            err_msg = "I/O error";
-            break;
-        case -20:
-            err_msg = "Not a directory";
-            break;
-        case -36:
-            err_msg = "Path too long";
-            break;
-        case -110:
-            err_msg = "Connection timed out";
-            break;
-        default:
-            printf("cd: %s: error %d\n", path, ret);
-            return;
-        }
-        printf("cd: %s: %s\n", path, err_msg);
+        printf("cd: %s: %s\n", path, strerror(-ret));
     }
 }
 
@@ -395,7 +357,7 @@ static void cmd_pwd(int argc, char **argv) {
     char cwd[256];
     int  ret = vfs_getcwd(cwd, sizeof(cwd));
     if (ret < 0) {
-        printf("pwd: error %d\n", ret);
+        printf("pwd: %s\n", strerror(-ret));
     } else {
         printf("%s\n", cwd);
     }
