@@ -6,15 +6,16 @@
 #include <d/protocol/tty.h>
 #include <stdio_internal.h>
 #include <string.h>
+#include <xnix/fd.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
 #include <xnix/termcolor.h>
 
 static handle_t termcolor_get_tty_ep(FILE *stream) {
-    if (!stream) {
+    if (!stream || stream->fd < 0) {
         return HANDLE_INVALID;
     }
-    return stream->tty_ep;
+    return fd_get_handle(stream->fd);
 }
 
 int termcolor_set(FILE *stream, enum term_color fg, enum term_color bg) {

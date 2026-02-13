@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <vfs_client.h>
 #include <xnix/abi/handle.h>
+#include <xnix/env.h>
+#include <xnix/fd.h>
 #include <xnix/ipc.h>
 #include <xnix/proc.h>
 #include <xnix/syscall.h>
@@ -226,7 +228,23 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     rt->ready          = false;
 
     if (strcmp(cfg->name, "shell") == 0) {
-        svc_suppress_diagnostics();
+        /* shell 启动后,将 init 的 stdout/stderr 重定向到 serial (tty1),
+         * 避免诊断输出干扰 shell 的 VGA 终端 (tty0). */
+        handle_t log_ep = env_get_handle("tty1");
+        if (log_ep != HANDLE_INVALID) {
+            int log_fd = fd_alloc();
+            if (log_fd >= 0) {
+                fd_install(log_fd, log_ep, FD_TYPE_TTY, FD_FLAG_WRITE);
+                dup2(log_fd, STDOUT_FILENO);
+                dup2(log_fd, STDERR_FILENO);
+                if (log_fd != STDOUT_FILENO && log_fd != STDERR_FILENO) {
+                    /* 仅释放 fd 槽位,不关闭底层 kernel handle -
+                     * tty1 handle 是服务管理器的共享资源,
+                     * 后续启动的 shell_serial 等服务仍需使用它. */
+                    fd_free(log_fd);
+                }
+            }
+        }
     }
 
     return pid;

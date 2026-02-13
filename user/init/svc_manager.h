@@ -120,9 +120,9 @@ struct svc_config {
     char name[SVC_NAME_MAX];
 
     bool       builtin;            /* 是否为内置服务(已启动) */
-    svc_type_t type;              /* 启动类型 */
+    svc_type_t type;               /* 启动类型 */
     char       path[SVC_PATH_MAX]; /* ELF 路径 */
-    char       args[256];                 /* 命令行参数 */
+    char       args[256];          /* 命令行参数 */
 
     /* 依赖声明 */
     char     after[SVC_DEPS_MAX][SVC_NAME_MAX]; /* 启动顺序依赖 */
@@ -310,17 +310,8 @@ int svc_resolve_service_discovery(struct svc_manager *mgr);
  */
 void svc_tick_parallel(struct svc_manager *mgr);
 
-/**
- * 抑制服务诊断输出
- *
- * 用于在 shell 启动后停止诊断日志输出
- */
-void svc_suppress_diagnostics(void);
-
-/**
- * 检查是否已抑制信息输出(shell 启动后为 true)
- */
-bool svc_is_quiet(void);
+/* svc_suppress_diagnostics/svc_is_quiet 已移除.
+ * init 诊断输出通过 fd 重定向到 serial (tty1). */
 
 /**
  * 处理服务就绪通知(IPC 消息)

@@ -2,7 +2,7 @@
  * @file stdio_internal.h
  * @brief FILE 流内部结构
  *
- * 用户态 I/O 通过 ttyd 终端服务器.
+ * 用户态 I/O 通过统一 fd 层.
  */
 
 #ifndef _STDIO_INTERNAL_H
@@ -10,7 +10,6 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <xnix/abi/handle.h>
 
 #define STREAM_BUF_SIZE 256
 
@@ -26,19 +25,20 @@ enum {
 #define _FILE_WRITE 2
 
 struct _FILE {
-    handle_t tty_ep; /* 连接的 tty endpoint */
-    char     buf[STREAM_BUF_SIZE];
-    int      buf_pos;
-    int      buf_mode; /* _IONBF, _IOLBF, _IOFBF */
-    int      flags;    /* _FILE_READ / _FILE_WRITE */
-    int      error;
-    int      eof;
+    int  fd; /* 底层 fd (替代原先的 tty_ep) */
+    char buf[STREAM_BUF_SIZE];
+    int  buf_pos;
+    int  buf_mode; /* _IONBF, _IOLBF, _IOFBF */
+    int  flags;    /* _FILE_READ / _FILE_WRITE */
+    int  error;
+    int  eof;
 };
 
 /**
  * 初始化标准流
  *
- * 在 __libc_init 中调用,查找 tty endpoint 并设置 stdin/stdout/stderr.
+ * 在 __libc_init 中调用,fd 表已由 fd_table_init() 建立,
+ * 这里设置 stdin/stdout/stderr FILE 结构.
  */
 void _libc_stdio_init(void);
 

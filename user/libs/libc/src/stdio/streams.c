@@ -2,16 +2,14 @@
  * @file streams.c
  * @brief FILE 流实现
  *
- * 管理 stdin/stdout/stderr 三个标准流,通过 TTY IPC 协议与 ttyd 通信.
+ * 管理 stdin/stdout/stderr 三个标准流,通过统一 fd 层进行 I/O.
  */
 
-#include <d/protocol/tty.h>
 #include <stdio_internal.h>
 #include <string.h>
 #include <unistd.h>
 #include <xnix/abi/handle.h>
-#include <xnix/env.h>
-#include <xnix/ipc.h>
+#include <xnix/fd.h>
 #include <xnix/syscall.h>
 
 FILE _stdin_file;
@@ -30,76 +28,32 @@ static inline void _debug_write(const void *buf, size_t len) {
     (void)ret;
 }
 
-/* 查找 tty endpoint (优先 tty1/serial,保证服务默认 stdio 走串口) */
-static handle_t find_tty_ep(void) {
-    handle_t h;
-
-    h = env_get_handle("tty1");
-    if (h != HANDLE_INVALID) {
-        return h;
-    }
-
-    h = env_get_handle("tty0");
-    if (h != HANDLE_INVALID) {
-        return h;
-    }
-
-    return HANDLE_INVALID;
-}
-
-/* 查找标准流 handle, 回退到 tty */
-static handle_t find_stdio_ep(const char *stdio_name) {
-    handle_t h = env_get_handle(stdio_name);
-    if (h != HANDLE_INVALID) {
-        return h;
-    }
-    return HANDLE_INVALID;
-}
-
 void _libc_stdio_init(void) {
-    /* 优先查找标准 handle 名称 (stdin/stdout/stderr) */
-    handle_t stdin_ep  = find_stdio_ep(HANDLE_STDIO_STDIN);
-    handle_t stdout_ep = find_stdio_ep(HANDLE_STDIO_STDOUT);
-    handle_t stderr_ep = find_stdio_ep(HANDLE_STDIO_STDERR);
-
-    /* 回退到 tty handle */
-    if (stdin_ep == HANDLE_INVALID || stdout_ep == HANDLE_INVALID || stderr_ep == HANDLE_INVALID) {
-        handle_t tty = find_tty_ep();
-        if (stdin_ep == HANDLE_INVALID) {
-            stdin_ep = tty;
-        }
-        if (stdout_ep == HANDLE_INVALID) {
-            stdout_ep = tty;
-        }
-        if (stderr_ep == HANDLE_INVALID) {
-            stderr_ep = tty;
-        }
-    }
-
+    /* fd 0/1/2 已由 fd_table_init() 建立,这里只设置 FILE 结构 */
     memset(&_stdin_file, 0, sizeof(_stdin_file));
-    _stdin_file.tty_ep   = stdin_ep;
+    _stdin_file.fd       = STDIN_FILENO;
     _stdin_file.buf_mode = _IONBF;
     _stdin_file.flags    = _FILE_READ;
 
     memset(&_stdout_file, 0, sizeof(_stdout_file));
-    _stdout_file.tty_ep   = stdout_ep;
+    _stdout_file.fd       = STDOUT_FILENO;
     _stdout_file.buf_mode = _IOLBF;
     _stdout_file.flags    = _FILE_WRITE;
 
     memset(&_stderr_file, 0, sizeof(_stderr_file));
-    _stderr_file.tty_ep   = stderr_ep;
+    _stderr_file.fd       = STDERR_FILENO;
     _stderr_file.buf_mode = _IONBF;
     _stderr_file.flags    = _FILE_WRITE;
 }
 
 void _stdio_force_debug_mode(void) {
-    _stdout_file.tty_ep = HANDLE_INVALID;
-    _stderr_file.tty_ep = HANDLE_INVALID;
+    _stdout_file.fd = -1;
+    _stderr_file.fd = -1;
 }
 
-void _stdio_set_tty(FILE *f, handle_t tty_ep) {
+void _stdio_set_fd(FILE *f, int fd) {
     if (f) {
-        f->tty_ep = tty_ep;
+        f->fd = fd;
     }
 }
 
@@ -108,21 +62,14 @@ int _file_flush(FILE *f) {
         return 0;
     }
 
-    if (f->tty_ep == HANDLE_INVALID) {
+    if (f->fd < 0) {
         /* fallback: SYS_DEBUG_WRITE */
         _debug_write(f->buf, f->buf_pos);
         f->buf_pos = 0;
         return 0;
     }
 
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = TTY_OP_WRITE;
-    msg.regs.data[1] = (uint32_t)f->buf_pos;
-    msg.buffer.data  = (uint64_t)(uintptr_t)f->buf;
-    msg.buffer.size  = (uint32_t)f->buf_pos;
-
-    sys_ipc_send(f->tty_ep, &msg, 100);
+    write(f->fd, f->buf, f->buf_pos);
     f->buf_pos = 0;
     return 0;
 }
@@ -134,16 +81,12 @@ int _file_putc(FILE *f, char c) {
 
     if (f->buf_mode == _IONBF) {
         /* 无缓冲:立即发送 */
-        if (f->tty_ep == HANDLE_INVALID) {
+        if (f->fd < 0) {
             char ch = (char)c;
             _debug_write(&ch, 1);
             return (unsigned char)c;
         }
-        struct ipc_message msg;
-        memset(&msg, 0, sizeof(msg));
-        msg.regs.data[0] = TTY_OP_PUTC;
-        msg.regs.data[1] = (uint32_t)(unsigned char)c;
-        sys_ipc_send(f->tty_ep, &msg, 100);
+        write(f->fd, &c, 1);
         return (unsigned char)c;
     }
 
@@ -163,42 +106,24 @@ int _file_getc(FILE *f) {
         return EOF;
     }
 
-    struct ipc_message req;
-    struct ipc_message reply;
-    char               recv_buf[4];
-
     for (;;) {
-        if (f->tty_ep == HANDLE_INVALID) {
-            f->tty_ep = find_tty_ep();
-            if (f->tty_ep == HANDLE_INVALID) {
-                f->error = 1;
-                msleep(10);
-                continue;
-            }
-        }
-
-        memset(&req, 0, sizeof(req));
-        memset(&reply, 0, sizeof(reply));
-
-        req.regs.data[0] = TTY_OP_READ;
-        req.regs.data[1] = 1;
-
-        reply.buffer.data = (uint64_t)(uintptr_t)recv_buf;
-        reply.buffer.size = sizeof(recv_buf);
-
-        int ret = sys_ipc_call(f->tty_ep, &req, &reply, 0);
-        if (ret != 0) {
-            /* 重试当前 endpoint,不要切换到其他 tty */
+        if (f->fd < 0) {
+            f->error = 1;
             msleep(10);
             continue;
         }
 
-        int n = (int)reply.regs.data[0];
-        if (n <= 0) {
+        char    c;
+        ssize_t n = read(f->fd, &c, 1);
+        if (n < 0) {
+            msleep(10);
+            continue;
+        }
+        if (n == 0) {
             msleep(1);
             continue;
         }
 
-        return (unsigned char)recv_buf[0];
+        return (unsigned char)c;
     }
 }

@@ -8,7 +8,6 @@
 
 #include <stdarg.h>
 #include <stddef.h>
-#include <xnix/abi/handle.h>
 
 /* EOF */
 #ifndef EOF
@@ -53,11 +52,11 @@ int fflush(FILE *stream);
 void _stdio_force_debug_mode(void);
 
 /**
- * 设置 FILE 流的 TTY endpoint
+ * 设置 FILE 流的底层 fd
  *
- * @param f      FILE 流
- * @param tty_ep TTY endpoint handle
+ * @param f  FILE 流
+ * @param fd 文件描述符
  */
-void _stdio_set_tty(FILE *f, handle_t tty_ep);
+void _stdio_set_fd(FILE *f, int fd);
 
 #endif /* _STDIO_H */
