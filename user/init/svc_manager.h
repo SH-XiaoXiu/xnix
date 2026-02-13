@@ -36,8 +36,7 @@ struct svc_ready_msg {
  * 服务类型
  */
 typedef enum {
-    SVC_TYPE_MODULE, /* 模块索引方式启动 */
-    SVC_TYPE_PATH,   /* ELF 路径方式启动(预留) */
+    SVC_TYPE_PATH, /* ELF 路径方式启动 */
 } svc_type_t;
 
 /**
@@ -120,10 +119,9 @@ struct svc_handle_def {
 struct svc_config {
     char name[SVC_NAME_MAX];
 
-    bool       builtin;                   /* 是否为内置服务(已启动) */
-    svc_type_t type;                      /* 启动类型 */
-    char       module_name[SVC_NAME_MAX]; /* 模块名称(type=MODULE 时) */
-    char       path[SVC_PATH_MAX];        /* ELF 路径(type=PATH 时) */
+    bool       builtin;            /* 是否为内置服务(已启动) */
+    svc_type_t type;              /* 启动类型 */
+    char       path[SVC_PATH_MAX]; /* ELF 路径 */
     char       args[256];                 /* 命令行参数 */
 
     /* 依赖声明 */

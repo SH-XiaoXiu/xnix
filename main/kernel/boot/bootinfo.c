@@ -93,7 +93,7 @@ void boot_handles_collect(void) {
     for (uint32_t i = 0; i < g_boot_resources.count; i++) {
         struct boot_resource *res = &g_boot_resources.resources[i];
         char                  handle_name[32];
-        snprintf(handle_name, sizeof(handle_name), "module_%s", res->name);
+        snprintf(handle_name, sizeof(handle_name), "boot.%s", res->name);
 
         handle_t h = physmem_create_handle_for_proc(kproc, res->phys_addr, res->size, handle_name);
         if (h != HANDLE_INVALID) {

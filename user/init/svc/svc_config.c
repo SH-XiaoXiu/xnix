@@ -115,7 +115,7 @@ static bool ini_handler(const char *section, const char *key, const char *value,
                 memset(cfg, 0, sizeof(*cfg));
                 memcpy(cfg->name, svc_name, strlen(svc_name));
                 cfg->name[strlen(svc_name)] = '\0';
-                cfg->type                   = SVC_TYPE_MODULE;
+                cfg->type                   = SVC_TYPE_PATH;
             }
             ictx->current = &mgr->configs[idx];
         }
@@ -123,18 +123,9 @@ static bool ini_handler(const char *section, const char *key, const char *value,
         struct svc_config *cfg = ictx->current;
 
         if (strcmp(key, "type") == 0) {
-            if (strcmp(value, "module") == 0) {
-                cfg->type = SVC_TYPE_MODULE;
-            } else if (strcmp(value, "path") == 0) {
+            if (strcmp(value, "path") == 0) {
                 cfg->type = SVC_TYPE_PATH;
             }
-        } else if (strcmp(key, "module_name") == 0) {
-            size_t len = strlen(value);
-            if (len >= SVC_NAME_MAX) {
-                len = SVC_NAME_MAX - 1;
-            }
-            memcpy(cfg->module_name, value, len);
-            cfg->module_name[len] = '\0';
         } else if (strcmp(key, "path") == 0) {
             size_t len = strlen(value);
             if (len >= SVC_PATH_MAX) {

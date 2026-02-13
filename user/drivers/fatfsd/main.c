@@ -3,7 +3,7 @@
  * @brief fatfsd 驱动程序入口
  *
  * FAT 文件系统用户态驱动, 支持两种后端:
- * - 内存模式: module_system handle 存在时, mmap 该模块
+ * - 内存模式: boot.system handle 存在时, mmap 该模块
  * - ATA 模式: 否则初始化 ATA, 读 MBR 分区表, 挂载第一个分区
  */
 
@@ -83,14 +83,14 @@ int main(int argc, char **argv) {
     bool use_ata = force_ata;
 
     if (!force_ata) {
-        /* 自动检测: module_system 存在则为内存模式 */
-        handle_t system_h = sys_handle_find("module_system");
+        /* 自动检测: boot.system 存在则为内存模式 */
+        handle_t system_h = sys_handle_find("boot.system");
         if (system_h != HANDLE_INVALID) {
             uint32_t system_size = 0;
             void    *system_addr = sys_mmap_phys(system_h, 0, 0, 0x03, &system_size);
             if (system_addr == NULL || (intptr_t)system_addr < 0) {
                 ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]",
-                          " failed to mmap module_system\n");
+                          " failed to mmap boot.system\n");
                 return 1;
             }
 

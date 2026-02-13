@@ -5,7 +5,7 @@
  * 将预制的磁盘镜像写入到物理磁盘
  *
  * 镜像来源:
- *   - 优先: module_disk_template (multiboot 模块, mmap)
+ *   - 优先: boot.disk_template (multiboot 模块, mmap)
  *   - 备选: /sys/disk_template.img (VFS 路径)
  *
  * 用法: installer <目标磁盘号>
@@ -237,8 +237,8 @@ int main(int argc, char **argv) {
     uint32_t disk_mb = disk_sectors / 2048;
     printf("磁盘容量: %u MB (%u 扇区)\n", disk_mb, disk_sectors);
 
-    /* 尝试获取镜像: 优先 module_disk_template, 备选 VFS */
-    uint32_t image_h    = sys_handle_find("module_disk_template");
+    /* 尝试获取镜像: 优先 boot.disk_template, 备选 VFS */
+    uint32_t image_h    = sys_handle_find("boot.disk_template");
     void    *image_data = NULL;
     uint32_t image_size = 0;
     int      image_fd   = -1;
@@ -250,7 +250,7 @@ int main(int argc, char **argv) {
             printf("错误: 无法映射 disk_template 模块\n");
             return 1;
         }
-        printf("镜像来源: module_disk_template (mmap)\n");
+        printf("镜像来源: boot.disk_template (mmap)\n");
     } else {
         /* VFS 模式: 从文件读取 */
         const char *image_path = "/sys/disk_template.img";

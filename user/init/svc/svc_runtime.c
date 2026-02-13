@@ -242,25 +242,12 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
 
     int pid;
 
-    if (cfg->type == SVC_TYPE_PATH) {
-        if (cfg->builtin) {
-            /* 核心服务: 从 ramfs 加载 (bootstrap) */
-            pid = start_via_bootstrap(mgr, cfg);
-        } else {
-            /* 用户服务: 通过 VFS 加载 (sys_exec) */
-            pid = start_via_exec(mgr, cfg);
-        }
+    if (cfg->builtin) {
+        /* 核心服务: 从 ramfs 加载 (bootstrap) */
+        pid = start_via_bootstrap(mgr, cfg);
     } else {
-        if (early_console_is_active()) {
-            char buf[160];
-            snprintf(buf, sizeof(buf), "[INIT] ERROR: type=module no longer supported for %s\n",
-                     cfg->name);
-            early_puts(buf);
-        } else {
-            printf("ERROR: type=module no longer supported for %s\n", cfg->name);
-        }
-        rt->state = SVC_STATE_FAILED;
-        return -1;
+        /* 用户服务: 通过 VFS 加载 (sys_exec) */
+        pid = start_via_exec(mgr, cfg);
     }
 
     if (pid < 0) {

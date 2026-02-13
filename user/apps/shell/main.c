@@ -297,42 +297,6 @@ static void cmd_run(int argc, char **argv) {
     /* sys_spawn has been removed - use exec from filesystem instead */
     printf("Error: 'run' command is deprecated (sys_spawn removed)\n");
     printf("Use regular commands to execute programs from /sys or /mnt\n");
-    return;
-
-#if 0 /* Old implementation using sys_spawn - kept for reference */
-    if (argc < 2) {
-        printf("Usage: run <module_name>\n");
-        return;
-    }
-
-    struct spawn_args spawn;
-    memset(&spawn, 0, sizeof(spawn));
-    strncpy(spawn.name, argv[1], ABI_SPAWN_NAME_LEN - 1);
-    strncpy(spawn.module_name, argv[1], ABI_SPAWN_NAME_LEN - 1);
-    spawn.handle_count = 0;
-
-    int pid = sys_spawn(&spawn);
-    if (pid < 0) {
-        printf("Failed to spawn module '%s' (error %d)\n", argv[1], pid);
-        return;
-    }
-
-    /* 复制CWD到子进程 */
-    vfs_copy_cwd_to_child(pid);
-
-    printf("Started module '%s' (pid=%d)\n", argv[1], pid);
-
-    shell_set_foreground(pid);
-
-    int status;
-    int ret = sys_waitpid(pid, &status, 0);
-
-    shell_set_foreground(0);
-
-    if (ret > 0) {
-        printf("Process %d exited (status=%d)\n", pid, status);
-    }
-#endif
 }
 
 static void cmd_kill(int argc, char **argv) {

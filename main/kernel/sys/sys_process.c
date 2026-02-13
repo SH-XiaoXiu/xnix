@@ -182,9 +182,8 @@ static int32_t sys_exec(const uint32_t *args) {
         profile = proc->perms ? proc->perms->profile : NULL;
     }
 
-    pid_t pid =
-        process_spawn(kargs->name, elf_paddr, kargs->elf_size, handles,
-                      handle_count, profile, argc, kargs->argv, flags);
+    pid_t pid = process_spawn(kargs->name, elf_paddr, kargs->elf_size, handles, handle_count,
+                              profile, argc, kargs->argv, flags);
     free_pages(elf_paddr, page_count);
     kfree(kargs);
 

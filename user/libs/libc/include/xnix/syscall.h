@@ -332,13 +332,6 @@ static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *repl
     return ret;
 }
 
-/*
- * 进程管理
- *
- * spawn_args 使用 ABI 定义的结构
- */
-#define spawn_args abi_spawn_args
-
 /**
  * 等待子进程退出
  * @return 进程 PID,-1 失败(设置 errno)

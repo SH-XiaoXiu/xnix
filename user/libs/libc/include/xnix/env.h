@@ -12,7 +12,7 @@
 /**
  * 初始化环境 handle 映射(由 libc 启动代码调用)
  *
- * @param handles handle 数组(来自 spawn_args)
+ * @param handles handle 数组
  * @param count   handle 数量
  */
 void __env_init_handles(const char **handle_names, uint32_t *handle_values, int count);

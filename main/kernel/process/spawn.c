@@ -363,7 +363,7 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
 
 pid_t process_spawn(const char *name, void *elf_data, uint32_t elf_size,
                     const struct spawn_handle *handles, uint32_t handle_count,
-                    struct perm_profile *profile, int argc,
-                    char argv[][ABI_EXEC_MAX_ARG_LEN], uint32_t flags) {
+                    struct perm_profile *profile, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
+                    uint32_t flags) {
     return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv, flags);
 }

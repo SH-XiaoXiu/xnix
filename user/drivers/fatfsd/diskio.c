@@ -3,7 +3,7 @@
  * @brief FatFs 块设备接口适配层
  *
  * 实现 FatFs 的 diskio 接口, 支持两种后端:
- * - 内存模式: 从 module_system mmap 的内存区域
+ * - 内存模式: 从 boot.system mmap 的内存区域
  * - ATA 模式: ATA PIO 磁盘 (带分区偏移)
  *
  * FatFs 始终使用 pdrv=0 (FF_VOLUMES=1), diskio 内部根据模式路由.

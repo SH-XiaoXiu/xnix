@@ -162,8 +162,8 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
  */
 pid_t process_spawn(const char *name, void *elf_data, uint32_t elf_size,
                     const struct spawn_handle *handles, uint32_t handle_count,
-                    struct perm_profile *profile, int argc,
-                    char argv[][ABI_EXEC_MAX_ARG_LEN], uint32_t flags);
+                    struct perm_profile *profile, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
+                    uint32_t flags);
 
 /**
  * 终止当前进程

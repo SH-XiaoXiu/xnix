@@ -181,7 +181,7 @@ int main(int argc, char **argv) {
     early_reset_color();
     early_puts("extracting initramfs...\n");
 
-    handle_t initramfs_h = sys_handle_find("module_initramfs");
+    handle_t initramfs_h = sys_handle_find("boot.initramfs");
     if (initramfs_h == HANDLE_INVALID) {
         early_set_color(10, 0);
         early_puts("[INIT] ");
