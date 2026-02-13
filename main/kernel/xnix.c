@@ -190,11 +190,11 @@ static void boot_start_services(void) {
 
     pid_t init_pid = PID_INVALID;
     if (init_argc > 0) {
-        init_pid = process_spawn_elf_ex_with_args_flags("init", mod_addr, mod_size, NULL, 0, NULL,
-                                                        init_argc, init_argv, ABI_EXEC_INHERIT_ALL);
+        init_pid = process_spawn("init", mod_addr, mod_size, NULL, 0, NULL,
+                                 init_argc, init_argv, ABI_EXEC_INHERIT_ALL);
     } else {
-        init_pid = process_spawn_elf_ex_with_args_flags("init", mod_addr, mod_size, NULL, 0, NULL,
-                                                        0, NULL, ABI_EXEC_INHERIT_ALL);
+        init_pid = process_spawn("init", mod_addr, mod_size, NULL, 0, NULL,
+                                 0, NULL, ABI_EXEC_INHERIT_ALL);
     }
 
     /* 为 init 直接授予全权限(不依赖 named profile) */

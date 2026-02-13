@@ -10,6 +10,7 @@
 #include <xnix/boot.h>
 #include <xnix/debug.h>
 #include <xnix/handle.h>
+#include <xnix/kerr.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
 #include <xnix/perm.h>
@@ -306,7 +307,7 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
     uint32_t entry_point = 0;
     int      ret         = process_load_elf(proc, elf_data, elf_size, &entry_point);
     if (ret < 0) {
-        pr_err("Failed to load ELF: %d", ret);
+        pr_err("spawn '%s': load ELF failed: %s (%d)", name ? name : "?", kerr(ret), ret);
         process_destroy((process_t)proc);
         return PID_INVALID;
     }
@@ -360,40 +361,9 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
     return spawn_core("init", elf_data, elf_size, NULL, 0, NULL, 0, NULL, ABI_EXEC_INHERIT_ALL);
 }
 
-pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size,
-                           struct perm_profile *profile) {
-    return spawn_core(name, elf_data, elf_size, NULL, 0, profile, 0, NULL, 0);
-}
-
-pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
-                              const struct spawn_handle *handles, uint32_t handle_count,
-                              struct perm_profile *profile) {
-    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, 0, NULL, 0);
-}
-
-pid_t process_spawn_module_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
-                                        const struct spawn_handle *handles, uint32_t handle_count,
-                                        struct perm_profile *profile, int argc,
-                                        char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv, 0);
-}
-
-pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf_size, int argc,
-                                  char argv[][ABI_EXEC_MAX_ARG_LEN], struct perm_profile *profile) {
-    return spawn_core(name, elf_data, elf_size, NULL, 0, profile, argc, argv, 0);
-}
-
-pid_t process_spawn_elf_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
-                                     const struct spawn_handle *handles, uint32_t handle_count,
-                                     struct perm_profile *profile, int argc,
-                                     char argv[][ABI_EXEC_MAX_ARG_LEN]) {
-    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv, 0);
-}
-
-pid_t process_spawn_elf_ex_with_args_flags(const char *name, void *elf_data, uint32_t elf_size,
-                                           const struct spawn_handle *handles,
-                                           uint32_t handle_count, struct perm_profile *profile,
-                                           int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
-                                           uint32_t flags) {
+pid_t process_spawn(const char *name, void *elf_data, uint32_t elf_size,
+                    const struct spawn_handle *handles, uint32_t handle_count,
+                    struct perm_profile *profile, int argc,
+                    char argv[][ABI_EXEC_MAX_ARG_LEN], uint32_t flags) {
     return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv, flags);
 }

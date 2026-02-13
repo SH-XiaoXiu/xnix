@@ -157,43 +157,13 @@ pid_t process_spawn_init(void *elf_data, uint32_t elf_size);
  */
 int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, uint32_t *out_entry);
 
-pid_t process_spawn_module(const char *name, void *elf_data, uint32_t elf_size,
-                           struct perm_profile *profile);
-
-pid_t process_spawn_module_ex(const char *name, void *elf_data, uint32_t elf_size,
-                              const struct spawn_handle *handles, uint32_t handle_count,
-                              struct perm_profile *profile);
-
 /**
- * 创建进程(带 handle 传递和 argv)
+ * 创建并启动用户进程(通用入口)
  */
-pid_t process_spawn_module_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
-                                        const struct spawn_handle *handles, uint32_t handle_count,
-                                        struct perm_profile *profile, int argc,
-                                        char argv[][ABI_EXEC_MAX_ARG_LEN]);
-
-/**
- * 从 ELF 创建进程(带 argv)
- */
-pid_t process_spawn_elf_with_args(const char *name, void *elf_data, uint32_t elf_size, int argc,
-                                  char argv[][ABI_EXEC_MAX_ARG_LEN], struct perm_profile *profile);
-
-/**
- * 从 ELF 创建进程(带 handle 传递和 argv)
- */
-pid_t process_spawn_elf_ex_with_args(const char *name, void *elf_data, uint32_t elf_size,
-                                     const struct spawn_handle *handles, uint32_t handle_count,
-                                     struct perm_profile *profile, int argc,
-                                     char argv[][ABI_EXEC_MAX_ARG_LEN]);
-
-/**
- * 从 ELF 创建进程(带 handle 传递,argv 和继承标志)
- */
-pid_t process_spawn_elf_ex_with_args_flags(const char *name, void *elf_data, uint32_t elf_size,
-                                           const struct spawn_handle *handles,
-                                           uint32_t handle_count, struct perm_profile *profile,
-                                           int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
-                                           uint32_t flags);
+pid_t process_spawn(const char *name, void *elf_data, uint32_t elf_size,
+                    const struct spawn_handle *handles, uint32_t handle_count,
+                    struct perm_profile *profile, int argc,
+                    char argv[][ABI_EXEC_MAX_ARG_LEN], uint32_t flags);
 
 /**
  * 终止当前进程
