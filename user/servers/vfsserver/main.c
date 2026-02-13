@@ -20,6 +20,7 @@ struct vfs_dir_state {
     uint32_t backend_ep;
     uint32_t backend_handle;
     uint32_t mount_count;
+    uint32_t backend_skip; /* 被挂载点遮盖而跳过的后端条目数 */
     char     mount_names[VFS_MAX_MOUNTS][VFS_NAME_MAX];
     int      active;
 };
@@ -50,8 +51,9 @@ static struct vfs_cwd_entry cwd_table[VFS_MAX_PROCESSES];
 static int vfsd_dir_alloc(void) {
     for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
         if (!dir_table[i].active) {
-            dir_table[i].active      = 1;
-            dir_table[i].mount_count = 0;
+            dir_table[i].active       = 1;
+            dir_table[i].mount_count  = 0;
+            dir_table[i].backend_skip = 0;
             return i;
         }
     }
@@ -466,32 +468,55 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
         return 0;
     }
 
-    struct ipc_message req   = {0};
-    struct ipc_message reply = {0};
+    uint32_t backend_index = index - st->mount_count + st->backend_skip;
 
-    req.regs.data[0] = UDM_VFS_READDIR;
-    req.regs.data[1] = st->backend_handle;
-    req.regs.data[2] = index - st->mount_count;
+    for (;;) {
+        struct ipc_message req   = {0};
+        struct ipc_message reply = {0};
 
-    reply.buffer.data = (uint64_t)(uintptr_t)&g_reply_dirent;
-    reply.buffer.size = sizeof(g_reply_dirent);
+        req.regs.data[0] = UDM_VFS_READDIR;
+        req.regs.data[1] = st->backend_handle;
+        req.regs.data[2] = backend_index;
 
-    int ret = sys_ipc_call(st->backend_ep, &req, &reply, 5000);
-    if (ret < 0) {
-        return ret;
+        reply.buffer.data = (uint64_t)(uintptr_t)&g_reply_dirent;
+        reply.buffer.size = sizeof(g_reply_dirent);
+
+        int ret = sys_ipc_call(st->backend_ep, &req, &reply, 5000);
+        if (ret < 0) {
+            return ret;
+        }
+
+        int32_t result = (int32_t)reply.regs.data[1];
+        if (result != 0) {
+            msg->regs.data[0] = UDM_VFS_READDIR;
+            msg->regs.data[1] = reply.regs.data[1];
+            msg->buffer.data  = (uint64_t)(uintptr_t)0;
+            msg->buffer.size  = 0;
+            return 0;
+        }
+
+        /* 检查是否被挂载点遮盖 */
+        int shadowed = 0;
+        for (uint32_t i = 0; i < st->mount_count; i++) {
+            if (strcmp(g_reply_dirent.name, st->mount_names[i]) == 0) {
+                shadowed = 1;
+                break;
+            }
+        }
+
+        if (!shadowed) {
+            break;
+        }
+
+        /* 被遮盖,跳过并继续读下一个后端条目 */
+        st->backend_skip++;
+        backend_index++;
     }
 
     msg->regs.data[0] = UDM_VFS_READDIR;
-    msg->regs.data[1] = reply.regs.data[1];
-
-    int32_t result = (int32_t)reply.regs.data[1];
-    if (result == 0) {
-        msg->buffer.data = (uint64_t)(uintptr_t)&g_reply_dirent;
-        msg->buffer.size = sizeof(g_reply_dirent);
-    } else {
-        msg->buffer.data = (uint64_t)(uintptr_t)0;
-        msg->buffer.size = 0;
-    }
+    msg->regs.data[1] = 0;
+    msg->buffer.data  = (uint64_t)(uintptr_t)&g_reply_dirent;
+    msg->buffer.size  = sizeof(g_reply_dirent);
     return 0;
 }
 
