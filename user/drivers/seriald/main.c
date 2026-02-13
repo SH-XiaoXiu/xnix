@@ -218,10 +218,9 @@ int main(void) {
     /* 初始化互斥锁 */
     pthread_mutex_init(&serial_lock, NULL);
 
-    /* 使用 init 传递的 endpoint handle (seriald provides serial) */
-    handle_t ep = env_get_handle("serial");
+    env_set_name("seriald");
+    handle_t ep = env_require("serial");
     if (ep == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[seriald]", " ERROR: 'serial' handle not found\n");
         return 1;
     }
 

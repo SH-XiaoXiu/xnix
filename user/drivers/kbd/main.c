@@ -215,9 +215,9 @@ int main(void) {
     pthread_mutex_init(&input_lock, NULL);
     pthread_mutex_init(&pending_lock, NULL);
 
-    handle_t kbd_ep = env_get_handle("kbd_ep");
+    env_set_name("kbd");
+    handle_t kbd_ep = env_require("kbd_ep");
     if (kbd_ep == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[kbd]", " ERROR: 'kbd_ep' handle not found\n");
         return 1;
     }
 

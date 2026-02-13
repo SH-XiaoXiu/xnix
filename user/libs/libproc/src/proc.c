@@ -9,7 +9,7 @@
 #include <xnix/proc.h>
 #include <xnix/syscall.h>
 
-/* ===== VFS 路径 builder ===== */
+/*VFS 路径 builder*/
 
 void proc_init(struct proc_builder *b, const char *path) {
     memset(&b->args, 0, sizeof(b->args));
@@ -144,7 +144,7 @@ int proc_spawn_args(const char *path, int argc, const char **argv) {
     return proc_spawn(&b);
 }
 
-/* ===== 内存 ELF builder ===== */
+/*内存 ELF builder*/
 
 void proc_image_init(struct proc_image_builder *b, const char *name,
                      const void *elf_data, size_t elf_size) {

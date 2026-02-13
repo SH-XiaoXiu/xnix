@@ -321,6 +321,7 @@ static int console_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
+    env_set_name("fbcond");
     handle_t serial = env_get_handle("serial");
 
     handle_t fb_handle = env_get_handle("fb_mem");
@@ -379,7 +380,7 @@ int main(void) {
         }
     }
 
-    handle_t fbcon_ep = env_get_handle("fbcon_ep");
+    handle_t fbcon_ep = env_require("fbcon_ep");
     if (fbcon_ep == HANDLE_INVALID) {
         return 1;
     }

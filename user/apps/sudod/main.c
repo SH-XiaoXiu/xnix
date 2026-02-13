@@ -22,9 +22,9 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    handle_t ep = env_get_handle("sudo_ep");
+    env_set_name("sudod");
+    handle_t ep = env_require("sudo_ep");
     if (ep == HANDLE_INVALID) {
-        printf("sudod: sudo_ep not found\n");
         return 1;
     }
 

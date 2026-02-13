@@ -11,12 +11,9 @@
 #include <unistd.h>
 #include <vfs_client.h>
 #include <xnix/abi/handle.h>
-#include <xnix/abi/process.h>
-#include <xnix/env.h>
 #include <xnix/ipc.h>
+#include <xnix/proc.h>
 #include <xnix/syscall.h>
-
-#include "bootstrap/bootstrap.h"
 
 /* 外部定义: init/main.c */
 extern struct ramfsd_service g_ramfsd;
@@ -60,41 +57,6 @@ static int do_mount(struct svc_config *cfg) {
 }
 
 /**
- * 解析 args 字符串, 填充 exec_args->argv 和 argc
- */
-static void build_argv(struct abi_exec_args *exec_args, char *args) {
-    exec_args->argc = 0;
-    if (args[0] == '\0') {
-        return;
-    }
-
-    char *p      = args;
-    int   in_arg = 0;
-    char *start  = p;
-
-    for (;; p++) {
-        if (*p == ' ' || *p == '\0') {
-            if (in_arg && exec_args->argc < ABI_EXEC_MAX_ARGS) {
-                size_t len = p - start;
-                if (len >= ABI_EXEC_MAX_ARG_LEN) {
-                    len = ABI_EXEC_MAX_ARG_LEN - 1;
-                }
-                memcpy(exec_args->argv[exec_args->argc], start, len);
-                exec_args->argv[exec_args->argc][len] = '\0';
-                exec_args->argc++;
-                in_arg = 0;
-            }
-            if (*p == '\0') {
-                break;
-            }
-        } else if (!in_arg) {
-            start  = p;
-            in_arg = 1;
-        }
-    }
-}
-
-/**
  * 查找服务配置中的 tty handle,返回其 src_handle
  */
 static uint32_t find_tty_handle(struct svc_config *cfg) {
@@ -108,24 +70,55 @@ static uint32_t find_tty_handle(struct svc_config *cfg) {
 }
 
 /**
- * 向 handle 数组追加标准 stdio handles(stdin/stdout/stderr → tty)
+ * 向 proc_image_builder 注入服务通用 handles
  */
-static int inject_stdio_handles(struct spawn_handle *handles, int count, int max,
-                                uint32_t tty_handle) {
-    if (tty_handle == HANDLE_INVALID || count >= max) {
-        return count;
+static void inject_svc_handles_image(struct proc_image_builder *b, struct svc_manager *mgr,
+                                     struct svc_config *cfg) {
+    /* 配置中声明的 handles */
+    for (int i = 0; i < cfg->handle_count; i++) {
+        proc_image_add_handle(b, cfg->handles[i].src_handle, cfg->handles[i].name);
     }
-    const char *names[] = {HANDLE_STDIO_STDIN, HANDLE_STDIO_STDOUT, HANDLE_STDIO_STDERR};
-    for (int i = 0; i < 3 && count < max; i++) {
-        handles[count].src = tty_handle;
-        snprintf(handles[count].name, sizeof(handles[count].name), "%s", names[i]);
-        count++;
+
+    /* init_notify */
+    if (mgr->init_notify_ep != HANDLE_INVALID) {
+        proc_image_add_handle(b, mgr->init_notify_ep, "init_notify");
     }
-    return count;
+
+    /* stdio → tty */
+    uint32_t tty_h = find_tty_handle(cfg);
+    if (tty_h != HANDLE_INVALID) {
+        proc_image_add_handle(b, tty_h, HANDLE_STDIO_STDIN);
+        proc_image_add_handle(b, tty_h, HANDLE_STDIO_STDOUT);
+        proc_image_add_handle(b, tty_h, HANDLE_STDIO_STDERR);
+    }
 }
 
 /**
- * 从 ramfs 加载 ELF 并使用 bootstrap_exec 启动
+ * 向 proc_builder 注入服务通用 handles
+ */
+static void inject_svc_handles(struct proc_builder *b, struct svc_manager *mgr,
+                               struct svc_config *cfg) {
+    /* 配置中声明的 handles */
+    for (int i = 0; i < cfg->handle_count; i++) {
+        proc_add_handle(b, cfg->handles[i].src_handle, cfg->handles[i].name);
+    }
+
+    /* init_notify */
+    if (mgr->init_notify_ep != HANDLE_INVALID) {
+        proc_add_handle(b, mgr->init_notify_ep, "init_notify");
+    }
+
+    /* stdio → tty */
+    uint32_t tty_h = find_tty_handle(cfg);
+    if (tty_h != HANDLE_INVALID) {
+        proc_add_handle(b, tty_h, HANDLE_STDIO_STDIN);
+        proc_add_handle(b, tty_h, HANDLE_STDIO_STDOUT);
+        proc_add_handle(b, tty_h, HANDLE_STDIO_STDERR);
+    }
+}
+
+/**
+ * 从 ramfs 加载 ELF 并通过 proc_image_builder 启动(绕过 VFS)
  */
 static int start_via_bootstrap(struct svc_manager *mgr, struct svc_config *cfg) {
     struct ramfs_ctx *ramfs = ramfsd_service_get_ramfs(&g_ramfsd);
@@ -154,85 +147,38 @@ static int start_via_bootstrap(struct svc_manager *mgr, struct svc_config *cfg) 
         return -1;
     }
 
-    /* 准备 handles */
-    struct spawn_handle handles[ABI_EXEC_MAX_HANDLES];
-    int                 handle_count = 0;
+    struct proc_image_builder b;
+    proc_image_init(&b, cfg->name, elf_data, (size_t)nread);
 
-    for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
-        handles[handle_count].src = cfg->handles[i].src_handle;
-        snprintf(handles[handle_count].name, sizeof(handles[handle_count].name), "%s",
-                 cfg->handles[i].name);
-        handle_count++;
+    if (cfg->profile[0]) {
+        proc_image_set_profile(&b, cfg->profile);
     }
 
-    /* 注入 init_notify(优先于 stdio 确保 ready 通知可达) */
-    if (mgr->init_notify_ep != HANDLE_INVALID && handle_count < ABI_EXEC_MAX_HANDLES) {
-        handles[handle_count].src = mgr->init_notify_ep;
-        snprintf(handles[handle_count].name, sizeof(handles[handle_count].name), "%s",
-                 "init_notify");
-        handle_count++;
-    }
+    inject_svc_handles_image(&b, mgr, cfg);
 
-    /* 注入标准 stdio handles */
-    uint32_t tty_h = find_tty_handle(cfg);
-    handle_count   = inject_stdio_handles(handles, handle_count, ABI_EXEC_MAX_HANDLES, tty_h);
-
-    int pid = bootstrap_exec(elf_data, (size_t)nread, cfg->name, NULL, handles, handle_count,
-                             cfg->profile[0] ? cfg->profile : NULL);
-
+    int pid = proc_image_spawn(&b);
     free(elf_data);
     return pid;
 }
 
 /**
- * 通过 sys_exec (VFS) 启动
+ * 通过 VFS 路径启动(依赖 VFS 就绪)
  */
 static int start_via_exec(struct svc_manager *mgr, struct svc_config *cfg) {
-    struct abi_exec_args exec_args;
-    memset(&exec_args, 0, sizeof(exec_args));
+    struct proc_builder b;
+    proc_init(&b, cfg->path);
 
-    size_t path_len = strlen(cfg->path);
-    if (path_len >= ABI_EXEC_PATH_MAX) {
-        path_len = ABI_EXEC_PATH_MAX - 1;
-    }
-    memcpy(exec_args.path, cfg->path, path_len);
-    exec_args.path[path_len] = '\0';
-
-    if (cfg->profile[0] != '\0') {
-        size_t profile_len = strlen(cfg->profile);
-        if (profile_len >= ABI_SPAWN_PROFILE_LEN) {
-            profile_len = ABI_SPAWN_PROFILE_LEN - 1;
-        }
-        memcpy(exec_args.profile_name, cfg->profile, profile_len);
-        exec_args.profile_name[profile_len] = '\0';
+    if (cfg->profile[0]) {
+        proc_set_profile(&b, cfg->profile);
     }
 
-    build_argv(&exec_args, cfg->args);
-    exec_args.flags = 0;
+    inject_svc_handles(&b, mgr, cfg);
 
-    int hcount = 0;
-    for (int i = 0; i < cfg->handle_count && i < ABI_EXEC_MAX_HANDLES; i++) {
-        exec_args.handles[hcount].src = cfg->handles[i].src_handle;
-        snprintf(exec_args.handles[hcount].name, sizeof(exec_args.handles[hcount].name), "%s",
-                 cfg->handles[i].name);
-        hcount++;
+    if (cfg->args[0]) {
+        proc_add_args_string(&b, cfg->args);
     }
 
-    /* 注入 init_notify(优先于 stdio 确保 ready 通知可达) */
-    if (mgr->init_notify_ep != HANDLE_INVALID && hcount < ABI_EXEC_MAX_HANDLES) {
-        exec_args.handles[hcount].src = mgr->init_notify_ep;
-        snprintf(exec_args.handles[hcount].name, sizeof(exec_args.handles[hcount].name), "%s",
-                 "init_notify");
-        hcount++;
-    }
-
-    /* 注入标准 stdio handles */
-    uint32_t tty_h = find_tty_handle(cfg);
-    hcount         = inject_stdio_handles(exec_args.handles, hcount, ABI_EXEC_MAX_HANDLES, tty_h);
-
-    exec_args.handle_count = (uint32_t)hcount;
-
-    return sys_exec(&exec_args);
+    return proc_spawn(&b);
 }
 
 int svc_start_service(struct svc_manager *mgr, int idx) {

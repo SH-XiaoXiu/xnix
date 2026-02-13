@@ -74,9 +74,9 @@ int main(int argc, char **argv) {
     const char *ep_name  = force_ata ? "fatfs_ata_ep" : "fatfs_ep";
     const char *svc_name = force_ata ? "fatfsd_ata" : "fatfsd";
 
-    handle_t ep = env_get_handle(ep_name);
+    env_set_name("fatfsd");
+    handle_t ep = env_require(ep_name);
     if (ep == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to find %s handle\n", ep_name);
         return 1;
     }
 

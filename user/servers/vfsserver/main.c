@@ -734,7 +734,8 @@ static int vfsd_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
-    g_vfs_ep = env_get_handle("vfs_ep");
+    env_set_name("vfsserver");
+    g_vfs_ep = env_require("vfs_ep");
     if (g_vfs_ep == HANDLE_INVALID) {
         return 1;
     }

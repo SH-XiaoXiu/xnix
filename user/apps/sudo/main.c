@@ -67,10 +67,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* 查找 sudo_ep */
-    handle_t sudo_ep = env_get_handle("sudo_ep");
+    env_set_name("sudo");
+    handle_t sudo_ep = env_require("sudo_ep");
     if (sudo_ep == HANDLE_INVALID) {
-        printf("sudo: sudod service not available\n");
         return 1;
     }
 

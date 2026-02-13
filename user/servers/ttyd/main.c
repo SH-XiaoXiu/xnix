@@ -690,7 +690,8 @@ int main(int argc, char **argv) {
     /* 强制 stdout/stderr 使用 debug fallback,避免 printf 发给自己死锁 */
     _stdio_force_debug_mode();
 
-    handle_t serial_ep = env_get_handle("serial");
+    env_set_name("ttyd");
+    handle_t serial_ep = env_require("serial");
     handle_t kbd_ep    = env_get_handle("kbd_ep");
 
     if (serial_ep == HANDLE_INVALID) {

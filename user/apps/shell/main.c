@@ -168,7 +168,7 @@ static void run_external(const char *path, int argc, char **argv, int background
     /* 清除前台进程 */
     shell_set_foreground(0);
 
-    if (ret > 0 && status != 0) {
+    if (status != 0) {
         printf("Process %d exited with status %d\n", pid, status);
     }
 }

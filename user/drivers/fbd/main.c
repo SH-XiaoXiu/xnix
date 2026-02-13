@@ -197,12 +197,11 @@ static int fb_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
+    env_set_name("fbd");
     ulog_tagf(stdout, TERM_COLOR_WHITE, "[fbd]", " Starting framebuffer driver\n");
 
-    /* 查找 framebuffer physmem handle */
-    handle_t fb_handle = sys_handle_find("fb_mem");
+    handle_t fb_handle = env_require("fb_mem");
     if (fb_handle == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " Failed to find fb_mem handle\n");
         return 1;
     }
 
@@ -242,10 +241,8 @@ int main(void) {
 
     fb_ready = 1;
 
-    /* 获取 endpoint handle (fbd provides fb_ep) */
-    handle_t fb_ep = env_get_handle("fb_ep");
+    handle_t fb_ep = env_require("fb_ep");
     if (fb_ep == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " Failed to find fb_ep handle\n");
         return 1;
     }
 

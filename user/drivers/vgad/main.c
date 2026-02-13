@@ -9,8 +9,6 @@
 #include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/svc.h>
-#include <xnix/syscall.h>
-#include <xnix/ulog.h>
 
 static struct vga_state g_vga;
 static pthread_mutex_t  g_vga_lock;
@@ -59,18 +57,9 @@ static int console_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
-    /* Get vga_mem physmem handle (0xB8000) */
-    handle_t vga_mem = env_get_handle("vga_mem");
-    if (vga_mem == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[vgad]", " ERROR: vga_mem handle not found\n");
-        return 1;
-    }
-
-    /* 映射VGA缓冲区 */
-    void *addr = sys_mmap_phys(vga_mem, 0, 0x1000, 0x03, NULL);
-    if (!addr || (intptr_t)addr < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[vgad]", " ERROR: failed to map VGA buffer (%d)\n",
-                  (int)(intptr_t)addr);
+    env_set_name("vgad");
+    void *addr = env_mmap_resource("vga_mem", NULL);
+    if (!addr) {
         return 1;
     }
 
@@ -80,10 +69,8 @@ int main(void) {
     vga_hw_init();
     vga_clear(&g_vga);
 
-    /* 获取 vga_ep 端点 - 应该由init通过provides传递 */
-    handle_t ep = env_get_handle("vga_ep");
+    handle_t ep = env_require("vga_ep");
     if (ep == HANDLE_INVALID) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[vgad]", " ERROR: vga_ep handle not found\n");
         return 1;
     }
 
