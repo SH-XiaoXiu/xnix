@@ -662,7 +662,6 @@ cat serial.log
 - [《x86汇编:从实模式到保护模式》](https://book.douban.com/subject/20492528/)
 - [OSDev Wiki](https://wiki.osdev.org/)
 - [Intel SDM](https://www.intel.com/sdm)
-- [L4 微内核](https://www.l4hq.org/)
 - [YatSenOS 教程](https://ysos.gzti.me/)
 
 ## License
