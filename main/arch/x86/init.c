@@ -6,22 +6,11 @@
  */
 
 #include <arch/cpu.h>
+#include <plat/platform.h>
 
 #include <asm/smp_defs.h>
 
-/* 驱动注册函数声明 */
-extern void vga_console_register(void);
-extern void fb_console_register(void);
-extern void serial_console_register(void);
-extern void pic_register(void);
-extern void pit_register(void);
-extern void apic_register(void);
-extern void ps2_register(void);
-
-/* Framebuffer 可用性检查 */
-extern bool fb_available(void);
-
-/* GDT/IDT 初始化 */
+/* GDT/IDT 初始化 (在 core 层) */
 extern void gdt_init(void);
 extern void idt_init(void);
 
@@ -30,27 +19,22 @@ extern struct smp_info g_smp_info;
 
 void arch_early_init(void) {
     /*
-     * 注册控制台驱动
-     * fb_console 和 vga_console 都注册,fb_console_init 会检测 framebuffer 是否可用
-     * 如果有 framebuffer,fb_console 用于显示;否则回退到 VGA 文本模式
-     *
-     * 暂时禁用内核 serial console 来验证用户态 seriald
+     * 通过平台描述符初始化早期设备
+     * 包括: 控制台、中断控制器、定时器等
      */
-    fb_console_register();
-    vga_console_register();
-    serial_console_register();
-
-    pic_register();
-    pit_register();
+    const struct platform_desc *plat = platform_get();
+    if (plat && plat->early_init) {
+        plat->early_init();
+    }
+    if (plat && plat->driver_init) {
+        plat->driver_init();
+    }
 }
 
 void arch_init(void) {
     /* 初始化 GDT/IDT */
     gdt_init();
     idt_init();
-
-    /* 注册 PS/2 键盘驱动 */
-    ps2_register();
 
     /*
      * 外部 IRQ 先使用 8259 PIC (PIT/键盘等 ISA IRQ 更稳定)

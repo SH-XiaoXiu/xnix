@@ -1,18 +1,16 @@
 /**
- * @file abi/protocol.h
+ * @file udm_errno.h
  * @brief UDM 协议层错误码定义
  *
  * 协议错误码与系统调用错误码分离:
- * - 系统调用错误码(errno):IPC 传输层失败(如 endpoint 无效,权限不足,超时)
- * - 协议错误码:IPC 消息体内业务逻辑失败(如 VFS 文件不存在,Serial 设备忙)
+ * - 系统调用错误码(errno): IPC 传输层失败(如 endpoint 无效,权限不足,超时)
+ * - 协议错误码: IPC 消息体内业务逻辑失败(如 VFS 文件不存在,Serial 设备忙)
  *
  * 协议错误码在 IPC 消息的响应字段中传递,独立于系统调用返回值.
  */
 
-#ifndef XNIX_ABI_PROTOCOL_H
-#define XNIX_ABI_PROTOCOL_H
-
-#include <xnix/abi/errno.h>
+#ifndef D_UDM_ERRNO_H
+#define D_UDM_ERRNO_H
 
 /*
  * UDM 协议基础错误码
@@ -44,27 +42,17 @@
  */
 static inline int errno_to_udm(int errnum) {
     switch (errnum) {
-    case XNIX_EOK:
-        return UDM_OK;
-    case XNIX_EINVAL:
-        return UDM_ERR_INVALID;
-    case XNIX_ENOENT:
-        return UDM_ERR_NOTFOUND;
-    case XNIX_ENOSYS:
-        return UDM_ERR_NOTSUP;
-    case XNIX_EBUSY:
-        return UDM_ERR_BUSY;
-    case XNIX_EIO:
-        return UDM_ERR_IO;
-    case XNIX_ETIMEDOUT:
-        return UDM_ERR_TIMEOUT;
-    case XNIX_EOVERFLOW:
-        return UDM_ERR_OVERFLOW;
-    case XNIX_EPERM:
-    case XNIX_EACCES:
-        return UDM_ERR_PERM;
-    default:
-        return UDM_ERR_UNKNOWN;
+    case 0:  return UDM_OK;
+    case 22: return UDM_ERR_INVALID;   /* EINVAL */
+    case 2:  return UDM_ERR_NOTFOUND;  /* ENOENT */
+    case 38: return UDM_ERR_NOTSUP;    /* ENOSYS */
+    case 16: return UDM_ERR_BUSY;      /* EBUSY */
+    case 5:  return UDM_ERR_IO;        /* EIO */
+    case 110: return UDM_ERR_TIMEOUT;  /* ETIMEDOUT */
+    case 75: return UDM_ERR_OVERFLOW;  /* EOVERFLOW */
+    case 1:  /* EPERM */
+    case 13: return UDM_ERR_PERM;      /* EACCES */
+    default: return UDM_ERR_UNKNOWN;
     }
 }
 
@@ -76,28 +64,18 @@ static inline int errno_to_udm(int errnum) {
  */
 static inline int udm_to_errno(int udm_err) {
     switch (udm_err) {
-    case UDM_OK:
-        return XNIX_EOK;
-    case UDM_ERR_INVALID:
-        return XNIX_EINVAL;
-    case UDM_ERR_NOTFOUND:
-        return XNIX_ENOENT;
-    case UDM_ERR_NOTSUP:
-        return XNIX_ENOSYS;
-    case UDM_ERR_BUSY:
-        return XNIX_EBUSY;
-    case UDM_ERR_IO:
-        return XNIX_EIO;
-    case UDM_ERR_TIMEOUT:
-        return XNIX_ETIMEDOUT;
-    case UDM_ERR_OVERFLOW:
-        return XNIX_EOVERFLOW;
-    case UDM_ERR_PERM:
-        return XNIX_EPERM;
+    case UDM_OK:           return 0;   /* OK */
+    case UDM_ERR_INVALID:  return 22;  /* EINVAL */
+    case UDM_ERR_NOTFOUND: return 2;   /* ENOENT */
+    case UDM_ERR_NOTSUP:   return 38;  /* ENOSYS */
+    case UDM_ERR_BUSY:     return 16;  /* EBUSY */
+    case UDM_ERR_IO:       return 5;   /* EIO */
+    case UDM_ERR_TIMEOUT:  return 110; /* ETIMEDOUT */
+    case UDM_ERR_OVERFLOW: return 75;  /* EOVERFLOW */
+    case UDM_ERR_PERM:     return 1;   /* EPERM */
     case UDM_ERR_UNKNOWN:
-    default:
-        return XNIX_EIO; /* 未知错误映射为 I/O 错误 */
+    default:               return 5;   /* EIO - 未知错误映射为 I/O 错误 */
     }
 }
 
-#endif /* XNIX_ABI_PROTOCOL_H */
+#endif /* D_UDM_ERRNO_H */

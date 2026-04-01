@@ -79,6 +79,11 @@ foreach (SVC ${CORE_SERVICES})
     list(APPEND SYSTEM_FILES "${CMAKE_BINARY_DIR}/${SVC}.elf:/sbin/${SVC}.elf")
 endforeach ()
 
+# 核心 bin 工具 -> /bin/
+foreach (BIN ${CORE_BIN_TOOLS})
+    list(APPEND SYSTEM_FILES "${BIN_TOOL_OUTPUT_DIR}/${BIN}.elf:/bin/${BIN}.elf")
+endforeach ()
+
 # 配置文件
 list(APPEND SYSTEM_FILES "${CMAKE_SOURCE_DIR}/user/core_services.conf:/etc/core_services.conf")
 list(APPEND SYSTEM_FILES "${CMAKE_SOURCE_DIR}/user/user_services.conf:/etc/user_services.conf")
@@ -103,10 +108,14 @@ file(WRITE ${SYSTEM_FILELIST} "${SYSTEM_FILES_CONTENT}")
 set(SYSTEM_IMG ${CMAKE_BINARY_DIR}/system.img)
 
 # 收集依赖
-set(SYSTEM_DEPENDS initramfs xnix.elf init.elf)
+set(SYSTEM_DEPENDS initramfs xnix.elf init.elf bin_tools)
 foreach (ENTRY ${SYSTEM_FILES})
     string(REGEX MATCH "^([^:]+)" SRC_FILE "${ENTRY}")
     if (SRC_FILE MATCHES "\\.elf$")
+        # 对于 bin 目录下的文件,依赖已经在 bin_tools 目标中
+        if (SRC_FILE MATCHES "/bin/[^/]+\\.elf$")
+            continue()
+        endif()
         get_filename_component(TARGET_NAME ${SRC_FILE} NAME_WE)
         if (SRC_FILE MATCHES "^${CMAKE_BINARY_DIR}/")
             list(APPEND SYSTEM_DEPENDS ${TARGET_NAME}.elf)

@@ -224,11 +224,26 @@ set(LIB_SOURCES ${LIB_C})
 file(GLOB_RECURSE DRIVER_SOURCES "${CMAKE_SOURCE_DIR}/main/drivers/*.c")
 
 # ─── 4. Arch 源文件 ───
+# Core 层 (CPU 架构核心)
 set(ARCH_SOURCES "")
-file(GLOB_RECURSE ARCH_C "${ARCH_DIR}/*.c")
-file(GLOB_RECURSE ARCH_ASM_LOWER "${ARCH_DIR}/*.s")
-file(GLOB_RECURSE ARCH_ASM_UPPER "${ARCH_DIR}/*.S")
+file(GLOB_RECURSE ARCH_C "${ARCH_DIR}/core/*.c")
+file(GLOB_RECURSE ARCH_ASM_LOWER "${ARCH_DIR}/core/*.s")
+file(GLOB_RECURSE ARCH_ASM_UPPER "${ARCH_DIR}/core/*.S")
 list(APPEND ARCH_SOURCES ${ARCH_C} ${ARCH_ASM_LOWER} ${ARCH_ASM_UPPER})
+
+# Platform 层 (平台驱动和 HAL)
+file(GLOB_RECURSE PLATFORM_C "${ARCH_DIR}/platform/*.c")
+file(GLOB_RECURSE PLATFORM_ASM_LOWER "${ARCH_DIR}/platform/*.s")
+file(GLOB_RECURSE PLATFORM_ASM_UPPER "${ARCH_DIR}/platform/*.S")
+list(APPEND ARCH_SOURCES ${PLATFORM_C} ${PLATFORM_ASM_LOWER} ${PLATFORM_ASM_UPPER})
+
+# Arch 根目录文件 (init.c 等)
+file(GLOB ARCH_ROOT_C "${ARCH_DIR}/*.c")
+list(APPEND ARCH_SOURCES ${ARCH_ROOT_C})
+
+# Boot 目录
+file(GLOB_RECURSE BOOT_ASM "${ARCH_DIR}/boot/*.S")
+list(APPEND ARCH_SOURCES ${BOOT_ASM})
 
 # ============================================
 # 内核目标（拆分为 4 个 object library + 1 个可执行文件）
@@ -236,7 +251,10 @@ list(APPEND ARCH_SOURCES ${ARCH_C} ${ARCH_ASM_LOWER} ${ARCH_ASM_UPPER})
 
 # ─── arch object library ───
 add_library(arch OBJECT ${ARCH_SOURCES})
-target_include_directories(arch PRIVATE ${SHARED_INCLUDES})
+target_include_directories(arch PRIVATE
+        ${SHARED_INCLUDES}
+        ${ARCH_DIR}/platform/pc/include  # <plat/xxx.h>
+)
 # arch 不能 include <kernel/...> 或内部头文件
 
 # ─── lib object library ───

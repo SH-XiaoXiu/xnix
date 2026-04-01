@@ -19,9 +19,9 @@ MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](http
 | 微内核设计        | 最小化内核，策略与机制分离              | 内核仅含调度、IPC、内存管理            |
 | Bootstrap 自举 | Init 完全自举，内核不依赖 bootloader | 内置 FAT32 驱动，绕过 VFS 启动服务    |
 | 平台抽象         | HAL + 弱符号机制，支持多平台移植        | 新增架构只需实现少量强符号              |
-| 权限系统 (Perms) | 字符串节点权限，Profile 管理         | `xnix.io.port.*` 控制 I/O 访问 |
+| 权限系统 | 字符串节点权限，Profile 管理         | `xnix.io.port.*` 控制 I/O 访问 |
 | IPC 通信       | 同步/异步消息传递，支持 RPC 模式        | endpoint send/recv/call    |
-| 用户态驱动 (UDM)  | 驱动隔离，崩溃可恢复，支持热更新           | seriald、kbd 均为用户进程         |
+| 用户态驱动 | 驱动隔离，崩溃可恢复，支持热更新           | seriald、kbd 均为用户进程         |
 | 进程管理         | 完整生命周期、信号机制、进程树            | exec-based spawn、SIGTERM   |
 | FAT32 文件系统   | 支持读写 FAT32 格式磁盘            | 可挂载硬盘镜像进行文件操作              |
 | 声明式服务管理      | INI 配置、依赖管理、自动重启           | services.conf 定义启动顺序       |
@@ -139,9 +139,13 @@ gdb build/xnix.elf -ex "target remote :1234"
 xnix/
 ├── main/                   # 内核代码
 │   ├── arch/x86/           # x86 架构实现
+│   │   ├── core/           # CPU 核心（GDT、IDT、MMU、上下文切换）
+│   │   ├── platform/pc/    # PC 平台实现
+│   │   │   ├── early/      # 早期驱动（PIC、PIT、串口、VGA 等）
+│   │   │   ├── hal/        # 平台 HAL（ACPI、MP Table）
+│   │   │   └── include/    # 平台抽象接口
 │   │   ├── boot/           # 启动代码、链接脚本
-│   │   ├── cpu/            # GDT、IDT、上下文切换
-│   │   └── hal/            # 硬件特性探测
+│   │   └── include/        # 架构私有头文件
 │   ├── kernel/             # 内核子系统（平台无关）
 │   │   ├── sched/          # 调度器
 │   │   ├── ipc/            # IPC 机制
@@ -150,12 +154,13 @@ xnix/
 │   │   ├── perm/           # 权限系统
 │   │   └── handle/         # 句柄系统
 │   ├── lib/                # 内核库（同步原语等）
-│   ├── drivers/            # 内核态控制台（早期输出）
+│   ├── drivers/            # 内核驱动框架（早期控制台、定时器）
 │   └── include/            # 公共头文件
 │
 ├── sdk/                    # 公共 ABI 层
-│   ├── include/xnix/abi/   # 稳定 ABI 接口（syscall, ipc, handle）
-│   └── include/xnix/driver/# 驱动辅助工具（ioport, irq）
+│   └── include/xnix/
+│       ├── abi/            # 稳定 ABI 接口（syscall, ipc, handle, errno）
+│       └── driver/         # 驱动辅助工具（ioport, irq）
 │
 ├── user/                   # 用户态代码
 │   ├── init/               # Init 进程（服务管理 + 自举）
@@ -169,7 +174,11 @@ xnix/
 │   ├── drivers/            # UDM 驱动（seriald, kbd, fatfsd...）
 │   ├── servers/            # 系统服务（vfsserver 等）
 │   ├── demos/              # 示例程序
-│   └── libs/               # 用户态库（libc, libvfs, libpthread）
+│   └── libs/               # 用户态库
+│       ├── libc/           # C 标准库
+│       ├── libd/           # 驱动辅助库（UDM 协议、服务框架）
+│       ├── libvfs/         # VFS 客户端库
+│       └── ...             # 其他库
 │
 ├── iso/                    # ISO 打包模块
 │   ├── CMakeLists.txt      # 生成 initramfs.img + system.img
@@ -206,8 +215,9 @@ graph TD
             Proc[进程管理]
         end
 
-        subgraph HAL["硬件抽象层"]
-            Feature[特性探测]
+        subgraph Platform["平台层 PC"]
+            EarlyDrv[早期驱动]
+            HAL[HAL 探测]
         end
 
         subgraph Arch["架构层 x86"]
@@ -221,7 +231,7 @@ graph TD
 
     Shell & Init & Demo -->|syscall| Kernel
     SerialD & KbdD -->|IPC| Kernel
-    Kernel --> HAL --> Arch --> Hardware
+    Kernel --> Platform --> Arch --> Hardware
 
     style UserSpace fill:#e1f5fe,stroke:#01579b
     style KernelSpace fill:#fff3e0,stroke:#ff6f00
@@ -436,20 +446,26 @@ target_link_options(myapp.elf PRIVATE ${USER_LINK_OPTIONS})
 
 | 路径前缀                | 可见性   | 说明         |
 |---------------------|-------|------------|
-| `<xnix/abi/xxx>`    | 公共ABI | 用户态/内核共享接口 |
-| `<xnix/driver/xxx>` | 公共SDK | 驱动辅助工具     |
+| `<xnix/abi/xxx>`    | 公共ABI | 用户态/内核共享接口（系统调用、IPC、句柄） |
+| `<xnix/driver/xxx>` | 公共SDK | 驱动辅助工具（ioport、irq） |
+| `<d/xxx>`           | 用户态库  | 驱动辅助库（UDM 协议、服务框架） |
 | `<libs/xxx/xxx.h>`  | 服务SDK | 服务客户端库     |
 | `<xnix/xxx>`        | 内核内部  | 仅内核可用      |
+| `<plat/xxx>`        | 平台接口  | 仅内核平台层可用   |
+| `<arch/xxx>`        | 架构接口  | 仅内核架构层可用   |
 
 **用户态代码只能包含：**
 
 ```c
 #include <xnix/abi/syscall.h>    // ✓ ABI
 #include <xnix/driver/ioport.h>  // ✓ 驱动工具
+#include <d/udm_errno.h>         // ✓ UDM 协议错误码
+#include <d/protocol/vfs.h>      // ✓ VFS 协议定义
 #include <libs/serial/serial.h>  // ✓ 服务 SDK
 #include <stdio.h>               // ✓ libc
 
 #include <xnix/ipc.h>            // ✗ 内核内部
+#include <plat/platform.h>       // ✗ 平台层接口
 ```
 
 #### 4. 权限 Profile
