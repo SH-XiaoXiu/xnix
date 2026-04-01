@@ -154,6 +154,9 @@ set(INSTALLER_FILELIST ${CMAKE_BINARY_DIR}/installer_files.txt)
 set(INSTALLER_FILES "")
 list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/shell.elf:/bin/shell.elf")
 list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/installer.elf:/bin/installer.elf")
+list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/sudo.elf:/bin/sudo.elf")
+list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/sudod.elf:/bin/sudod.elf")
+list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/devfsd.elf:/sbin/devfsd.elf")
 list(APPEND INSTALLER_FILES "${CMAKE_SOURCE_DIR}/user/user_services.conf:/etc/user_services.conf")
 # 核心服务也放到 /sbin/ (与 initramfs 内容相同, 用于 respawn)
 foreach (SVC ${CORE_SERVICES})
@@ -172,7 +175,7 @@ add_custom_command(
         -DIMG_FILE=${SYSTEM_INSTALLER_IMG}
         -DFILELIST=${INSTALLER_FILELIST}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/copy_system_files.cmake
-        DEPENDS shell.elf installer.elf ${INITRAMFS_DEPENDS}
+        DEPENDS shell.elf installer.elf sudo.elf sudod.elf devfsd.elf ${INITRAMFS_DEPENDS}
         COMMENT "生成 system_installer.img (FAT16, 16MB)..."
 )
 

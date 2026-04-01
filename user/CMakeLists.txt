@@ -126,6 +126,7 @@ set(CORE_SERVICES
         fbcond
         ttyd
         klogd
+        devfsd
         # shell - 移到 /bin/，不是系统服务
 )
 

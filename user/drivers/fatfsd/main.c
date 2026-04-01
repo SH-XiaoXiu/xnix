@@ -11,6 +11,7 @@
 #include "diskio_mem.h"
 #include "fatfs_vfs.h"
 
+#include <block.h>
 #include <d/protocol/vfs.h>
 #include <d/server.h>
 #include <stdio.h>
@@ -36,6 +37,102 @@ struct mbr_partition {
 } __attribute__((packed));
 
 static struct fatfs_ctx g_fatfs;
+
+/* ============== 块设备适配器 ============== */
+
+/* ATA 驱动上下文 */
+struct ata_block_ctx {
+    int drive;
+    uint32_t sector_count;
+};
+
+static struct ata_block_ctx g_ata_ctx[2];
+static struct block_device g_block_dev[2];
+static bool g_block_dev_registered[2] = {false, false};
+
+/* 块设备读取操作 */
+static int block_ata_read(void *ctx, uint64_t lba, uint32_t count, void *buffer) {
+    struct ata_block_ctx *actx = (struct ata_block_ctx *)ctx;
+    if (!ata_is_ready(actx->drive)) {
+        return -1;
+    }
+    return ata_read(actx->drive, (uint32_t)lba, count, buffer);
+}
+
+/* 块设备写入操作 */
+static int block_ata_write(void *ctx, uint64_t lba, uint32_t count, const void *buffer) {
+    struct ata_block_ctx *actx = (struct ata_block_ctx *)ctx;
+    if (!ata_is_ready(actx->drive)) {
+        return -1;
+    }
+    return ata_write(actx->drive, (uint32_t)lba, count, buffer);
+}
+
+/* 块设备刷新操作 */
+static int block_ata_flush(void *ctx) {
+    (void)ctx;
+    /* ATA 驱动在每个扇区写入后自动刷新 */
+    return 0;
+}
+
+/* 块设备信息获取操作 */
+static int block_ata_get_info(void *ctx, struct block_info *info) {
+    struct ata_block_ctx *actx = (struct ata_block_ctx *)ctx;
+    info->sector_count = actx->sector_count;
+    info->sector_size = 512;
+    info->type = BLOCK_DEV_ATA;
+    strncpy(info->model, "ATA Disk", sizeof(info->model) - 1);
+    info->serial[0] = '\0';
+    return 0;
+}
+
+/* ATA 块设备操作表 */
+static struct block_ops ata_block_ops = {
+    .read = block_ata_read,
+    .write = block_ata_write,
+    .flush = block_ata_flush,
+    .get_info = block_ata_get_info,
+};
+
+/**
+ * 注册 ATA 块设备
+ * @param drive ATA 驱动器号 (0 或 1)
+ */
+static void register_ata_block_device(int drive) {
+    if (drive < 0 || drive > 1) return;
+    if (g_block_dev_registered[drive]) return;
+
+    if (!ata_is_ready(drive)) {
+        return;
+    }
+
+    uint32_t sectors = ata_get_sector_count(drive);
+    if (sectors == 0) {
+        return;
+    }
+
+    /* 初始化上下文 */
+    g_ata_ctx[drive].drive = drive;
+    g_ata_ctx[drive].sector_count = sectors;
+
+    /* 初始化块设备 */
+    memset(&g_block_dev[drive], 0, sizeof(g_block_dev[drive]));
+    g_block_dev[drive].type = BLOCK_DEV_ATA;
+    g_block_dev[drive].ops = &ata_block_ops;
+    g_block_dev[drive].driver_ctx = &g_ata_ctx[drive];
+    g_block_dev[drive].info.sector_count = sectors;
+    g_block_dev[drive].info.sector_size = 512;
+    g_block_dev[drive].info.type = BLOCK_DEV_ATA;
+
+    /* 注册设备（名称自动分配） */
+    if (block_register(&g_block_dev[drive]) == 0) {
+        g_block_dev_registered[drive] = true;
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]",
+                  " registered block device: %s (%u MB)\n",
+                  g_block_dev[drive].name,
+                  sectors / 2048);
+    }
+}
 
 /**
  * 从 MBR 解析第一个有效分区的起始 LBA
@@ -123,6 +220,13 @@ int main(int argc, char **argv) {
         disk_init_ata(0, base_lba);
         ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " ATA mode (drive=0, base_lba=%u)\n",
                   base_lba);
+
+        /* 注册块设备（供 devfsd 使用） */
+        register_ata_block_device(0);
+        /* 如果有从盘，也注册 */
+        if (ata_is_ready(1)) {
+            register_ata_block_device(1);
+        }
     }
 
     /* 初始化 FatFs */
