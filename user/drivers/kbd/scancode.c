@@ -144,3 +144,53 @@ int scancode_to_char(uint8_t scancode) {
 
     return c ? c : -1;
 }
+
+/*
+ * 输入事件路径 (GUI)
+ *
+ * 独立的 E0 前缀状态,避免与 TTY 路径干扰.
+ */
+
+static bool e0_prefix_ev = false;
+
+uint8_t scancode_get_modifiers(void) {
+    uint8_t mods = 0;
+    if (shift_held) mods |= INPUT_MOD_SHIFT;
+    if (ctrl_held)  mods |= INPUT_MOD_CTRL;
+    if (caps_lock)  mods |= INPUT_MOD_CAPSLOCK;
+    return mods;
+}
+
+int scancode_to_event(uint8_t scancode, struct input_event *ev) {
+    /* E0 前缀 */
+    if (scancode == SC_E0_PREFIX) {
+        e0_prefix_ev = true;
+        return -1;
+    }
+
+    bool    release = (scancode & 0x80) != 0;
+    uint8_t code    = scancode & 0x7F;
+
+    ev->type      = release ? INPUT_EVENT_KEY_RELEASE : INPUT_EVENT_KEY_PRESS;
+    ev->modifiers = scancode_get_modifiers();
+    ev->value     = release ? 0 : 1;
+    ev->value2    = 0;
+    ev->timestamp = 0; /* 由调用者填充 */
+    ev->_reserved = 0;
+
+    /* E0 扩展码 */
+    if (e0_prefix_ev) {
+        e0_prefix_ev = false;
+        switch (code) {
+        case SC_E0_UP:    ev->code = INPUT_KEY_UP;    break;
+        case SC_E0_DOWN:  ev->code = INPUT_KEY_DOWN;  break;
+        case SC_E0_LEFT:  ev->code = INPUT_KEY_LEFT;  break;
+        case SC_E0_RIGHT: ev->code = INPUT_KEY_RIGHT; break;
+        default:          ev->code = 0x80 | code;     break;
+        }
+        return 0;
+    }
+
+    ev->code = code;
+    return 0;
+}

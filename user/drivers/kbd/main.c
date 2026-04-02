@@ -11,6 +11,7 @@
 
 #include "scancode.h"
 
+#include <xnix/protocol/input.h>
 #include <xnix/protocol/kbd.h>
 #include <d/server.h>
 #include <pthread.h>
@@ -38,6 +39,17 @@ static pid_t foreground_pid = 0;
 /* 挂起的 GETC 请求 */
 static uint32_t        pending_getc_tid = 0; /* 0 表示无挂起请求 */
 static pthread_mutex_t pending_lock;
+
+/* 输入事件缓冲区 (GUI 路径) */
+#define EVENT_BUF_SIZE 128
+static struct input_event event_buf[EVENT_BUF_SIZE];
+static volatile uint16_t event_head = 0;
+static volatile uint16_t event_tail = 0;
+static pthread_mutex_t   event_lock;
+
+/* 挂起的事件读请求 */
+static uint32_t        pending_event_tid = 0;
+static pthread_mutex_t pending_event_lock;
 
 /**
  * 写入字符到输入队列
@@ -106,6 +118,68 @@ static void try_fulfill_pending_getc(void) {
 }
 
 /**
+ * 写入事件到事件队列
+ */
+static void event_write(const struct input_event *ev) {
+    pthread_mutex_lock(&event_lock);
+
+    uint16_t next = (event_head + 1) % EVENT_BUF_SIZE;
+    if (next != event_tail) {
+        event_buf[event_head] = *ev;
+        event_head            = next;
+    }
+
+    pthread_mutex_unlock(&event_lock);
+}
+
+/**
+ * 从事件队列读取事件 (非阻塞)
+ */
+static int event_read(struct input_event *out) {
+    pthread_mutex_lock(&event_lock);
+
+    if (event_head == event_tail) {
+        pthread_mutex_unlock(&event_lock);
+        return -1;
+    }
+
+    *out       = event_buf[event_tail];
+    event_tail = (event_tail + 1) % EVENT_BUF_SIZE;
+
+    pthread_mutex_unlock(&event_lock);
+    return 0;
+}
+
+/**
+ * 尝试满足挂起的事件读请求
+ */
+static void try_fulfill_pending_event(void) {
+    pthread_mutex_lock(&pending_event_lock);
+
+    if (pending_event_tid == 0) {
+        pthread_mutex_unlock(&pending_event_lock);
+        return;
+    }
+
+    struct input_event ev;
+    if (event_read(&ev) < 0) {
+        pthread_mutex_unlock(&pending_event_lock);
+        return;
+    }
+
+    struct ipc_message reply = {0};
+    reply.regs.data[0] = 0;
+    reply.regs.data[1] = INPUT_PACK_REG1(&ev);
+    reply.regs.data[2] = INPUT_PACK_REG2(&ev);
+    reply.regs.data[3] = INPUT_PACK_REG3(&ev);
+
+    sys_ipc_reply_to(pending_event_tid, &reply);
+    pending_event_tid = 0;
+
+    pthread_mutex_unlock(&pending_event_lock);
+}
+
+/**
  * IPC 消息处理
  */
 static int kbd_handler(struct ipc_message *msg) {
@@ -163,6 +237,39 @@ static int kbd_handler(struct ipc_message *msg) {
         msg->regs.data[0] = 0;
         break;
 
+    case INPUT_OP_READ_EVENT: {
+        struct input_event ev;
+        if (event_read(&ev) == 0) {
+            msg->regs.data[0] = 0;
+            msg->regs.data[1] = INPUT_PACK_REG1(&ev);
+            msg->regs.data[2] = INPUT_PACK_REG2(&ev);
+            msg->regs.data[3] = INPUT_PACK_REG3(&ev);
+        } else {
+            pthread_mutex_lock(&pending_event_lock);
+            if (msg->sender_tid == 0) {
+                msg->regs.data[0] = (uint32_t)-1;
+                pthread_mutex_unlock(&pending_event_lock);
+            } else if (pending_event_tid != 0 &&
+                       pending_event_tid != msg->sender_tid) {
+                msg->regs.data[0] = (uint32_t)-1;
+                pthread_mutex_unlock(&pending_event_lock);
+            } else {
+                pending_event_tid = msg->sender_tid;
+                pthread_mutex_unlock(&pending_event_lock);
+                return 1;
+            }
+        }
+        break;
+    }
+
+    case INPUT_OP_POLL: {
+        pthread_mutex_lock(&event_lock);
+        int has_event = (event_head != event_tail) ? 1 : 0;
+        pthread_mutex_unlock(&event_lock);
+        msg->regs.data[0] = has_event;
+        break;
+    }
+
     default:
         msg->regs.data[0] = -1;
         break;
@@ -192,7 +299,14 @@ static void *keyboard_thread(void *arg) {
             continue;
         }
 
-        /* 翻译扫描码 */
+        /* 生成输入事件 (GUI 路径) */
+        struct input_event ev;
+        if (scancode_to_event(scancode, &ev) == 0) {
+            event_write(&ev);
+            try_fulfill_pending_event();
+        }
+
+        /* 翻译扫描码 (TTY 路径) */
         int c = scancode_to_char(scancode);
         if (c >= 0) {
             input_write_char((char)c);
@@ -214,6 +328,8 @@ static void *keyboard_thread(void *arg) {
 int main(void) {
     pthread_mutex_init(&input_lock, NULL);
     pthread_mutex_init(&pending_lock, NULL);
+    pthread_mutex_init(&event_lock, NULL);
+    pthread_mutex_init(&pending_event_lock, NULL);
 
     env_set_name("kbd");
     handle_t kbd_ep = env_require("kbd_ep");
