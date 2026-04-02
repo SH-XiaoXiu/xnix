@@ -6,7 +6,7 @@
  * 文件操作使用统一 fd 表.
  */
 
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>

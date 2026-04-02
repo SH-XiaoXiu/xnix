@@ -1,6 +1,6 @@
 #include "vga.h"
 
-#include <d/protocol/serial.h>
+#include <xnix/protocol/serial.h>
 #include <d/server.h>
 #include <pthread.h>
 #include <stdint.h>

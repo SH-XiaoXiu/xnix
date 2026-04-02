@@ -1,16 +1,16 @@
 /**
- * @file udm/protocol/vfs.h
- * @brief VFS Protocol Definition (userspace only)
+ * @file xnix/protocol/vfs.h
+ * @brief VFS Protocol Definition
  *
  * Defines IPC protocol between VFS clients (libvfs) and FS drivers.
  * Used by both client and server code.
  */
 
-#ifndef UDM_PROTOCOL_VFS_H
-#define UDM_PROTOCOL_VFS_H
+#ifndef XNIX_PROTOCOL_VFS_H
+#define XNIX_PROTOCOL_VFS_H
 
 #include <stdint.h>
-#include <d/udm_errno.h>
+#include <xnix/protocol/udm_errno.h>
 
 /* VFS Protocol Operation Codes */
 #define UDM_VFS_OPEN     1
@@ -66,4 +66,4 @@ struct vfs_dirent {
     uint32_t size;
 };
 
-#endif /* UDM_PROTOCOL_VFS_H */
+#endif /* XNIX_PROTOCOL_VFS_H */

@@ -3,7 +3,7 @@
 #include "ramfsd_service.h"
 #include "svc_internal.h"
 
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -191,11 +191,11 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
 
     int pid;
 
-    if (cfg->builtin) {
-        /* 核心服务: 从 ramfs 加载 (bootstrap) */
+    if (cfg->ramfs_load) {
+        /* ramfs:// 服务: 从 ramfs 加载 (bootstrap) */
         pid = start_via_bootstrap(mgr, cfg);
     } else {
-        /* 用户服务: 通过 VFS 加载 (sys_exec) */
+        /* VFS 路径服务: 通过 VFS 加载 (sys_exec) */
         pid = start_via_exec(mgr, cfg);
     }
 

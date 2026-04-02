@@ -1,5 +1,5 @@
 /**
- * @file udm_errno.h
+ * @file xnix/protocol/udm_errno.h
  * @brief UDM 协议层错误码定义
  *
  * 协议错误码与系统调用错误码分离:
@@ -9,8 +9,8 @@
  * 协议错误码在 IPC 消息的响应字段中传递,独立于系统调用返回值.
  */
 
-#ifndef D_UDM_ERRNO_H
-#define D_UDM_ERRNO_H
+#ifndef XNIX_PROTOCOL_UDM_ERRNO_H
+#define XNIX_PROTOCOL_UDM_ERRNO_H
 
 /*
  * UDM 协议基础错误码
@@ -78,4 +78,4 @@ static inline int udm_to_errno(int udm_err) {
     }
 }
 
-#endif /* D_UDM_ERRNO_H */
+#endif /* XNIX_PROTOCOL_UDM_ERRNO_H */

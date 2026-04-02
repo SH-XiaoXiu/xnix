@@ -9,24 +9,14 @@
 #include <unistd.h>
 #include <xnix/abi/handle.h>
 #include <xnix/ipc.h>
+#include <xnix/protocol/svc.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
-
-#define SVC_MSG_READY 0xF001
 
 /* 重试参数 */
 #define SVC_NOTIFY_MAX_RETRIES   5
 #define SVC_NOTIFY_INITIAL_MS  200
 #define SVC_NOTIFY_SEND_TIMEOUT 2000
-
-/**
- * 服务就绪通知消息
- */
-struct svc_ready_msg {
-    uint32_t magic;
-    uint32_t pid;
-    char     name[16];
-};
 
 /**
  * 通知 init 服务已就绪

@@ -1,4 +1,4 @@
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <stdlib.h>
 #include <string.h>
 #include <vfs_client.h>

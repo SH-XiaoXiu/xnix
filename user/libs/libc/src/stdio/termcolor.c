@@ -3,7 +3,7 @@
  * @brief 终端颜色控制实现
  */
 
-#include <d/protocol/tty.h>
+#include <xnix/protocol/tty.h>
 #include <stdio_internal.h>
 #include <string.h>
 #include <xnix/fd.h>

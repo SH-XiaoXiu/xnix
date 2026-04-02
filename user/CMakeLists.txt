@@ -252,15 +252,8 @@ message(STATUS "[user] Sorted core: ${CORE_SERVICES}")
 # ============================================
 # 无需生成头文件
 # ============================================
-# 核心服务配置：user/core_services.conf -> initramfs:/etc/core_services.conf
-# 用户服务配置：user/user_services.conf -> system.img:/etc/user_services.conf
-# init 通过 ramfs/VFS 直接读取配置文件，不再使用嵌入式头文件
-
-# ============================================
-# 用户服务配置
-# ============================================
-# 用户服务配置已改为手写配置文件：user/user_services.conf
-# 不再从 service.conf 自动生成（简化构建流程）
+# 系统服务配置：user/sys.conf -> initramfs:/etc/sys.conf
+# init 从 ramfs 读取统一配置文件
 #
 # 注意：保留 generated 目录，以防其他地方依赖
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/generated)

@@ -3,7 +3,7 @@
  * @brief VFS 消息分发实现
  */
 
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs/vfs.h>

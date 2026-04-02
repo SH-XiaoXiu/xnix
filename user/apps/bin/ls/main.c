@@ -3,7 +3,7 @@
  * @brief 列出目录内容
  */
 
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>

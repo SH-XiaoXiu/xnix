@@ -10,6 +10,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <xnix/protocol/svc.h>
 #include <xnix/syscall.h>
 
 #define SVC_NAME_MAX        16
@@ -19,18 +20,6 @@
 #define SVC_DEPS_MAX        8
 #define SVC_MAX_SERVICES    16
 #define SVC_MAX_HANDLE_DEFS 32
-
-/* IPC 就绪通知消息 */
-#define SVC_MSG_READY 0xF001
-
-/**
- * 服务就绪通知消息
- */
-struct svc_ready_msg {
-    uint32_t magic;    /* SVC_MSG_READY */
-    uint32_t pid;      /* 进程 ID */
-    char     name[16]; /* 服务名 */
-};
 
 /**
  * 服务类型
@@ -119,7 +108,7 @@ struct svc_handle_def {
 struct svc_config {
     char name[SVC_NAME_MAX];
 
-    bool       builtin;            /* 是否为内置服务(已启动) */
+    bool       ramfs_load;         /* ramfs:// 路径前缀 → 从 ramfs 加载 */
     svc_type_t type;               /* 启动类型 */
     char       path[SVC_PATH_MAX]; /* ELF 路径 */
     char       args[256];          /* 命令行参数 */

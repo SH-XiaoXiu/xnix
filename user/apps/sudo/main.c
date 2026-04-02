@@ -7,7 +7,7 @@
  * 通过 sudod 以提升的 profile 执行指定命令.
  */
 
-#include <d/protocol/sudo.h>
+#include <xnix/protocol/sudo.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>

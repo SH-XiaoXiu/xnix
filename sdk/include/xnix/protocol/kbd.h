@@ -1,13 +1,13 @@
 /**
- * @file d/protocol/kbd.h
+ * @file xnix/protocol/kbd.h
  * @brief 键盘协议定义
  */
 
-#ifndef D_PROTOCOL_KBD_H
-#define D_PROTOCOL_KBD_H
+#ifndef XNIX_PROTOCOL_KBD_H
+#define XNIX_PROTOCOL_KBD_H
 
 #include <stdint.h>
-#include <d/udm_errno.h>
+#include <xnix/protocol/udm_errno.h>
 
 /* 消息解析辅助宏 */
 #ifndef UDM_MSG_OPCODE
@@ -23,4 +23,4 @@ enum udm_kbd_op {
 /* IRQ 编号 */
 #define IRQ_KEYBOARD 1
 
-#endif /* D_PROTOCOL_KBD_H */
+#endif /* XNIX_PROTOCOL_KBD_H */

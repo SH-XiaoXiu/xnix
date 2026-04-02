@@ -11,7 +11,7 @@
 
 #include "scancode.h"
 
-#include <d/protocol/kbd.h>
+#include <xnix/protocol/kbd.h>
 #include <d/server.h>
 #include <pthread.h>
 #include <signal.h>

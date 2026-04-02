@@ -3,7 +3,7 @@
  * @brief VFS 服务器 - 维护全局挂载表和路径解析
  */
 
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <d/server.h>
 #include <stdio.h>
 #include <string.h>

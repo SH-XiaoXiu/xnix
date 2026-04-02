@@ -1,4 +1,4 @@
-#include <d/protocol/serial.h>
+#include <xnix/protocol/serial.h>
 #include <d/server.h>
 #include <font/font.h>
 #include <font/utf8.h>

@@ -8,7 +8,7 @@
  *   read <file> -c <bytes>   读取前 N 字节
  */
 
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>

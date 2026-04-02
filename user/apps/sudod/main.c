@@ -8,7 +8,7 @@
  * 当前为原型实现: 允许所有请求, 无认证检查.
  */
 
-#include <d/protocol/sudo.h>
+#include <xnix/protocol/sudo.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>

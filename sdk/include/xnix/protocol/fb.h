@@ -1,14 +1,14 @@
 /**
- * @file d/protocol/fb.h
+ * @file xnix/protocol/fb.h
  * @brief Framebuffer 协议定义
  */
 
-#ifndef D_PROTOCOL_FB_H
-#define D_PROTOCOL_FB_H
+#ifndef XNIX_PROTOCOL_FB_H
+#define XNIX_PROTOCOL_FB_H
 
 #include <stdint.h>
 #include <xnix/abi/framebuffer.h>
-#include <d/udm_errno.h>
+#include <xnix/protocol/udm_errno.h>
 
 /* Helper macros for message parsing */
 #ifndef UDM_MSG_OPCODE
@@ -39,4 +39,4 @@ enum udm_fb_op {
  * reply.regs.data[6] = (blue_pos << 8) | blue_size
  */
 
-#endif /* D_PROTOCOL_FB_H */
+#endif /* XNIX_PROTOCOL_FB_H */

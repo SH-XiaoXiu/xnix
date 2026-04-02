@@ -1,15 +1,15 @@
 /**
- * @file d/protocol/tty.h
+ * @file xnix/protocol/tty.h
  * @brief TTY IPC 协议定义
  *
  * 定义用户态程序与 ttyd 终端服务器之间的通信协议.
  */
 
-#ifndef D_PROTOCOL_TTY_H
-#define D_PROTOCOL_TTY_H
+#ifndef XNIX_PROTOCOL_TTY_H
+#define XNIX_PROTOCOL_TTY_H
 
 #include <stdint.h>
-#include <d/udm_errno.h>
+#include <xnix/protocol/udm_errno.h>
 
 /* Helper macros for message parsing */
 #ifndef UDM_MSG_OPCODE
@@ -74,4 +74,4 @@ enum tty_ioctl {
 /* TTY 输入缓冲区大小 */
 #define TTY_INPUT_BUF_SIZE 256
 
-#endif /* D_PROTOCOL_TTY_H */
+#endif /* XNIX_PROTOCOL_TTY_H */

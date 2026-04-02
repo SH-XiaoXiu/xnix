@@ -5,7 +5,7 @@
  * 循环读取 kmsg 内核日志,转发到 tty 终端输出.
  */
 
-#include <d/protocol/tty.h>
+#include <xnix/protocol/tty.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>

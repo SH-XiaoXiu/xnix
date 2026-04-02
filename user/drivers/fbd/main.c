@@ -6,7 +6,7 @@
  * 使用 HANDLE_PHYSMEM 机制访问 framebuffer.
  */
 
-#include <d/protocol/fb.h>
+#include <xnix/protocol/fb.h>
 #include <d/server.h>
 #include <stdio.h>
 #include <string.h>

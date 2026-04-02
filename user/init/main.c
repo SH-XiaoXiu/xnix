@@ -7,12 +7,12 @@
  * 启动流程:
  *   1. 启动内置 ramfsd 服务线程
  *   2. 提取 initramfs.img 到 ramfs
- *   3. 从 ramfs 加载核心服务配置
- *   4. 使用 bootstrap 从 ramfs 启动核心服务(绕过 VFS)
+ *   3. 从 ramfs 加载 /etc/sys.conf (统一服务配置)
+ *   4. ramfs:// 路径服务通过 bootstrap 从 ramfs 启动(绕过 VFS)
  *   5. vfsserver ready -> 迁移到 vfsserver, mount ramfs at "/"
  *   6. fatfsd ready -> vfs_mount("/", fatfs_ep), vfsserver 执行 remount
  *      从此所有 VFS 路径解析走 fatfsd (system.img 由 fatfsd 自行挂载)
- *   7. 从 VFS 读 /etc/user_services.conf -> 启动用户服务
+ *   7. 普通路径服务通过 VFS sys_exec 启动
  *   8. 系统就绪 (shell 可用)
  */
 
@@ -43,8 +43,6 @@ static struct svc_manager g_mgr;
 /* 内置 ramfsd 服务(需要被 svc_runtime.c 访问)*/
 struct ramfsd_service g_ramfsd;
 
-/* 用户配置路径(可通过引导参数覆盖) */
-static const char *g_user_config_path = "/etc/user_services.conf";
 
 /**
  * 从管理器的 profile 配置创建内核 profile
@@ -120,14 +118,10 @@ static void drain_ready_notifications(handle_t init_notify_ep) {
 
 /**
  * 解析启动参数
- * 支持: config=<path>
  */
 static void parse_args(int argc, char **argv) {
-    for (int i = 0; i < argc; i++) {
-        if (strncmp(argv[i], "config=", 7) == 0) {
-            g_user_config_path = argv[i] + 7;
-        }
-    }
+    (void)argc;
+    (void)argv;
 }
 
 /**
@@ -251,9 +245,9 @@ int main(int argc, char **argv) {
     early_set_color(10, 0);
     early_puts("[INIT] ");
     early_reset_color();
-    early_puts("loading core services config from ramfs...\n");
+    early_puts("loading system config from ramfs...\n");
 
-    int config_fd = ramfs_open(ramfs, "/etc/core_services.conf", VFS_O_RDONLY);
+    int config_fd = ramfs_open(ramfs, "/etc/sys.conf", VFS_O_RDONLY);
     if (config_fd < 0) {
         early_set_color(10, 0);
         early_puts("[INIT] ");
@@ -261,7 +255,7 @@ int main(int argc, char **argv) {
         early_set_color(12, 0);
         early_puts("FATAL");
         early_reset_color();
-        early_puts(": failed to open /etc/core_services.conf from ramfs\n");
+        early_puts(": failed to open /etc/sys.conf from ramfs\n");
         while (1) {
             msleep(1000);
         }
@@ -303,7 +297,7 @@ int main(int argc, char **argv) {
         early_set_color(12, 0);
         early_puts("FATAL");
         early_reset_color();
-        early_puts(": failed to load core services\n");
+        early_puts(": failed to load system config\n");
         while (1) {
             msleep(1000);
         }
@@ -364,7 +358,6 @@ int main(int argc, char **argv) {
     early_puts("entering main loop\n");
 
     /* 主循环 */
-    static bool user_config_loaded = false;
     static bool vfsserver_migrated = false;
     bool        serial_initialized = false;
     int         loop_count         = 0;
@@ -438,26 +431,6 @@ int main(int argc, char **argv) {
             early_puts("\n");
         }
 
-        /*
-         * 加载用户配置
-         * fatfsd remount "/" 后, /etc/user_services.conf 从 system.img 可见
-         */
-        if (!user_config_loaded && serial_initialized) {
-            int test_fd = vfs_open(g_user_config_path, 0);
-            if (test_fd >= 0) {
-                vfs_close(test_fd);
-                ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ",
-                          "loading user config from %s\n", g_user_config_path);
-                ret = svc_load_config(&g_mgr, g_user_config_path);
-                if (ret == 0) {
-                    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ", "user config loaded\n");
-                } else {
-                    ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[INIT] ",
-                              "user config load failed: %d\n", ret);
-                }
-                user_config_loaded = true;
-            }
-        }
         loop_count++;
         msleep(50);
     }

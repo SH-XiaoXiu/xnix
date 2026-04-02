@@ -34,8 +34,8 @@ foreach (SVC ${CORE_SERVICES})
     list(APPEND INITRAMFS_FILES "${CMAKE_BINARY_DIR}/${SVC}.elf:sbin/${SVC}.elf")
 endforeach ()
 
-# 核心服务配置
-list(APPEND INITRAMFS_FILES "${CMAKE_SOURCE_DIR}/user/core_services.conf:etc/core_services.conf")
+# 系统服务配置
+list(APPEND INITRAMFS_FILES "${CMAKE_SOURCE_DIR}/user/sys.conf:etc/sys.conf")
 
 # 写入文件列表
 set(INITRAMFS_FILELIST ${CMAKE_BINARY_DIR}/initramfs_files.txt)
@@ -85,8 +85,7 @@ foreach (BIN ${CORE_BIN_TOOLS})
 endforeach ()
 
 # 配置文件
-list(APPEND SYSTEM_FILES "${CMAKE_SOURCE_DIR}/user/core_services.conf:/etc/core_services.conf")
-list(APPEND SYSTEM_FILES "${CMAKE_SOURCE_DIR}/user/user_services.conf:/etc/user_services.conf")
+list(APPEND SYSTEM_FILES "${CMAKE_SOURCE_DIR}/user/sys.conf:/etc/sys.conf")
 
 # boot 文件 (磁盘启动使用)
 list(APPEND SYSTEM_FILES "${CMAKE_BINARY_DIR}/xnix.elf:/boot/xnix.elf")
@@ -157,12 +156,11 @@ list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/installer.elf:/bin/installer.el
 list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/sudo.elf:/bin/sudo.elf")
 list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/sudod.elf:/bin/sudod.elf")
 list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/devfsd.elf:/sbin/devfsd.elf")
-list(APPEND INSTALLER_FILES "${CMAKE_SOURCE_DIR}/user/user_services.conf:/etc/user_services.conf")
 # 核心服务也放到 /sbin/ (与 initramfs 内容相同, 用于 respawn)
 foreach (SVC ${CORE_SERVICES})
     list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/${SVC}.elf:/sbin/${SVC}.elf")
 endforeach ()
-list(APPEND INSTALLER_FILES "${CMAKE_SOURCE_DIR}/user/core_services.conf:/etc/core_services.conf")
+list(APPEND INSTALLER_FILES "${CMAKE_SOURCE_DIR}/user/sys.conf:/etc/sys.conf")
 string(REPLACE ";" "\n" INSTALLER_FILES_CONTENT "${INSTALLER_FILES}")
 file(WRITE ${INSTALLER_FILELIST} "${INSTALLER_FILES_CONTENT}")
 

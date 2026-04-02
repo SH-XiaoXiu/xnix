@@ -14,8 +14,8 @@
  * 该 tty 的服务线程中执行,input_listener 通过 IPC 投递字符.
  */
 
-#include <d/protocol/serial.h>
-#include <d/protocol/tty.h>
+#include <xnix/protocol/serial.h>
+#include <xnix/protocol/tty.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdint.h>

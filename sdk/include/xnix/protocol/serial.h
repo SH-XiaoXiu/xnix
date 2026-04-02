@@ -1,13 +1,13 @@
 /**
- * @file d/protocol/serial.h
+ * @file xnix/protocol/serial.h
  * @brief 串口控制台协议定义
  */
 
-#ifndef D_PROTOCOL_SERIAL_H
-#define D_PROTOCOL_SERIAL_H
+#ifndef XNIX_PROTOCOL_SERIAL_H
+#define XNIX_PROTOCOL_SERIAL_H
 
 #include <stdint.h>
-#include <d/udm_errno.h>
+#include <xnix/protocol/udm_errno.h>
 
 /* Helper macros for message parsing */
 #ifndef UDM_MSG_OPCODE
@@ -27,4 +27,4 @@ enum udm_console_op {
 /* WRITE 操作可用的最大字节数 */
 #define UDM_CONSOLE_WRITE_MAX 24 /* 6*4 bytes from data[1..6], data[7] = length */
 
-#endif /* D_PROTOCOL_SERIAL_H */
+#endif /* XNIX_PROTOCOL_SERIAL_H */

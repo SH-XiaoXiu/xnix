@@ -5,7 +5,7 @@
 
 #include "ini_parser.h"
 
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>

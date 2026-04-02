@@ -5,8 +5,8 @@
 
 #include "path.h"
 
-#include <d/protocol/tty.h>
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/tty.h>
+#include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>

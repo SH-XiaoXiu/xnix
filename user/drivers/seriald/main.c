@@ -7,7 +7,7 @@
 
 #include "serial.h"
 
-#include <d/protocol/serial.h>
+#include <xnix/protocol/serial.h>
 #include <d/server.h>
 #include <libs/serial/serial.h> /* 消息类型定义 */
 #include <pthread.h>

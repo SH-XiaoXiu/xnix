@@ -5,8 +5,8 @@
  * 提供 read/write/close/dup/dup2/pipe/open,按 fd 类型分发到对应的 IPC 协议.
  */
 
-#include <d/protocol/tty.h>
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/tty.h>
+#include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>

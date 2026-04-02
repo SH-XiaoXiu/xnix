@@ -7,7 +7,7 @@
 
 #include "stdio.h"
 
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <string.h>
 #include <vfs_client.h>
 

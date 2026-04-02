@@ -12,7 +12,7 @@
 #include "fatfs_vfs.h"
 
 #include <block.h>
-#include <d/protocol/vfs.h>
+#include <xnix/protocol/vfs.h>
 #include <d/server.h>
 #include <stdio.h>
 #include <stdlib.h>

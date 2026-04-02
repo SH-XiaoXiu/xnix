@@ -127,11 +127,16 @@ static bool ini_handler(const char *section, const char *key, const char *value,
                 cfg->type = SVC_TYPE_PATH;
             }
         } else if (strcmp(key, "path") == 0) {
-            size_t len = strlen(value);
+            const char *actual = value;
+            if (strncmp(value, "ramfs://", 8) == 0) {
+                cfg->ramfs_load = true;
+                actual = value + 8;
+            }
+            size_t len = strlen(actual);
             if (len >= SVC_PATH_MAX) {
                 len = SVC_PATH_MAX - 1;
             }
-            memcpy(cfg->path, value, len);
+            memcpy(cfg->path, actual, len);
             cfg->path[len] = '\0';
         } else if (strcmp(key, "args") == 0) {
             size_t len = strlen(value);
@@ -158,8 +163,6 @@ static bool ini_handler(const char *section, const char *key, const char *value,
                     cfg->delay_ms = cfg->delay_ms * 10 + (*s - '0');
                 }
             }
-        } else if (strcmp(key, "builtin") == 0) {
-            cfg->builtin = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
         } else if (strcmp(key, "respawn") == 0) {
             cfg->respawn = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
         } else if (strcmp(key, "handles") == 0) {
