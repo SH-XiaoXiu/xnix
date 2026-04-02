@@ -76,4 +76,16 @@ struct abi_ipc_message {
  */
 #define ABI_IPC_MSG_PAYLOAD_BYTES ((ABI_IPC_MSG_REGS - 1) * sizeof(uint32_t))
 
+/**
+ * 等待集合(用于 SYS_IPC_WAIT_ANY)
+ *
+ * 同时等待多个 Endpoint/Notification,返回第一个就绪的 handle.
+ */
+#define ABI_IPC_WAIT_MAX 8
+
+struct abi_ipc_wait_set {
+    handle_t handles[ABI_IPC_WAIT_MAX];
+    uint32_t count;
+};
+
 #endif /* XNIX_ABI_IPC_H */

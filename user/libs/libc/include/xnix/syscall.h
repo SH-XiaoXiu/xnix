@@ -351,6 +351,22 @@ static inline int sys_ipc_reply_to(uint32_t sender_tid, struct ipc_message *repl
 }
 
 /**
+ * 等待多个 endpoint/notification 中任一就绪
+ *
+ * @param set        等待集合(abi_ipc_wait_set)
+ * @param timeout_ms 超时毫秒, 0=无限等待
+ * @return 就绪的 handle, HANDLE_INVALID 失败(设置 errno)
+ */
+static inline handle_t sys_ipc_wait_any(void *set, uint32_t timeout_ms) {
+    int ret = syscall2(SYS_IPC_WAIT_ANY, (uint32_t)(uintptr_t)set, timeout_ms);
+    if (ret < 0) {
+        errno = -ret;
+        return (handle_t)-1;
+    }
+    return (handle_t)ret;
+}
+
+/**
  * 等待子进程退出
  * @return 进程 PID,-1 失败(设置 errno)
  */

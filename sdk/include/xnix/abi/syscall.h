@@ -25,6 +25,7 @@
 #define SYS_IPC_CALL        103 /* RPC 调用: ebx=handle, ecx=msg* */
 #define SYS_IPC_REPLY       104 /* RPC 回复: ecx=msg* */
 #define SYS_IPC_REPLY_TO    105 /* 延迟回复: ebx=sender_tid, ecx=msg* */
+#define SYS_IPC_WAIT_ANY    106 /* 等待多个对象: ebx=wait_set*, ecx=timeout_ms */
 
 /* 内存管理 (200-219) */
 #define SYS_SBRK 200 /* 堆管理: ebx=increment, 返回旧堆顶或 -1 */

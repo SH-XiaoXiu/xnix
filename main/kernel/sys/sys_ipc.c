@@ -346,6 +346,37 @@ static int32_t sys_notification_signal(const uint32_t *args) {
     return 0;
 }
 
+/* SYS_IPC_WAIT_ANY: ebx=wait_set*, ecx=timeout_ms */
+static int32_t sys_ipc_wait_any(const uint32_t *args) {
+    struct ipc_wait_set *user_set = (struct ipc_wait_set *)(uintptr_t)args[0];
+    uint32_t             timeout  = args[1];
+
+    struct process *proc = process_current();
+    if (!proc) {
+        return -EINVAL;
+    }
+
+    if (!perm_check_name(proc, PERM_NODE_IPC_RECV)) {
+        return -EPERM;
+    }
+
+    struct ipc_wait_set kset;
+    int ret = copy_from_user(&kset, user_set, sizeof(kset));
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (kset.count == 0 || kset.count > IPC_WAIT_MAX) {
+        return -EINVAL;
+    }
+
+    handle_t result = ipc_wait_any(&kset, timeout);
+    if (result == HANDLE_INVALID) {
+        return -ETIMEDOUT;
+    }
+    return (int32_t)result;
+}
+
 /**
  * 注册 IPC 系统调用(新编号:100-119)
  */
@@ -360,4 +391,5 @@ void sys_ipc_init(void) {
     syscall_register(SYS_NOTIFICATION_CREATE, sys_notification_create, 0, "notification_create");
     syscall_register(SYS_NOTIFICATION_WAIT, sys_notification_wait, 1, "notification_wait");
     syscall_register(SYS_NOTIFICATION_SIGNAL, sys_notification_signal, 2, "notification_signal");
+    syscall_register(SYS_IPC_WAIT_ANY, sys_ipc_wait_any, 2, "ipc_wait_any");
 }
