@@ -33,6 +33,7 @@
     201 /* 映射物理内存: ebx=handle, ecx=offset, edx=size, esi=prot, edi=out_size */
 #define SYS_MUNMAP       202 /* 取消映射: ebx=addr, ecx=size */
 #define SYS_PHYSMEM_INFO 203 /* 查询物理内存信息: ebx=handle, ecx=info_ptr */
+#define SYS_SHM_CREATE   204 /* 创建匿名共享内存: ebx=size, 返回 handle */
 
 /* 任务/线程 (300-319) */
 #define SYS_THREAD_CREATE 301 /* 创建用户线程: ebx=entry, ecx=arg, edx=stack_top */

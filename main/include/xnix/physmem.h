@@ -22,6 +22,7 @@ struct process;
 typedef enum {
     PHYSMEM_TYPE_GENERIC = 0, /* 通用物理内存 */
     PHYSMEM_TYPE_FB      = 1, /* Framebuffer */
+    PHYSMEM_TYPE_SHM     = 2, /* 匿名共享内存 */
 } physmem_type_t;
 
 /**
@@ -45,6 +46,12 @@ struct physmem_region {
         uint8_t  green_pos, green_size;
         uint8_t  blue_pos, blue_size;
     } fb_info;
+
+    /* SHM 元数据 (type == PHYSMEM_TYPE_SHM 时有效) */
+    struct {
+        paddr_t  *pages;     /* 物理页地址数组(非连续) */
+        uint32_t  num_pages; /* 页数 */
+    } shm_info;
 };
 
 /**
@@ -104,5 +111,16 @@ handle_t physmem_create_fb_handle_for_proc(struct process *proc, const char *nam
  */
 uint32_t physmem_map_to_user(struct process *proc, struct physmem_region *region, uint32_t offset,
                              uint32_t size, uint32_t prot);
+
+/**
+ * 创建匿名共享内存区域
+ *
+ * 分配非连续物理页并清零,包装为 PHYSMEM_TYPE_SHM 类型的 region.
+ * 通过 handle_transfer/grant 传给其他进程后,两个进程可映射同一 region.
+ *
+ * @param size 共享内存大小(字节,向上对齐到页)
+ * @return physmem 对象指针,失败返回 NULL
+ */
+struct physmem_region *shm_create(uint32_t size);
 
 #endif /* XNIX_PHYSMEM_H */

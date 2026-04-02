@@ -521,6 +521,21 @@ static inline int sys_physmem_info(handle_t handle, struct physmem_info *info) {
     return ret;
 }
 
+/**
+ * 创建匿名共享内存
+ *
+ * @param size 大小(字节,向上对齐到页)
+ * @return handle, HANDLE_INVALID 失败(设置 errno)
+ */
+static inline handle_t sys_shm_create(uint32_t size) {
+    int ret = syscall1(SYS_SHM_CREATE, size);
+    if (ret < 0) {
+        errno = -ret;
+        return (handle_t)-1;
+    }
+    return (handle_t)ret;
+}
+
 /*
  * 进程列表
  */

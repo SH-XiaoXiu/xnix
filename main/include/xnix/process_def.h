@@ -71,6 +71,9 @@ struct process {
     uint32_t heap_current; /* 当前堆顶(brk 指针) */
     uint32_t heap_max;     /* 堆上限(栈底之前) */
 
+    /* 用户态 mmap 区域 */
+    uint32_t mmap_next;    /* 下一个可用 mmap 虚拟地址(SHM 等) */
+
     /* 父子关系 */
     struct process *parent;
     struct process *children;     /* 子进程链表 */

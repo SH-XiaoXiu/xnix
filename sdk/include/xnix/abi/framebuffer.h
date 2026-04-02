@@ -34,4 +34,11 @@ struct abi_fb_info {
  */
 #define ABI_FB_MAP_BASE 0x40000000
 
+/**
+ * 用户空间共享内存映射基地址
+ *
+ * SHM 区域从 0x50000000 开始,每次映射线性推进.
+ */
+#define ABI_SHM_MAP_BASE 0x50000000
+
 #endif /* XNIX_ABI_FRAMEBUFFER_H */

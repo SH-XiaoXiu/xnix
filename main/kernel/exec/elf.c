@@ -3,6 +3,7 @@
  * @brief ELF32 加载器实现
  */
 
+#include <xnix/abi/framebuffer.h>
 #include <xnix/errno.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
@@ -321,6 +322,7 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
     proc->heap_start    = heap_start;
     proc->heap_current  = heap_start;
     proc->heap_max      = heap_max;
+    proc->mmap_next     = ABI_SHM_MAP_BASE;
 
     /* 分配并映射用户栈 */
     uint32_t stack_pages = USER_STACK_SIZE / PAGE_SIZE;

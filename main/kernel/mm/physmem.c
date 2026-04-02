@@ -37,6 +37,15 @@ void physmem_get(struct physmem_region *region) {
 
 void physmem_put(struct physmem_region *region) {
     if (region && --region->refcount == 0) {
+        /* SHM: 释放所有分配的物理页 */
+        if (region->type == PHYSMEM_TYPE_SHM && region->shm_info.pages) {
+            for (uint32_t i = 0; i < region->shm_info.num_pages; i++) {
+                if (region->shm_info.pages[i]) {
+                    free_page((void *)region->shm_info.pages[i]);
+                }
+            }
+            kfree(region->shm_info.pages);
+        }
         kfree(region);
     }
 }
@@ -96,6 +105,61 @@ handle_t physmem_create_fb_handle_for_proc(struct process *proc, const char *nam
     return h;
 }
 
+extern void *vmm_kmap(paddr_t paddr);
+extern void  vmm_kunmap(void *vaddr);
+
+struct physmem_region *shm_create(uint32_t size) {
+    if (size == 0) {
+        return NULL;
+    }
+
+    uint32_t num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    struct physmem_region *region = kmalloc(sizeof(struct physmem_region));
+    if (!region) {
+        return NULL;
+    }
+    memset(region, 0, sizeof(*region));
+
+    paddr_t *pages = kmalloc(num_pages * sizeof(paddr_t));
+    if (!pages) {
+        kfree(region);
+        return NULL;
+    }
+    memset(pages, 0, num_pages * sizeof(paddr_t));
+
+    /* 逐页分配并清零 */
+    for (uint32_t i = 0; i < num_pages; i++) {
+        void *page = alloc_page_high();
+        if (!page) {
+            /* 回滚 */
+            for (uint32_t j = 0; j < i; j++) {
+                free_page((void *)pages[j]);
+            }
+            kfree(pages);
+            kfree(region);
+            return NULL;
+        }
+        pages[i] = (paddr_t)page;
+
+        /* 清零物理页 */
+        void *k = vmm_kmap(pages[i]);
+        if (k) {
+            memset(k, 0, PAGE_SIZE);
+            vmm_kunmap(k);
+        }
+    }
+
+    region->phys_addr          = 0; /* SHM 无连续物理地址 */
+    region->size               = num_pages * PAGE_SIZE;
+    region->type               = PHYSMEM_TYPE_SHM;
+    region->refcount           = 1;
+    region->shm_info.pages     = pages;
+    region->shm_info.num_pages = num_pages;
+
+    return region;
+}
+
 uint32_t physmem_map_to_user(struct process *proc, struct physmem_region *region, uint32_t offset,
                              uint32_t size, uint32_t prot) {
     if (!proc || !region) {
@@ -117,7 +181,15 @@ uint32_t physmem_map_to_user(struct process *proc, struct physmem_region *region
     uint32_t num_pages  = (end_page - start_page) / PAGE_SIZE;
 
     /* 选择用户空间映射基地址 */
-    uint32_t user_base = ABI_FB_MAP_BASE; /* 固定地址,简化实现 */
+    uint32_t user_base;
+    if (region->type == PHYSMEM_TYPE_SHM) {
+        /* SHM: 动态分配虚拟地址 */
+        user_base = proc->mmap_next;
+        proc->mmap_next += num_pages * PAGE_SIZE;
+    } else {
+        /* FB/GENERIC: 固定地址(保持兼容) */
+        user_base = ABI_FB_MAP_BASE;
+    }
 
     const struct mm_operations *mm = mm_get_ops();
     if (!mm || !mm->map) {
@@ -126,7 +198,10 @@ uint32_t physmem_map_to_user(struct process *proc, struct physmem_region *region
     }
 
     /* 构建页保护标志 */
-    uint32_t page_prot = VMM_PROT_USER | VMM_PROT_NOCACHE;
+    uint32_t page_prot = VMM_PROT_USER;
+    if (region->type != PHYSMEM_TYPE_SHM) {
+        page_prot |= VMM_PROT_NOCACHE; /* 设备内存禁缓存,SHM 是普通 RAM */
+    }
     if (prot & 0x01) { /* PROT_READ */
         page_prot |= VMM_PROT_READ;
     }
@@ -135,18 +210,29 @@ uint32_t physmem_map_to_user(struct process *proc, struct physmem_region *region
     }
 
     /* 映射物理页到用户空间 */
-    paddr_t phys_base = region->phys_addr + start_page;
+    uint32_t first_page = start_page / PAGE_SIZE;
     for (uint32_t i = 0; i < num_pages; i++) {
         uint32_t vaddr = user_base + i * PAGE_SIZE;
-        paddr_t  paddr = phys_base + i * PAGE_SIZE;
+        paddr_t  paddr;
+
+        if (region->type == PHYSMEM_TYPE_SHM) {
+            /* SHM: 从页数组取物理地址 */
+            paddr = region->shm_info.pages[first_page + i];
+        } else {
+            /* 连续物理内存 */
+            paddr = region->phys_addr + start_page + i * PAGE_SIZE;
+        }
 
         if (mm->map(proc->page_dir_phys, vaddr, paddr, page_prot) != 0) {
-            /* 映射失败,尝试回滚 */
             pr_err("physmem: failed to map page %u at 0x%08x", i, vaddr);
             if (mm->unmap) {
                 for (uint32_t j = 0; j < i; j++) {
                     mm->unmap(proc->page_dir_phys, user_base + j * PAGE_SIZE);
                 }
+            }
+            /* SHM: 回滚 mmap_next */
+            if (region->type == PHYSMEM_TYPE_SHM) {
+                proc->mmap_next -= num_pages * PAGE_SIZE;
             }
             return 0;
         }
@@ -155,8 +241,7 @@ uint32_t physmem_map_to_user(struct process *proc, struct physmem_region *region
     /* 返回用户空间地址(带页内偏移) */
     uint32_t user_addr = user_base + (offset & (PAGE_SIZE - 1));
 
-    pr_debug("physmem: mapped %u pages at user 0x%08x (phys 0x%08x)", num_pages, user_addr,
-             (uint32_t)(region->phys_addr + offset));
+    pr_debug("physmem: mapped %u pages at user 0x%08x", num_pages, user_addr);
 
     return user_addr;
 }

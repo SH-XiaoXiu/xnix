@@ -249,10 +249,47 @@ static int32_t sys_physmem_info(const uint32_t *args) {
 }
 
 /**
+ * SYS_SHM_CREATE: 创建匿名共享内存
+ *
+ * @param args[0] size 共享内存大小(字节)
+ * @return handle 值,失败返回负错误码
+ */
+static int32_t sys_shm_create(const uint32_t *args) {
+    uint32_t size = args[0];
+
+    if (size == 0) {
+        return -EINVAL;
+    }
+
+    struct process *proc = process_get_current();
+    if (!proc) {
+        return -EINVAL;
+    }
+
+    if (!perm_check_name(proc, PERM_NODE_MM_MMAP)) {
+        return -EPERM;
+    }
+
+    struct physmem_region *region = shm_create(size);
+    if (!region) {
+        return -ENOMEM;
+    }
+
+    handle_t h = handle_alloc(proc, HANDLE_PHYSMEM, region, NULL);
+    if (h == HANDLE_INVALID) {
+        physmem_put(region);
+        return -ENOMEM;
+    }
+
+    return (int32_t)h;
+}
+
+/**
  * 注册内存管理系统调用(编号:200-219)
  */
 void sys_mm_init(void) {
     syscall_register(SYS_SBRK, sys_sbrk, 1, "sbrk");
     syscall_register(SYS_MMAP_PHYS, sys_mmap_phys, 5, "mmap_phys");
     syscall_register(SYS_PHYSMEM_INFO, sys_physmem_info, 2, "physmem_info");
+    syscall_register(SYS_SHM_CREATE, sys_shm_create, 1, "shm_create");
 }
