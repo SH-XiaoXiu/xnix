@@ -117,6 +117,7 @@ endfunction()
 set(CORE_SERVICES
         seriald
         kbd
+        moused
         # ramfsd - 已内置到 init，不再作为独立服务
         # rootfsd - 已被 system.img 替代，不再需要
         vfsserver
