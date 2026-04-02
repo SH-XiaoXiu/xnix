@@ -3,13 +3,13 @@
  * @brief PC 平台描述符
  */
 
-#include <plat/platform.h>
 #include <plat/early_dev.h>
+#include <plat/platform.h>
 
 /* 外部驱动注册函数 */
 extern void pic_register(void);
 extern void pit_register(void);
-extern void apic_register(void);          /* ioapic.c */
+extern void apic_register(void); /* ioapic.c */
 extern void lapic_timer_register(void);
 extern void serial_console_register(void);
 extern void vga_console_register(void);
@@ -35,27 +35,22 @@ static int apic_probe(void) {
     return (g_hal_features.flags & HAL_FEATURE_APIC) != 0;
 }
 
-static int fb_probe(void) {
-    /* 检测 framebuffer 是否可用 */
-    return fb_available() ? 1 : 0;
-}
-
 static const struct early_device pc_early_devices[] = {
     /* 控制台驱动 - 优先注册,不需要 probe */
-    { "fb_console",     0, NULL,             fb_console_register    },
-    { "vga_console",   10, NULL,             vga_console_register   },
-    { "serial_console",10, NULL,             serial_console_register},
+    {"fb_console", 0, NULL, fb_console_register},
+    {"vga_console", 10, NULL, vga_console_register},
+    {"serial_console", 10, NULL, serial_console_register},
 
     /* 中断控制器和定时器 */
-    { "pic",           20, pic_probe,        pic_register           },
-    { "pit",           20, pit_probe,        pit_register           },
-    { "apic",          25, apic_probe,       apic_register          },
-    { "lapic_timer",   25, apic_probe,       lapic_timer_register   },
+    {"pic", 20, pic_probe, pic_register},
+    {"pit", 20, pit_probe, pit_register},
+    {"apic", 25, apic_probe, apic_register},
+    {"lapic_timer", 25, apic_probe, lapic_timer_register},
 
     /* 输入设备 */
-    { "ps2",           30, NULL,             ps2_register           },
+    {"ps2", 30, NULL, ps2_register},
 
-    { NULL, 0, NULL, NULL }  /* 结束标记 */
+    {NULL, 0, NULL, NULL} /* 结束标记 */
 };
 
 static int pc_early_init(void) {
@@ -69,9 +64,9 @@ static int pc_driver_init(void) {
 }
 
 const struct platform_desc platform_pc = {
-    .name = "pc",
-    .devices = pc_early_devices,
-    .early_init = pc_early_init,
+    .name        = "pc",
+    .devices     = pc_early_devices,
+    .early_init  = pc_early_init,
     .driver_init = pc_driver_init,
 };
 
