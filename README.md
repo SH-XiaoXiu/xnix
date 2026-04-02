@@ -17,14 +17,14 @@ MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](http
 | 能力           | 说明                         | 示例                         |
 |--------------|----------------------------|----------------------------|
 | 微内核设计        | 最小化内核，策略与机制分离              | 内核仅含调度、IPC、内存管理            |
-| Bootstrap 自举 | Init 完全自举，内核不依赖 bootloader | 内置 FAT32 驱动，绕过 VFS 启动服务    |
+| Bootstrap 自举 | Init 完全自举，内核不依赖 bootloader | 内置 ramfsd，绕过 VFS 启动核心服务    |
 | 平台抽象         | HAL + 弱符号机制，支持多平台移植        | 新增架构只需实现少量强符号              |
 | 权限系统         | 字符串节点权限，Profile 管理         | `xnix.io.port.*` 控制 I/O 访问 |
 | IPC 通信       | 同步/异步消息传递，支持 RPC 模式        | endpoint send/recv/call    |
 | 用户态驱动        | 驱动隔离，崩溃可恢复，支持热更新           | seriald、kbd 均为用户进程         |
 | 进程管理         | 完整生命周期、信号机制、进程树            | exec-based spawn、SIGTERM   |
 | FAT32 文件系统   | 支持读写 FAT32 格式磁盘            | 可挂载硬盘镜像进行文件操作              |
-| 声明式服务管理      | INI 配置、依赖管理、自动重启           | services.conf 定义启动顺序       |
+| 声明式服务管理      | INI 配置、依赖管理、自动重启           | sys.conf 统一定义服务和权限         |
 
 ## 项目亮点
 
@@ -204,24 +204,23 @@ graph TD
 
 ```mermaid
 graph TD
-    GRUB[GRUB Multiboot] --> Modules[加载 4 个模块]
-    Modules --> Kernel[xnix.elf 内核]
+    GRUB[GRUB Multiboot] --> Modules[加载 3 个模块]
     Modules --> Init[init.elf Init进程]
-    Modules --> Initramfs[initramfs.img 配置]
+    Modules --> Initramfs[initramfs.img 核心服务+配置]
     Modules --> System[system.img FAT32镜像]
-    Kernel --> BootHandles[创建 boot handles]
-    BootHandles --> module_init
-    BootHandles --> module_initramfs
-    BootHandles --> module_system
-    Init --> Map1[映射 initramfs]
-    Map1 --> Extract[提取配置到 ramfs]
-    Init --> Map2[映射 system.img]
-    Map2 --> FAT32[FAT32 mount]
-    Extract --> LoadSvc[从配置加载服务]
-    FAT32 --> LoadSvc
-    LoadSvc --> BootExec[bootstrap_exec]
-    BootExec --> Services[服务启动完成]
-    Services --> Shell[Shell 就绪]
+    Kernel[xnix.elf 内核] --> BootHandles[创建 boot handles]
+    BootHandles --> boot.initramfs
+    BootHandles --> boot.system
+    Init --> Ramfsd[启动内置 ramfsd]
+    Ramfsd --> Map1[映射 initramfs]
+    Map1 --> Extract[提取核心服务+配置到 ramfs]
+    Extract --> LoadConf[加载 /etc/sys.conf]
+    LoadConf --> Profiles[注册权限 profiles]
+    Profiles --> Bootstrap["ramfs:// 服务通过 bootstrap 启动"]
+    Bootstrap --> VFS[vfsserver ready → 迁移到 vfsserver]
+    VFS --> FatFS["fatfsd ready → remount / 到 fatfsd"]
+    FatFS --> UserSvc[VFS 路径服务通过 sys_exec 启动]
+    UserSvc --> Shell[Shell 就绪]
     style GRUB fill: #e1f5fe
     style Init fill: #fff3e0
     style System fill: #c8e6c9
@@ -257,7 +256,7 @@ graph TD
 
 ## 服务配置
 
-Xnix 采用声明式服务配置，所有服务从 **system.img**（FAT32 格式）加载。
+Xnix 采用声明式服务配置，统一在 `user/sys.conf` 中定义服务、权限 Profile 和 Handle。
 
 ### ISO 结构
 
@@ -266,8 +265,8 @@ xnix.iso
 ├── boot/
 │   ├── xnix.elf         # 内核
 │   ├── init.elf         # Init 进程（内置 ramfsd + bootstrap）
-│   ├── initramfs.img    # TAR 格式配置文件（~5KB）
-│   └── system.img       # FAT32 镜像（所有服务，16MB）
+│   ├── initramfs.img    # TAR 格式（核心服务 ELF + sys.conf）
+│   └── system.img       # FAT32 镜像（完整系统，16MB）
 └── ...
 ```
 
@@ -283,50 +282,73 @@ system.img (FAT32):
 ├── bin/                 # 应用程序
 │   └── shell.elf
 ├── etc/                 # 配置文件
-│   └── core_services.conf
+│   └── sys.conf
+├── boot/                # 启动文件（磁盘启动使用）
 └── drivers/             # 可选驱动
 ```
 
 ### 服务配置文件
 
-核心服务配置在 `user/init/core_services.conf`，使用 INI 格式：
+系统配置统一在 `user/sys.conf`，使用 INI 格式，包含三类 section：
 
 ```ini
-# 服务定义
+# --- 权限 Profile 定义 ---
+[profile.io_driver]
+inherit = driver
+xnix.io.port.* = true
+xnix.irq.all = true
+
+# --- Handle（服务发现）定义 ---
+[handle.vfs_ep]
+type = endpoint
+
+# --- 服务定义 ---
 [service.seriald]
-builtin = true       # 内置服务标记
-type = path          # 加载类型（path=从文件系统）
-path = /sbin/seriald.elf   # ELF 文件路径（相对 system.img）
-profile = io_driver  # 权限 Profile
-after = ramfsd       # 启动顺序依赖
-provides = serial    # 提供的 handle
-respawn = false      # 退出后是否重启
+path = ramfs:///sbin/seriald.elf  # ramfs:// 前缀 = 从 initramfs 启动（绕过 VFS）
+profile = io_driver               # 权限 Profile
+provides = serial                 # 提供的 handle
+
+[service.shell]
+path = /bin/shell.elf             # 普通路径 = 从 VFS（system.img）加载
+profile = default
+after = seriald kbd vfsserver fatfsd ttyd
+ready = ttyd fatfsd               # 等待这些服务 ready 后才启动
+requires = kbd_ep vfs_ep tty0     # 需要接收的 handle
+respawn = true
 ```
 
 ### 配置字段
 
-| 字段         | 类型     | 说明                                            |
-|------------|--------|-----------------------------------------------|
-| `builtin`  | bool   | 标记为内置服务（由 init 硬编码启动）                         |
-| `type`     | string | `path`=从文件系统加载（system.img）                    |
-| `path`     | string | ELF 文件路径（相对 system.img 根目录，如 `/sbin/xxx.elf`） |
-| `profile`  | string | 权限配置 Profile (如 `io_driver`, `default`)       |
-| `after`    | string | 启动顺序依赖，空格分隔多个服务                               |
-| `ready`    | string | 就绪等待依赖，等待服务报告就绪                               |
-| `provides` | string | 提供的 handle 名称                                 |
-| `requires` | string | 需要的 handle，空格分隔                               |
-| `respawn`  | bool   | 退出后自动重启                                       |
+| 字段         | 类型     | 说明                                                            |
+|------------|--------|---------------------------------------------------------------|
+| `path`     | string | ELF 路径；`ramfs://` 前缀从 initramfs 加载，普通路径从 VFS 加载               |
+| `args`     | string | 启动参数（如 `--ata --drive 1`）                                     |
+| `profile`  | string | 权限配置 Profile（如 `io_driver`、`default`）                         |
+| `after`    | string | 启动顺序依赖，空格分隔多个服务                                               |
+| `ready`    | string | 就绪等待依赖，等待服务报告就绪后才启动                                           |
+| `provides` | string | 提供的 handle 名称，空格分隔                                            |
+| `requires` | string | 需要接收的 handle，空格分隔                                             |
+| `wants`    | string | 可选 handle，有则注入，无不阻塞                                           |
+| `handles`  | string | 直接注入的 handle 名称列表                                             |
+| `mount`    | string | 服务 ready 后自动挂载到此 VFS 路径（如 `/`、`/dev`）                         |
+| `wait_path`| string | 等待指定 VFS 路径存在后才启动                                             |
+| `delay`    | int    | 延迟启动（毫秒）                                                      |
+| `respawn`  | bool   | 退出后自动重启                                                       |
 
 ### Handle 机制
 
-服务可以通过 `provides` 和 `requires` 声明 handle 依赖：
+服务通过 `provides` / `requires` / `wants` 声明 handle 依赖，handle 类型在 `[handle.*]` section 定义：
 
 ```ini
+[handle.vfs_ep]
+type = endpoint        # endpoint 类型（init 自动创建）
+
 [service.vfsserver]
-provides = vfs_ep      # 创建名为 vfs_ep 的 endpoint
+provides = vfs_ep      # 提供 vfs_ep
 
 [service.shell]
-requires = vfs_ep      # 接收 vfs_ep handle
+requires = vfs_ep      # 必须接收 vfs_ep
+wants = sudo_ep        # 可选接收 sudo_ep
 ```
 
 服务内部通过名称查找 handle：
@@ -340,9 +362,8 @@ ipc_send(vfs, &msg);
 
 CMake 构建时自动生成：
 
-- `build/system.img` - FAT32 镜像，包含所有服务 ELF
-- `build/initramfs.img` - TAR 镜像，包含配置文件
-- `build/generated/services.conf` - 合并后的服务配置
+- `build/initramfs.img` - TAR 镜像，包含核心服务 ELF 和 sys.conf
+- `build/system.img` - FAT32 镜像，包含所有服务 ELF 和配置
 
 ## 构建规范
 
@@ -369,14 +390,13 @@ target_link_libraries(mydrv.elf PRIVATE c d)
 target_link_options(mydrv.elf PRIVATE ${USER_LINK_OPTIONS})
 ```
 
-**在 core_services.conf 中声明：**
+**在 sys.conf 中声明：**
 
 ```ini
 [service.mydrv]
-builtin = true
-type = path
-path = /sbin/mydrv.elf
+path = ramfs:///sbin/mydrv.elf   # 核心服务用 ramfs:// 前缀
 profile = io_driver
+provides = mydrv_ep
 ```
 
 #### 2. 添加应用程序
