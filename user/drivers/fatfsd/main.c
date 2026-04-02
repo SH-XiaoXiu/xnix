@@ -12,6 +12,8 @@
 #include "fatfs_vfs.h"
 
 #include <block.h>
+#include <pthread.h>
+#include <xnix/protocol/blk.h>
 #include <xnix/protocol/vfs.h>
 #include <d/server.h>
 #include <stdio.h>
@@ -156,8 +158,127 @@ static int parse_mbr_first_partition(const uint8_t *mbr, uint32_t *out_lba) {
     return -1;
 }
 
-static int vfs_handler(struct ipc_message *msg) {
+/* ============== BLK IPC 处理 ============== */
+
+static int  g_blk_ata_drive = -1; /* ATA 模式时保存的驱动器号 */
+static char g_blk_dev_name[16];   /* 块设备名 (e.g., "sda") */
+static uint32_t g_blk_sector_count;
+static uint8_t g_saved_mbr[512];  /* main() 阶段读取的 MBR, 注册时复用 */
+
+static char g_blk_io_buf[BLK_IO_BUF_SIZE];
+
+static int blk_handler(struct ipc_message *msg) {
+    uint32_t op = UDM_MSG_OPCODE(msg);
+
+    if (g_blk_ata_drive < 0) {
+        msg->regs.data[1] = (uint32_t)-6; /* EIO */
+        return 0;
+    }
+
+    switch (op) {
+    case UDM_BLK_READ: {
+        uint64_t lba = (uint64_t)msg->regs.data[2] << 32 | msg->regs.data[1];
+        uint32_t count = msg->regs.data[3];
+        if (count > BLK_IO_MAX_SECTORS) count = BLK_IO_MAX_SECTORS;
+
+        int ret = ata_read(g_blk_ata_drive, (uint32_t)lba, count, g_blk_io_buf);
+        if (ret < 0) {
+            msg->regs.data[1] = (uint32_t)-6;
+            return 0;
+        }
+
+        uint32_t bytes = count * 512;
+        msg->regs.data[1] = bytes;
+        msg->buffer.data = (uint64_t)(uintptr_t)g_blk_io_buf;
+        msg->buffer.size = bytes;
+        return 0;
+    }
+
+    case UDM_BLK_WRITE: {
+        uint64_t lba = (uint64_t)msg->regs.data[2] << 32 | msg->regs.data[1];
+        uint32_t count = msg->regs.data[3];
+        if (count > BLK_IO_MAX_SECTORS) count = BLK_IO_MAX_SECTORS;
+
+        if (!msg->buffer.data || msg->buffer.size < count * 512) {
+            msg->regs.data[1] = (uint32_t)-22; /* EINVAL */
+            return 0;
+        }
+
+        memcpy(g_blk_io_buf, (const void *)(uintptr_t)msg->buffer.data, count * 512);
+        int ret = ata_write(g_blk_ata_drive, (uint32_t)lba, count, g_blk_io_buf);
+        if (ret < 0) {
+            msg->regs.data[1] = (uint32_t)-6;
+            return 0;
+        }
+
+        msg->regs.data[1] = count * 512;
+        return 0;
+    }
+
+    case UDM_BLK_INFO: {
+        msg->regs.data[1] = 0;
+        msg->regs.data[2] = (uint32_t)g_blk_sector_count;
+        msg->regs.data[3] = 0;
+        msg->regs.data[4] = 512;
+        msg->buffer.data = (uint64_t)(uintptr_t)g_blk_dev_name;
+        msg->buffer.size = (uint32_t)strlen(g_blk_dev_name);
+        return 0;
+    }
+
+    default:
+        msg->regs.data[1] = (uint32_t)-38; /* ENOSYS */
+        return 0;
+    }
+}
+
+/* 组合 handler: VFS + BLK */
+static int combined_handler(struct ipc_message *msg) {
+    uint32_t op = UDM_MSG_OPCODE(msg);
+    if (op >= 100) return blk_handler(msg);
     return vfs_dispatch(fatfs_get_ops(), &g_fatfs, msg);
+}
+
+/* 向 devfsd 注册块设备 */
+/* 注册缓冲区: [name\0][mbr 512B] */
+static char g_reg_buf[16 + 1 + 512];
+
+static void register_blkdev_to_devfsd(handle_t self_ep) {
+    if (g_blk_ata_drive < 0 || g_blk_dev_name[0] == '\0') return;
+
+    /* 重试查找 devfs_ep */
+    handle_t devfs = HANDLE_INVALID;
+    for (int i = 0; i < 30; i++) {
+        devfs = sys_handle_find("devfs_ep");
+        if (devfs != HANDLE_INVALID) break;
+        sys_sleep(100);
+    }
+    if (devfs == HANDLE_INVALID) return;
+
+    /* 构建 buffer: name\0 + MBR (复用 main 阶段保存的 MBR) */
+    uint32_t name_len = (uint32_t)strlen(g_blk_dev_name);
+    memcpy(g_reg_buf, g_blk_dev_name, name_len);
+    g_reg_buf[name_len] = '\0';
+    memcpy(g_reg_buf + name_len + 1, g_saved_mbr, 512);
+
+    struct ipc_message reg   = {0};
+    struct ipc_message reply = {0};
+
+    reg.regs.data[0] = UDM_DEVFS_REGISTER_BLOCK;
+    reg.regs.data[1] = g_blk_sector_count;
+    reg.regs.data[2] = 0;
+    reg.regs.data[3] = 512;
+    reg.regs.data[4] = name_len;
+    reg.buffer.data = (uint64_t)(uintptr_t)g_reg_buf;
+    reg.buffer.size = name_len + 1 + 512;
+    reg.handles.handles[0] = self_ep;
+    reg.handles.count = 1;
+
+    sys_ipc_call(devfs, &reg, &reply, 5000);
+}
+
+static void *srv_thread_entry(void *arg) {
+    udm_server_run((struct udm_server *)arg);
+    return NULL;
 }
 
 int main(int argc, char **argv) {
@@ -227,12 +348,12 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        uint8_t mbr[512];
-        if (ata_read(ata_drive, 0, 1, mbr) < 0) {
+        if (ata_read(ata_drive, 0, 1, g_saved_mbr) < 0) {
             ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to read MBR (drive=%d)\n",
                       ata_drive);
             return 1;
         }
+        uint8_t *mbr = g_saved_mbr;
 
         uint32_t base_lba = 0;
         if (parse_mbr_first_partition(mbr, &base_lba) < 0) {
@@ -244,8 +365,14 @@ int main(int argc, char **argv) {
         ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]",
                   " ATA mode (drive=%d, base_lba=%u)\n", ata_drive, base_lba);
 
-        /* 注册当前驱动器的块设备（供 devfsd 使用） */
+        /* 记录 ATA 信息供 BLK 协议使用 */
+        g_blk_ata_drive = ata_drive;
+        g_blk_sector_count = ata_get_sector_count(ata_drive);
+        /* 注册当前驱动器的块设备 */
         register_ata_block_device(ata_drive);
+        /* 设备名: drive 0 → sda, drive 1 → sdb, ... */
+        snprintf(g_blk_dev_name, sizeof(g_blk_dev_name), "sd%c",
+                 'a' + ata_drive);
     }
 
     /* 初始化 FatFs */
@@ -256,7 +383,7 @@ int main(int argc, char **argv) {
 
     struct udm_server srv = {
         .endpoint = ep,
-        .handler  = vfs_handler,
+        .handler  = combined_handler,
         .name     = svc_name,
     };
 
@@ -264,7 +391,16 @@ int main(int argc, char **argv) {
     svc_notify_ready(svc_name);
     ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " %s started\n", svc_name);
 
-    udm_server_run(&srv);
+    /* ATA 模式: 先启动服务线程, 再注册到 devfsd */
+    if (use_ata) {
+        pthread_t srv_thread;
+        pthread_create(&srv_thread, NULL, srv_thread_entry, &srv);
+        sys_sleep(50); /* 等待服务线程进入 receive 循环 */
+        register_blkdev_to_devfsd(ep);
+        pthread_join(srv_thread, NULL);
+    } else {
+        udm_server_run(&srv);
+    }
 
     return 0;
 }

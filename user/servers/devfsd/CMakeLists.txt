@@ -4,6 +4,6 @@
 
 set(APP_NAME "devfsd")
 set(APP_SOURCES main.c)
-set(APP_LIBS c d vfs pthread block)
+set(APP_LIBS c d vfs pthread)
 
 include(${CMAKE_SOURCE_DIR}/user/app.cmake)

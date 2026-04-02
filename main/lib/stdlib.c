@@ -9,11 +9,7 @@ static int is_space(int c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
 }
 
-static int is_digit(int c) {
-    return c >= '0' && c <= '9';
-}
-
-static int char_val(int c) {
+static unsigned int char_val(int c) {
     if (c >= '0' && c <= '9') return c - '0';
     if (c >= 'a' && c <= 'z') return c - 'a' + 10;
     if (c >= 'A' && c <= 'Z') return c - 'A' + 10;
@@ -35,10 +31,11 @@ long strtol(const char *s, char **endptr, int base) {
         s += 2;
     }
 
+    unsigned int ubase = (unsigned int)base;
     long result = 0;
     const char *start = s;
-    while (char_val(*s) < base) {
-        result = result * base + char_val(*s);
+    while (char_val(*s) < ubase) {
+        result = result * base + (int)char_val(*s);
         s++;
     }
 
@@ -58,10 +55,11 @@ unsigned long strtoul(const char *s, char **endptr, int base) {
         s += 2;
     }
 
+    unsigned int ubase = (unsigned int)base;
     unsigned long result = 0;
     const char *start = s;
-    while (char_val(*s) < (unsigned)base) {
-        result = result * (unsigned)base + (unsigned)char_val(*s);
+    while (char_val(*s) < ubase) {
+        result = result * ubase + char_val(*s);
         s++;
     }
 
