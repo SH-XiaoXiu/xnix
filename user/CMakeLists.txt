@@ -197,32 +197,12 @@ foreach (APP ${APP_NAMES})
     endif ()
 endforeach ()
 
-# 扫描 bin 工具（确定哪些是 core）
-# bin 工具不是服务，不需要 services.conf 条目
-# core=true 的打包到 rootfs.img，core=false 的放到 optional/
-set(CORE_BIN_TOOLS "")
+# 所有 bin 工具全部打包到 /bin
+set(CORE_BIN_TOOLS ${BIN_TOOL_NAMES})
 set(USER_BIN_TOOLS "")
 
-foreach (BIN ${BIN_TOOL_NAMES})
-    set(SVC_CONF "${CMAKE_CURRENT_SOURCE_DIR}/apps/bin/${BIN}/service.conf")
-    set(IS_CORE ${PACK_BIN_TO_ROOTFS})  # 使用全局配置作为默认值
-
-    if (EXISTS ${SVC_CONF})
-        parse_service_conf("${SVC_CONF}" "SVC")
-        if (DEFINED SVC_CORE)
-            set(IS_CORE ${SVC_CORE})  # service.conf 覆盖默认值
-        endif ()
-    endif ()
-
-    if (IS_CORE)
-        list(APPEND CORE_BIN_TOOLS "${BIN}")
-    else ()
-        list(APPEND USER_BIN_TOOLS "${BIN}")
-    endif ()
-endforeach ()
-
-set(CORE_BIN_TOOLS "${CORE_BIN_TOOLS}" CACHE INTERNAL "Core bin tools (in rootfs)")
-set(USER_BIN_TOOLS "${USER_BIN_TOOLS}" CACHE INTERNAL "User bin tools (in optional)")
+set(CORE_BIN_TOOLS "${CORE_BIN_TOOLS}" CACHE INTERNAL "Core bin tools (in /bin)")
+set(USER_BIN_TOOLS "" CACHE INTERNAL "User bin tools (in optional)")
 
 message(STATUS "[user] Core services: ${CORE_SERVICES}")
 message(STATUS "[user] Core bin tools: ${CORE_BIN_TOOLS}")

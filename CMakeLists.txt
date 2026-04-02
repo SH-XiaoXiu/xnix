@@ -138,11 +138,6 @@ set(CFG_KMSG_MAX_LINE 256 CACHE STRING "Kernel log max line length")
 option(CFG_DEBUG "Enable kernel debug logging" OFF)
 option(CONFIG_DEBUG_CONSOLE "Enable SYS_DEBUG_WRITE syscall for early debugging" ON)
 
-# ============================================
-# 打包配置
-# ============================================
-option(PACK_BIN_TO_ROOTFS "Pack all bin tools to rootfs.img by default" OFF)
-
 configure_file(
         ${CMAKE_SOURCE_DIR}/main/include/xnix/config.h.in
         ${CMAKE_BINARY_DIR}/include/xnix/config.h

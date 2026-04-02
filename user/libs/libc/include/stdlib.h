@@ -41,4 +41,9 @@ void *realloc(void *ptr, size_t size);
  */
 void free(void *ptr);
 
+long          strtol(const char *s, char **endptr, int base);
+unsigned long strtoul(const char *s, char **endptr, int base);
+int           atoi(const char *s);
+long          atol(const char *s);
+
 #endif /* _STDLIB_H */

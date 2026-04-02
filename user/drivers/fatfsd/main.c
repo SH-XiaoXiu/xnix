@@ -15,6 +15,7 @@
 #include <d/protocol/vfs.h>
 #include <d/server.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <vfs/vfs.h>
 #include <vfs_client.h>
@@ -160,16 +161,37 @@ static int vfs_handler(struct ipc_message *msg) {
 }
 
 int main(int argc, char **argv) {
-    /* 解析参数: --ata 强制 ATA 模式 */
+    /* 解析参数: --ata 强制 ATA 模式，--drive N 指定 ATA 驱动器号 */
     bool force_ata = false;
+    int  ata_drive = 0;
     for (int i = 0; i < argc; i++) {
         if (strcmp(argv[i], "--ata") == 0) {
             force_ata = true;
+        } else if (strcmp(argv[i], "--drive") == 0 && i + 1 < argc) {
+            ata_drive = (int)strtol(argv[i + 1], NULL, 10);
+            i++;
         }
     }
 
-    const char *ep_name  = force_ata ? "fatfs_ata_ep" : "fatfs_ep";
-    const char *svc_name = force_ata ? "fatfsd_ata" : "fatfsd";
+    /* 根据驱动器号生成服务名和端点名（drive 0 保持向后兼容名称） */
+    char ep_name_buf[32];
+    char svc_name_buf[32];
+    const char *ep_name;
+    const char *svc_name;
+    if (force_ata) {
+        if (ata_drive == 0) {
+            ep_name  = "fatfs_ata_ep";
+            svc_name = "fatfsd_ata";
+        } else {
+            snprintf(ep_name_buf, sizeof(ep_name_buf), "fatfs_ata%d_ep", ata_drive);
+            snprintf(svc_name_buf, sizeof(svc_name_buf), "fatfsd_ata%d", ata_drive);
+            ep_name  = ep_name_buf;
+            svc_name = svc_name_buf;
+        }
+    } else {
+        ep_name  = "fatfs_ep";
+        svc_name = "fatfsd";
+    }
 
     env_set_name("fatfsd");
     handle_t ep = env_require(ep_name);
@@ -206,8 +228,9 @@ int main(int argc, char **argv) {
         }
 
         uint8_t mbr[512];
-        if (ata_read(0, 0, 1, mbr) < 0) {
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to read MBR\n");
+        if (ata_read(ata_drive, 0, 1, mbr) < 0) {
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to read MBR (drive=%d)\n",
+                      ata_drive);
             return 1;
         }
 
@@ -217,16 +240,12 @@ int main(int argc, char **argv) {
             base_lba = 0;
         }
 
-        disk_init_ata(0, base_lba);
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " ATA mode (drive=0, base_lba=%u)\n",
-                  base_lba);
+        disk_init_ata(ata_drive, base_lba);
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]",
+                  " ATA mode (drive=%d, base_lba=%u)\n", ata_drive, base_lba);
 
-        /* 注册块设备（供 devfsd 使用） */
-        register_ata_block_device(0);
-        /* 如果有从盘，也注册 */
-        if (ata_is_ready(1)) {
-            register_ata_block_device(1);
-        }
+        /* 注册当前驱动器的块设备（供 devfsd 使用） */
+        register_ata_block_device(ata_drive);
     }
 
     /* 初始化 FatFs */

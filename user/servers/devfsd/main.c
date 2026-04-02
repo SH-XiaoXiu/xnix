@@ -189,8 +189,6 @@ static int devfs_read(void *ctx, uint32_t handle, void *buf, uint32_t offset, ui
 
 static int devfs_write(void *ctx, uint32_t handle, const void *buf, uint32_t offset, uint32_t size) {
     (void)ctx;
-    (void)buf;
-    (void)offset;
 
     if (handle >= DEVFS_MAX_FILES || !g_devfs.entries[handle].valid) {
         return -1;
@@ -204,7 +202,33 @@ static int devfs_write(void *ctx, uint32_t handle, const void *buf, uint32_t off
         return (int)size;  /* 吞掉数据 */
 
     case DEV_TYPE_BLOCK:
-        /* TODO: 实现块设备写入 */
+        if (ent->bdev && ent->bdev->ops && ent->bdev->ops->write) {
+            uint32_t sector_size = ent->bdev->info.sector_size;
+            if (sector_size == 0) sector_size = 512;
+
+            uint64_t lba = offset / sector_size;
+            uint32_t sector_offset = offset % sector_size;
+            uint32_t sectors = (sector_offset + size + sector_size - 1) / sector_size;
+
+            char *temp = malloc(sectors * sector_size);
+            if (!temp) return -1;
+
+            /* 非对齐写入需先读出原始扇区，保留非写入区域数据 */
+            if ((sector_offset != 0 || size % sector_size != 0) && ent->bdev->ops->read) {
+                int ret = ent->bdev->ops->read(ent->bdev->driver_ctx, lba, sectors, temp);
+                if (ret < 0) {
+                    free(temp);
+                    return ret;
+                }
+            }
+
+            memcpy(temp + sector_offset, buf, size);
+
+            int ret = ent->bdev->ops->write(ent->bdev->driver_ctx, lba, sectors, temp);
+            free(temp);
+            if (ret < 0) return ret;
+            return (int)size;
+        }
         return -1;
 
     default:

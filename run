@@ -21,9 +21,7 @@ BOOT_MODE="iso"  # iso | disk
 DEBUG=false
 CONFIG_PATH=""
 QEMU_EXTRA=""
-HDA_FILE=""
-HDA_INSTALL=""
-PACK_BIN=""
+EXTRA_DISKS=()   # 挂载的磁盘列表，格式 "file:type"
 
 # 帮助信息
 show_help() {
@@ -33,25 +31,25 @@ Xnix 构建运行脚本
 用法: ./run [选项]
 
 选项:
-  -h, --help          显示帮助
-  -b, --build         清理重建（删除 build 目录）
-  -n, --no-run        只编译不运行
-  -i, --iso           ISO 模式（默认）
-  --disk              磁盘启动模式（构建 disk_template）
-  -d, --debug         调试模式（GDB 端口 1234）
-  -c, --config PATH   用户服务配置路径
-  --pack-bin          强制打包 bin 工具到 system.img
-  --no-pack-bin       强制不打包 bin 工具（放到 optional）
-  --hda FILE          挂载硬盘镜像
-  --install SRC       从源镜像复制到 --hda
-  --qemu "ARGS"       额外 QEMU 参数
+  -h, --help            显示帮助
+  -b, --build           清理重建（删除 build 目录）
+  -n, --no-run          只编译不运行
+  -i, --iso             ISO 模式（默认）
+  --disk                磁盘启动模式（构建 disk_template）
+  -d, --debug           调试模式（GDB 端口 1234）
+  -c, --config PATH     用户服务配置路径
+  --attach FILE[:TYPE]  附加磁盘镜像（可重复，TYPE: ide/virtio/scsi，默认 ide）
+  --qemu "ARGS"         额外 QEMU 参数
 
 示例:
-  ./run               # 增量编译 + ISO 启动
-  ./run -b            # 清理重建 + ISO 启动
-  ./run -n -b         # 清理重建（只编译）
-  ./run --disk        # 磁盘模式启动
-  ./run -d            # ISO 调试模式
+  ./run                              # 增量编译 + ISO 启动
+  ./run -b                           # 清理重建 + ISO 启动
+  ./run -n -b                        # 清理重建（只编译）
+  ./run --disk                       # 磁盘模式启动
+  ./run -d                           # ISO 调试模式
+  ./run --attach build/disk_template.img            # 附加 IDE 磁盘，/mnt/sda1 可见
+  ./run --attach sda.img --attach sdb.img:ide       # 挂载两块 IDE 磁盘
+  ./run --attach data.img:virtio                    # 附加 VirtIO 磁盘
   ./run --qemu "-m 256M -smp 4"
 EOF
 }
@@ -87,21 +85,9 @@ while [[ $# -gt 0 ]]; do
             CONFIG_PATH="$2"
             shift 2
             ;;
-        --hda)
-            HDA_FILE="$2"
+        --attach)
+            EXTRA_DISKS+=("$2")
             shift 2
-            ;;
-        --install)
-            HDA_INSTALL="$2"
-            shift 2
-            ;;
-        --pack-bin)
-            PACK_BIN="ON"
-            shift
-            ;;
-        --no-pack-bin)
-            PACK_BIN="OFF"
-            shift
             ;;
         --qemu)
             QEMU_EXTRA="$2"
@@ -133,15 +119,7 @@ cd "$BUILD_DIR"
 # 配置（如果需要）
 if [ ! -f "CMakeCache.txt" ]; then
     echo "配置 CMake..."
-    CMAKE_OPTS=""
-    if [ -n "$PACK_BIN" ]; then
-        CMAKE_OPTS="$CMAKE_OPTS -DPACK_BIN_TO_ROOTFS=$PACK_BIN"
-        echo "设置 PACK_BIN_TO_ROOTFS=$PACK_BIN"
-    fi
-    cmake $CMAKE_OPTS ..
-elif [ -n "$PACK_BIN" ]; then
-    echo "重新配置 CMake（PACK_BIN_TO_ROOTFS=$PACK_BIN）..."
-    cmake -DPACK_BIN_TO_ROOTFS=$PACK_BIN ..
+    cmake ..
 fi
 
 # 编译
@@ -171,31 +149,29 @@ if [ -n "$CONFIG_PATH" ]; then
     fi
 fi
 
-# 处理硬盘镜像
-if [ -n "$HDA_INSTALL" ]; then
-    if [ -z "$HDA_FILE" ]; then
-        HDA_FILE="$BUILD_DIR/xnix_disk.img"
-    fi
-    if [ ! -f "$HDA_INSTALL" ]; then
-        echo "错误: 源镜像不存在: $HDA_INSTALL"
-        exit 1
-    fi
-    echo "复制 $HDA_INSTALL -> $HDA_FILE"
-    cp "$HDA_INSTALL" "$HDA_FILE"
-fi
-
 # 构建 QEMU 命令
 QEMU_CMD="qemu-system-i386"
 QEMU_ARGS="-serial stdio -no-reboot -m 4096M -smp 2"
 
-# 硬盘
-if [ -n "$HDA_FILE" ]; then
-    if [ ! -f "$HDA_FILE" ]; then
-        echo "错误: 硬盘镜像不存在: $HDA_FILE"
+# 附加磁盘（每块先复制到 build/disk_<n>.img，保护原始镜像）
+disk_idx=0
+for disk_entry in "${EXTRA_DISKS[@]}"; do
+    disk_file="${disk_entry%%:*}"
+    disk_type="${disk_entry#*:}"
+    # 若没有 ':' 分隔，则 disk_type == disk_file，默认用 ide
+    if [ "$disk_type" = "$disk_file" ]; then
+        disk_type="ide"
+    fi
+    if [ ! -f "$disk_file" ]; then
+        echo "错误: 磁盘镜像不存在: $disk_file"
         exit 1
     fi
-    QEMU_ARGS="$QEMU_ARGS -drive file=$HDA_FILE,format=raw,if=ide"
-fi
+    disk_copy="$BUILD_DIR/disk_${disk_idx}.img"
+    echo "复制磁盘: $disk_file -> $disk_copy (type=$disk_type)"
+    cp "$disk_file" "$disk_copy"
+    QEMU_ARGS="$QEMU_ARGS -drive file=$disk_copy,format=raw,if=$disk_type"
+    disk_idx=$((disk_idx + 1))
+done
 
 # 调试模式
 if $DEBUG; then
