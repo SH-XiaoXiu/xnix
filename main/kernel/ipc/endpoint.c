@@ -137,7 +137,7 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
 
                 /* 传递 Handle 到接收者进程 */
                 handle_t dst_handle =
-                    handle_transfer(src_proc, src_handle, dst_proc, NULL, HANDLE_INVALID);
+                    handle_transfer(src_proc, src_handle, dst_proc, NULL, HANDLE_INVALID, 0);
 
                 if (dst_handle != HANDLE_INVALID) {
                     dst_msg->handles.handles[dst_msg->handles.count++] = dst_handle;
@@ -239,7 +239,10 @@ int ipc_send(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
     }
 
     struct ipc_endpoint *ep = entry.object;
-    if (entry.perm_send == PERM_ID_INVALID || !perm_check(proc, entry.perm_send)) {
+    if (!(entry.rights & HANDLE_RIGHT_WRITE) || entry.perm_send == PERM_ID_INVALID ||
+        !perm_check(proc, entry.perm_send)) {
+        pr_debug("[IPC] send denied: proc=%d handle=%d rights=0x%x perm=%d\n",
+                 proc->pid, ep_handle, entry.rights, entry.perm_send);
         handle_object_put(entry.type, entry.object);
         return -EPERM;
     }
@@ -262,7 +265,8 @@ int ipc_call(handle_t ep_handle, struct ipc_message *request, struct ipc_message
     }
 
     struct ipc_endpoint *ep = entry.object;
-    if (entry.perm_send == PERM_ID_INVALID || !perm_check(proc, entry.perm_send)) {
+    if (!(entry.rights & HANDLE_RIGHT_WRITE) || entry.perm_send == PERM_ID_INVALID ||
+        !perm_check(proc, entry.perm_send)) {
         handle_object_put(entry.type, entry.object);
         return -EPERM;
     }
@@ -295,7 +299,10 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
     }
 
     struct ipc_endpoint *ep = entry.object;
-    if (entry.perm_recv == PERM_ID_INVALID || !perm_check(proc, entry.perm_recv)) {
+    if (!(entry.rights & HANDLE_RIGHT_READ) || entry.perm_recv == PERM_ID_INVALID ||
+        !perm_check(proc, entry.perm_recv)) {
+        pr_debug("[IPC] recv denied: proc=%d handle=%d rights=0x%x perm=%d\n",
+                 proc->pid, ep_handle, entry.rights, entry.perm_recv);
         handle_object_put(entry.type, entry.object);
         return -EPERM;
     }
@@ -456,7 +463,8 @@ handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
 
         if (entry.type == HANDLE_ENDPOINT) {
             /* 检查 recv 权限 */
-            if (entry.perm_recv == PERM_ID_INVALID || !perm_check(proc, entry.perm_recv)) {
+            if (!(entry.rights & HANDLE_RIGHT_READ) || entry.perm_recv == PERM_ID_INVALID ||
+                !perm_check(proc, entry.perm_recv)) {
                 handle_object_put(entry.type, entry.object);
                 continue;
             }

@@ -54,6 +54,7 @@ handle_t handle_alloc(struct process *proc, handle_type_t type, void *object, co
     struct handle_entry *entry = &table->entries[h];
     entry->type                = type;
     entry->object              = object;
+    entry->rights              = HANDLE_RIGHT_ALL;
     if (name) {
         strncpy(entry->name, name, sizeof(entry->name) - 1);
         entry->name[sizeof(entry->name) - 1] = '\0';
@@ -121,6 +122,7 @@ handle_t handle_alloc_at(struct process *proc, handle_type_t type, void *object,
     struct handle_entry *entry = &table->entries[hint];
     entry->type                = type;
     entry->object              = object;
+    entry->rights              = HANDLE_RIGHT_ALL;
     if (name) {
         strncpy(entry->name, name, sizeof(entry->name) - 1);
         entry->name[sizeof(entry->name) - 1] = '\0';

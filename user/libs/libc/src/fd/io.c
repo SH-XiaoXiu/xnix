@@ -76,6 +76,19 @@ static ssize_t write_pipe(struct fd_entry *ent, const void *buf, size_t n) {
     return (ssize_t)n;
 }
 
+static ssize_t write_ipc(struct fd_entry *ent, const void *buf, size_t n) {
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.buffer.data = (uint64_t)(uintptr_t)buf;
+    msg.buffer.size = (uint32_t)n;
+
+    int ret = sys_ipc_send(ent->handle, &msg, 5000);
+    if (ret < 0) {
+        return -EIO;
+    }
+    return (ssize_t)n;
+}
+
 ssize_t write(int fd, const void *buf, size_t n) {
     struct fd_entry *ent = fd_get(fd);
     if (!ent) {
@@ -92,6 +105,8 @@ ssize_t write(int fd, const void *buf, size_t n) {
         return write_vfs(ent, buf, n);
     case FD_TYPE_PIPE:
         return write_pipe(ent, buf, n);
+    case FD_TYPE_IPC:
+        return write_ipc(ent, buf, n);
     default:
         return -EBADF;
     }
@@ -174,6 +189,19 @@ static ssize_t read_pipe(struct fd_entry *ent, void *buf, size_t n) {
     return (ssize_t)msg.regs.data[1];
 }
 
+static ssize_t read_ipc(struct fd_entry *ent, void *buf, size_t n) {
+    struct ipc_message msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.buffer.data = (uint64_t)(uintptr_t)buf;
+    msg.buffer.size = (uint32_t)n;
+
+    int ret = sys_ipc_receive(ent->handle, &msg, 0);
+    if (ret < 0) {
+        return -EIO;
+    }
+    return (ssize_t)msg.buffer.size;
+}
+
 ssize_t read(int fd, void *buf, size_t n) {
     struct fd_entry *ent = fd_get(fd);
     if (!ent) {
@@ -190,6 +218,8 @@ ssize_t read(int fd, void *buf, size_t n) {
         return read_vfs(ent, buf, n);
     case FD_TYPE_PIPE:
         return read_pipe(ent, buf, n);
+    case FD_TYPE_IPC:
+        return read_ipc(ent, buf, n);
     default:
         return -EBADF;
     }

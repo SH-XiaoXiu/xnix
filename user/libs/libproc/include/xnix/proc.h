@@ -65,6 +65,17 @@ void proc_inherit_perm(struct proc_builder *b);
 void proc_add_handle(struct proc_builder *b, handle_t src, const char *name);
 
 /**
+ * 添加 handle 并指定子进程中的 rights
+ *
+ * @param b      builder 实例
+ * @param h      源 handle
+ * @param name   子进程中的名称
+ * @param rights 子进程中的权限位(0=继承源 handle 的全部权限)
+ */
+void proc_add_handle_with_rights(struct proc_builder *b, handle_t h,
+                                 const char *name, uint32_t rights);
+
+/**
  * 添加一个参数
  */
 void proc_add_arg(struct proc_builder *b, const char *arg);

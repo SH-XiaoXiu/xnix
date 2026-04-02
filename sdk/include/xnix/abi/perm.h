@@ -27,6 +27,9 @@
 /* Handle 授予权限(允许将 handle 传给其他进程) */
 #define PERM_NODE_HANDLE_GRANT "xnix.handle.grant"
 
+/* 权限委托权限(允许将自身权限授予/撤销给其他进程) */
+#define PERM_NODE_PERM_DELEGATE "xnix.perm.delegate"
+
 /* I/O 端口访问通配符 */
 #define PERM_NODE_IO_PORT_ALL "xnix.io.port.*"
 
@@ -38,7 +41,7 @@
 #define PERM_NODE_NAME_MAX 128
 
 /* Profile 动态创建参数 */
-#define ABI_PERM_RULE_MAX    16   /* 单个 profile 最多 16 条规则 */
+#define ABI_PERM_RULE_MAX    64   /* 单个 profile 最多 64 条规则 */
 #define ABI_PERM_NODE_MAX    64   /* 权限节点名最大长度 */
 
 struct abi_perm_rule {
@@ -51,6 +54,13 @@ struct abi_profile_create_args {
     char                 parent[32];                    /* 父 profile 名(空=无继承)*/
     uint32_t             rule_count;
     struct abi_perm_rule rules[ABI_PERM_RULE_MAX];
+};
+
+/* Phase 3: 自省 API 结构体 */
+
+struct abi_perm_info {
+    char     node[ABI_PERM_NODE_MAX]; /* 权限节点名 */
+    uint32_t granted;                 /* 1=有, 0=无 */
 };
 
 #endif /* XNIX_ABI_PERM_H */

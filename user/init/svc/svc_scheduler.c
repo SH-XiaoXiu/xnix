@@ -8,8 +8,9 @@
 static uint32_t g_ticks           = 0;
 static uint32_t g_last_diag_ticks = 0;
 
-#define SVC_READY_TIMEOUT_MS 5000
-#define SVC_DIAG_INTERVAL_MS 2000
+#define SVC_READY_TIMEOUT_MS   5000
+#define SVC_READY_MAX_RETRIES  2
+#define SVC_DIAG_INTERVAL_MS   2000
 
 /**
  * 检查是否有其他服务依赖此服务的就绪状态
@@ -50,8 +51,19 @@ static void svc_check_ready_timeouts(struct svc_manager *mgr) {
             continue;
         }
 
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[INIT] ",
-                  "Timeout: %s not ready (pid=%d, elapsed=%u)\n", cfg->name, rt->pid, elapsed);
+        /* 还有重试机会: 重置计时器等待下一轮 */
+        if (rt->ready_retry < SVC_READY_MAX_RETRIES) {
+            rt->ready_retry++;
+            rt->start_ticks = g_ticks; /* 重置超时起点 */
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[INIT] ",
+                      "%s: ready timeout, retry %d/%d (pid=%d)\n",
+                      cfg->name, rt->ready_retry, SVC_READY_MAX_RETRIES, rt->pid);
+            continue;
+        }
+
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[INIT] ",
+                  "Timeout: %s not ready after %d retries (pid=%d)\n",
+                  cfg->name, rt->ready_retry, rt->pid);
         rt->state = SVC_STATE_FAILED;
     }
 }

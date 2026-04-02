@@ -67,6 +67,24 @@ void proc_add_handle(struct proc_builder *b, handle_t src, const char *name) {
     }
     memcpy(b->args.handles[i].name, name, len);
     b->args.handles[i].name[len] = '\0';
+    b->args.handles[i].rights    = 0; /* 继承源 handle 全部 rights */
+    b->args.handle_count++;
+}
+
+void proc_add_handle_with_rights(struct proc_builder *b, handle_t h,
+                                 const char *name, uint32_t rights) {
+    if (b->args.handle_count >= ABI_EXEC_MAX_HANDLES) {
+        return;
+    }
+    uint32_t i             = b->args.handle_count;
+    b->args.handles[i].src = h;
+    size_t len             = strlen(name);
+    if (len >= HANDLE_NAME_MAX) {
+        len = HANDLE_NAME_MAX - 1;
+    }
+    memcpy(b->args.handles[i].name, name, len);
+    b->args.handles[i].name[len] = '\0';
+    b->args.handles[i].rights    = rights;
     b->args.handle_count++;
 }
 

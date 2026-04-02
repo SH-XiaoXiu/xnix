@@ -226,6 +226,7 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     rt->reported_ready = false;
     rt->mounted        = false;
     rt->ready          = false;
+    rt->ready_retry    = 0;
 
     if (strcmp(cfg->name, "shell") == 0) {
         /* shell 启动后,将 init 的 stdout/stderr 重定向到 serial (tty1),
@@ -316,6 +317,7 @@ void svc_handle_exit(struct svc_manager *mgr, int pid, int status) {
             rt->reported_ready = false;
             rt->mounted        = false;
             rt->ready          = false;
+            rt->ready_retry    = 0;
 
             if (cfg->respawn) {
                 printf("Respawning %s...\n", cfg->name);

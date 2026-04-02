@@ -13,10 +13,11 @@
  * @param dst       目标进程
  * @param name      在目标进程中的名称(可为 NULL 以保持原名)
  * @param dst_hint  目标进程中的期望槽位(HANDLE_INVALID 表示自动分配)
+ * @param rights    目标 handle 的权限位(与源 handle 取交集), 0 = 继承源 rights
  * @return 目标进程中的 Handle,失败返回 HANDLE_INVALID
  */
 handle_t handle_transfer(struct process *src, handle_t src_h, struct process *dst, const char *name,
-                         handle_t dst_hint) {
+                         handle_t dst_hint, uint32_t rights) {
     if (!src || !src->handles || !dst || !dst->handles) {
         return HANDLE_INVALID;
     }
@@ -26,16 +27,32 @@ handle_t handle_transfer(struct process *src, handle_t src_h, struct process *ds
         return HANDLE_INVALID;
     }
 
+    /* 检查源 handle 有 TRANSFER 权限 */
+    if (src != dst && !(src_entry.rights & HANDLE_RIGHT_TRANSFER)) {
+        handle_object_put(src_entry.type, src_entry.object);
+        return HANDLE_INVALID;
+    }
+
     /* 在目标进程分配 */
     const char *dst_name = name ? name : src_entry.name;
     handle_t    dst_h = handle_alloc_at(dst, src_entry.type, src_entry.object, dst_name, dst_hint);
 
     if (dst_h == HANDLE_INVALID) {
         handle_object_put(src_entry.type, src_entry.object);
+    } else {
+        /* 设置目标 handle 的 rights: 取交集(只能缩小) */
+        uint32_t dst_rights = (rights == 0) ? src_entry.rights : (src_entry.rights & rights);
+        struct handle_table *table = dst->handles;
+        spin_lock(&table->lock);
+        if (dst_h < table->capacity) {
+            table->entries[dst_h].rights = dst_rights;
+        }
+        spin_unlock(&table->lock);
     }
 
-    pr_debug("[HANDLE] transfer: %d:%d -> %d:%d type=%d name=%s\n", src->pid, src_h, dst->pid,
-             dst_h, src_entry.type, dst_name);
+    pr_debug("[HANDLE] transfer: %d:%d -> %d:%d type=%d name=%s rights=0x%x\n", src->pid, src_h,
+             dst->pid, dst_h, src_entry.type, dst_name,
+             (rights == 0) ? src_entry.rights : (src_entry.rights & rights));
 
     return dst_h;
 }

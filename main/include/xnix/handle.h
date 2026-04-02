@@ -24,6 +24,7 @@ struct handle_entry {
     handle_type_t type;                  /* 对象类型 */
     void         *object;                /* 内核对象指针 */
     char          name[HANDLE_NAME_MAX]; /* 可选名称(用于按名查找) */
+    uint32_t      rights;                /* handle 权限位 (HANDLE_RIGHT_*) */
 
     /* 缓存的权限 ID(用于加速 syscall 检查) */
     perm_id_t perm_send; /* 用于 HANDLE_ENDPOINT: 发送权限 */
@@ -157,6 +158,6 @@ handle_t handle_find(struct process *proc, const char *name);
  * @return 目标进程中的 handle 值,失败返回 HANDLE_INVALID
  */
 handle_t handle_transfer(struct process *src, handle_t src_h, struct process *dst, const char *name,
-                         handle_t dst_hint);
+                         handle_t dst_hint, uint32_t rights);
 
 #endif /* XNIX_HANDLE_H */

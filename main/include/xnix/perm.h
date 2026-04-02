@@ -18,6 +18,7 @@
 #define PERM_NODE_IPC_RECV            "xnix.ipc.recv"
 #define PERM_NODE_IPC_ENDPOINT_CREATE "xnix.ipc.endpoint.create"
 #define PERM_NODE_HANDLE_GRANT        "xnix.handle.grant"
+#define PERM_NODE_PERM_DELEGATE       "xnix.perm.delegate"
 #define PERM_NODE_IO_PORT_ALL         "xnix.io.port.*"
 #define PERM_NODE_MM_MMAP             "xnix.mm.mmap"
 #define PERM_NODE_PROCESS_SPAWN       "xnix.process.spawn"

@@ -61,8 +61,8 @@ static int spawn_transfer_handles(struct process *proc, struct process *creator,
     pr_debug("[PROC] spawn: Transferring %u handles to %s\n", handle_count, proc->name);
     for (uint32_t i = 0; i < handle_count; i++) {
         pr_debug("[PROC] spawn:   %u: src=%u, name='%s'\n", i, handles[i].src, handles[i].name);
-        handle_t dst =
-            handle_transfer(creator, handles[i].src, proc, handles[i].name, HANDLE_INVALID);
+        handle_t dst = handle_transfer(creator, handles[i].src, proc, handles[i].name,
+                                       HANDLE_INVALID, handles[i].rights);
         if (dst == HANDLE_INVALID) {
             pr_debug("[PROC] spawn: Failed to transfer handle %d (src=%u, name=%s)\n", i,
                      handles[i].src, handles[i].name);
@@ -218,7 +218,7 @@ static void spawn_inherit_by_names(struct process *dst, struct process *src, con
                 strcmp(table->entries[i].name, names[n]) == 0) {
                 /* 目标中不存在同名 handle 才传递 */
                 if (handle_find(dst, names[n]) == HANDLE_INVALID) {
-                    handle_transfer(src, (handle_t)i, dst, names[n], HANDLE_INVALID);
+                    handle_transfer(src, (handle_t)i, dst, names[n], HANDLE_INVALID, 0);
                 }
                 break;
             }
@@ -237,7 +237,7 @@ static void spawn_inherit_named_handles(struct process *dst, struct process *src
     for (uint32_t i = 0; i < table->capacity; i++) {
         if (table->entries[i].type != HANDLE_NONE && table->entries[i].name[0] != '\0') {
             if (handle_find(dst, table->entries[i].name) == HANDLE_INVALID) {
-                handle_transfer(src, (handle_t)i, dst, table->entries[i].name, HANDLE_INVALID);
+                handle_transfer(src, (handle_t)i, dst, table->entries[i].name, HANDLE_INVALID, 0);
             }
         }
     }
@@ -257,7 +257,7 @@ static void spawn_inherit_all_handles(struct process *dst, struct process *src) 
             if (name && handle_find(dst, name) != HANDLE_INVALID) {
                 continue;
             }
-            handle_transfer(src, (handle_t)i, dst, name, HANDLE_INVALID);
+            handle_transfer(src, (handle_t)i, dst, name, HANDLE_INVALID, 0);
         }
     }
 }

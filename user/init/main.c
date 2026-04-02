@@ -98,8 +98,14 @@ static void drain_ready_notifications(handle_t init_notify_ep) {
         msg.buffer.data            = (uint64_t)(uintptr_t)buf;
         msg.buffer.size            = sizeof(buf);
 
-        int ipc_ret = sys_ipc_receive((uint32_t)init_notify_ep, &msg, 1);
+        int ipc_ret = sys_ipc_receive((uint32_t)init_notify_ep, &msg, 10);
         if (ipc_ret != 0) {
+            if (errno == EPERM) {
+                char errbuf[80];
+                snprintf(errbuf, sizeof(errbuf),
+                         "[INIT] ERROR: init_notify recv denied (EPERM)\n");
+                early_puts(errbuf);
+            }
             break;
         }
 

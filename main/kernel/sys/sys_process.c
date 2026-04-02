@@ -145,7 +145,8 @@ static int32_t sys_exec(const uint32_t *args) {
 
     struct spawn_handle handles[ABI_EXEC_MAX_HANDLES];
     for (uint32_t i = 0; i < handle_count; i++) {
-        handles[i].src = (handle_t)kargs->handles[i].src;
+        handles[i].src    = (handle_t)kargs->handles[i].src;
+        handles[i].rights = kargs->handles[i].rights;
         strncpy(handles[i].name, kargs->handles[i].name, sizeof(handles[i].name));
         handles[i].name[sizeof(handles[i].name) - 1] = '\0';
     }

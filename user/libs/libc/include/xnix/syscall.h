@@ -141,6 +141,24 @@ static inline handle_t sys_handle_find(const char *name) {
 }
 
 /**
+ * 授予句柄给目标进程
+ *
+ * @param pid 目标进程 ID
+ * @param handle 要授予的 handle
+ * @param name 目标进程中的 handle 名称
+ * @param rights 要转移的权限位(0=继承完整权限)
+ * @return 目标进程中的 handle 值,-1 失败(设置 errno)
+ */
+static inline handle_t sys_handle_grant(pid_t pid, handle_t handle, const char *name, uint32_t rights) {
+    int ret = syscall4(SYS_HANDLE_GRANT, (uint32_t)pid, (uint32_t)handle, (uint32_t)(uintptr_t)name, rights);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return (handle_t)ret;
+}
+
+/**
  * 写 I/O 端口(8 位)
  * @return 0 成功,-1 失败(设置 errno)
  */
@@ -567,6 +585,90 @@ static inline int sys_kmsg_read(uint32_t *seq, char *buf, uint32_t size) {
  */
 static inline int sys_perm_profile_create(struct abi_profile_create_args *args) {
     int ret = syscall1(SYS_PERM_PROFILE_CREATE, (uint32_t)(uintptr_t)args);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
+/**
+ * 委托权限给目标进程
+ *
+ * @param pid  目标进程 ID
+ * @param node 权限节点名称(调用者必须拥有此权限且有 xnix.perm.delegate)
+ * @return 0 成功, -1 失败(设置 errno)
+ */
+static inline int sys_perm_grant_to(pid_t pid, const char *node) {
+    int ret = syscall2(SYS_PERM_GRANT, (uint32_t)pid, (uint32_t)(uintptr_t)node);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
+/**
+ * 撤销目标进程的权限
+ *
+ * @param pid  目标进程 ID
+ * @param node 权限节点名称
+ * @return 0 成功, -1 失败(设置 errno)
+ */
+static inline int sys_perm_revoke_from(pid_t pid, const char *node) {
+    int ret = syscall2(SYS_PERM_REVOKE, (uint32_t)pid, (uint32_t)(uintptr_t)node);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
+/**
+ * 查询当前进程拥有的权限列表
+ *
+ * @param buf       输出缓冲区(struct abi_perm_info[])
+ * @param max_count 最多返回条数
+ * @return 实际写入条数, -1 失败(设置 errno)
+ */
+static inline int sys_perm_query(struct abi_perm_info *buf, uint32_t max_count) {
+    int ret = syscall2(SYS_PERM_QUERY, (uint32_t)(uintptr_t)buf, max_count);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
+/**
+ * 列出当前进程的所有 handle
+ *
+ * @param buf       输出缓冲区(struct abi_handle_info[])
+ * @param max_count 最多返回条数
+ * @return 实际写入条数, -1 失败(设置 errno)
+ */
+static inline int sys_handle_list(struct abi_handle_info *buf, uint32_t max_count) {
+    int ret = syscall2(SYS_HANDLE_LIST, (uint32_t)(uintptr_t)buf, max_count);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
+/**
+ * 向已存在的 profile 追加规则
+ *
+ * @param profile_name profile 名称
+ * @param rules        规则数组
+ * @param count        规则数量
+ * @return 0 成功, -1 失败(设置 errno)
+ */
+static inline int sys_perm_profile_add_rules(const char *profile_name,
+                                             struct abi_perm_rule *rules,
+                                             uint32_t count) {
+    int ret = syscall3(SYS_PERM_PROFILE_ADD_RULES, (uint32_t)(uintptr_t)profile_name,
+                       (uint32_t)(uintptr_t)rules, count);
     if (ret < 0) {
         errno = -ret;
         return -1;

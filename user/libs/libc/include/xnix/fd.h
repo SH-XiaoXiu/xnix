@@ -19,6 +19,7 @@
 #define FD_TYPE_TTY  1 /* TTY endpoint -- 走 TTY IPC 协议 */
 #define FD_TYPE_VFS  2 /* VFS file -- 走 VFS IPC 协议 */
 #define FD_TYPE_PIPE 3 /* Pipe endpoint -- 简单 IPC send/recv */
+#define FD_TYPE_IPC  4 /* 通用 IPC endpoint -- 用于服务连接 */
 
 /* fd 标志 */
 #define FD_FLAG_READ    0x01

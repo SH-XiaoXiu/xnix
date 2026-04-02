@@ -44,13 +44,18 @@
 
 /* Handle 管理 (400-419) */
 #define SYS_HANDLE_FIND      400 /* 查找命名 handle: ebx=name, 返回 handle 或 -1 */
-#define SYS_HANDLE_GRANT     401 /* 授予 handle: ebx=pid, ecx=handle, edx=name */
+#define SYS_HANDLE_GRANT     401 /* 授予 handle: ebx=pid, ecx=handle, edx=name, esi=rights */
 #define SYS_HANDLE_CLOSE     402 /* 关闭 handle: ebx=handle */
 #define SYS_HANDLE_DUPLICATE 403 /* 复制 handle: ebx=src, ecx=dst_hint, edx=name */
+#define SYS_HANDLE_LIST      404 /* 列出 handle: ebx=buf, ecx=max_count, 返回条目数 */
 
 /* 权限 (420-439) */
 #define SYS_PERM_CHECK          420 /* 检查权限: ebx=perm_id */
 #define SYS_PERM_PROFILE_CREATE 421 /* 创建权限 profile: ebx=abi_profile_create_args* */
+#define SYS_PERM_GRANT          422 /* 委托权限: ebx=pid, ecx=node_ptr */
+#define SYS_PERM_REVOKE         423 /* 撤销权限: ebx=pid, ecx=node_ptr */
+#define SYS_PERM_QUERY          424 /* 查询权限: ebx=buf, ecx=max_count, 返回条目数 */
+#define SYS_PERM_PROFILE_ADD_RULES 425 /* 追加规则: ebx=profile_name, ecx=rules, edx=count */
 
 /* 硬件访问 (500-519) - 基于权限 */
 #define SYS_IOPORT_OUTB 500 /* 写端口 8位: ebx=port, ecx=val (需 xnix.io.port.<port> 权限) */

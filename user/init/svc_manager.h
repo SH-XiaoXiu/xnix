@@ -161,7 +161,8 @@ struct svc_runtime {
     uint32_t    start_ticks;
     bool        reported_ready;
     bool        mounted;
-    bool        ready; /* 是否已报告就绪 */
+    bool        ready;       /* 是否已报告就绪 */
+    int         ready_retry; /* ready 超时后的重试次数 */
 };
 
 /**
