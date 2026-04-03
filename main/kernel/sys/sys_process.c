@@ -169,11 +169,14 @@ static int32_t sys_exec(const uint32_t *args) {
     } else if (kargs->profile_name[0] != '\0') {
         profile = perm_profile_find(kargs->profile_name);
         if (!profile) {
-            kprintf("[sys_exec] WARNING: Profile '%s' not found for process '%s'\n",
-                    kargs->profile_name, kargs->name);
+            pr_err("Profile '%s' not found for process '%s'\n",
+                   kargs->profile_name, kargs->name);
+            free_pages(elf_paddr, page_count);
+            kfree(kargs);
+            return -ENOENT;
         }
         /* 权限降级检查:子进程 profile 不能超过父进程权限 */
-        if (profile && proc->perms && !perm_profile_is_subset(profile, proc->perms)) {
+        if (proc->perms && !perm_profile_is_subset(profile, proc->perms)) {
             free_pages(elf_paddr, page_count);
             kfree(kargs);
             return -EPERM;

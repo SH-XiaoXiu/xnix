@@ -6,6 +6,8 @@
  * 文件操作使用统一 fd 表.
  */
 
+#include <xnix/protocol/devfs.h>
+#include <xnix/protocol/tty.h>
 #include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <stddef.h>
@@ -114,6 +116,14 @@ int vfs_open(const char *path, uint32_t flags) {
         return result;
     }
 
+    /* 设备类型检查: devfsd 对 TTY 设备返回 DEVFS_TYPE_TTY + endpoint handle */
+    uint32_t dev_type = reply.regs.data[2];
+    if (dev_type == DEVFS_TYPE_TTY && reply.handles.count > 0) {
+        fd_install(fd, reply.handles.handles[0], FD_TYPE_TTY,
+                   FD_FLAG_READ | FD_FLAG_WRITE);
+        return fd;
+    }
+
     struct fd_entry *ent =
         fd_install(fd, HANDLE_INVALID, FD_TYPE_VFS, FD_FLAG_READ | FD_FLAG_WRITE);
     if (!ent) {
@@ -153,10 +163,47 @@ int vfs_close(int fd) {
 
 /**
  * 读取文件(直接与 FS 驱动通信) - 使用统一 fd 表
+ * 注意: 对于 TTY 设备，使用 TTY IPC 协议
  */
 ssize_t vfs_read(int fd, void *buf, size_t size) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->type != FD_TYPE_VFS) {
+    if (!ent) {
+        return -EBADF;
+    }
+
+    /* 对于 TTY 类型，使用 TTY 协议读取 */
+    if (ent->type == FD_TYPE_TTY) {
+        if (!buf || size == 0) {
+            return 0;
+        }
+        struct ipc_message req   = {0};
+        struct ipc_message reply = {0};
+        char               recv_buf[64];
+
+        req.regs.data[0] = TTY_OP_READ;
+        req.regs.data[1] = (uint32_t)size;
+
+        size_t recv_size  = (size < sizeof(recv_buf)) ? size : sizeof(recv_buf);
+        reply.buffer.data = (uint64_t)(uintptr_t)recv_buf;
+        reply.buffer.size = (uint32_t)recv_size;
+
+        int ret = sys_ipc_call(ent->handle, &req, &reply, 0);
+        if (ret < 0) {
+            return -EIO;
+        }
+
+        int count = (int)reply.regs.data[0];
+        if (count <= 0) {
+            return count;
+        }
+        if ((size_t)count > size) {
+            count = (int)size;
+        }
+        memcpy(buf, recv_buf, (size_t)count);
+        return count;
+    }
+
+    if (ent->type != FD_TYPE_VFS) {
         return -EBADF;
     }
 

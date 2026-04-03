@@ -346,7 +346,9 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
     }
 
     process_add_thread(proc, (struct thread *)t);
-    pr_debug("[PROC] spawned: %s (PID %d)\n", name ? name : "?", proc->pid);
+
+    pr_debug("[PROC] spawned '%s' (pid=%d)\n", name ? name : "?", proc->pid);
+
     return proc->pid;
 }
 

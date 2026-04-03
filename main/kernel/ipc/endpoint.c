@@ -130,6 +130,10 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
 
         if (src_proc && dst_proc) {
             if (!perm_check_name(src_proc, PERM_NODE_HANDLE_GRANT)) {
+                pr_warn("handle transfer denied: process '%s' (pid=%d) lacks "
+                        "'xnix.handle.grant' permission, %u handle(s) dropped\n",
+                        src_proc->name ? src_proc->name : "?", src_proc->pid,
+                        src_msg->handles.count);
                 return;
             }
             for (uint32_t i = 0; i < src_msg->handles.count; i++) {
