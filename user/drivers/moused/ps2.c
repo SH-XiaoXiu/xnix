@@ -86,6 +86,14 @@ static int ps2_mouse_write(uint8_t cmd) {
 }
 
 int ps2_mouse_init(void) {
+    /* 0. 清空 PS/2 输出缓冲区,避免读取 config 时得到残留键盘数据 */
+    {
+        int timeout = 1024;
+        while ((sys_ioport_inb(PS2_STATUS_PORT) & PS2_STATUS_OUTPUT_FULL) && --timeout > 0) {
+            (void)sys_ioport_inb(PS2_DATA_PORT);
+        }
+    }
+
     /* 1. 启用第二 PS/2 端口 */
     if (ps2_wait_input() < 0) {
         return -1;
@@ -102,8 +110,10 @@ int ps2_mouse_init(void) {
         return -1;
     }
 
-    /* 3. 修改配置:启用第二端口中断(bit 1),清除第二端口禁用(bit 5) */
-    config |= (1 << 1);  /* 启用 IRQ12 */
+    /* 3. 修改配置:启用双端口中断,不禁用任何端口 */
+    config |= (1 << 0);  /* 确保 IRQ1 (键盘) 保持启用 */
+    config |= (1 << 1);  /* 启用 IRQ12 (鼠标) */
+    config &= ~(1 << 4); /* 确保键盘端口不被禁用 */
     config &= ~(1 << 5); /* 取消禁用第二端口时钟 */
 
     if (ps2_wait_input() < 0) {

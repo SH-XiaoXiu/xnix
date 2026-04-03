@@ -48,70 +48,6 @@ add_subdirectory(servers)
 add_subdirectory(apps)
 
 # ============================================
-# 服务发现与配置生成
-# ============================================
-# 解析 service.conf 的函数
-function(parse_service_conf FILE_PATH OUT_PREFIX)
-    if (NOT EXISTS ${FILE_PATH})
-        return()
-    endif ()
-
-    file(STRINGS ${FILE_PATH} LINES)
-
-    set(${OUT_PREFIX}_CORE FALSE PARENT_SCOPE)
-    set(${OUT_PREFIX}_AFTER "" PARENT_SCOPE)
-    set(${OUT_PREFIX}_CAPS "" PARENT_SCOPE)
-    set(${OUT_PREFIX}_MOUNT "" PARENT_SCOPE)
-    set(${OUT_PREFIX}_RESPAWN FALSE PARENT_SCOPE)
-    set(${OUT_PREFIX}_PATH "" PARENT_SCOPE)
-    set(${OUT_PREFIX}_PROVIDES "" PARENT_SCOPE)
-    set(${OUT_PREFIX}_REQUIRES "" PARENT_SCOPE)
-    set(${OUT_PREFIX}_WANTS "" PARENT_SCOPE)
-
-    foreach (LINE ${LINES})
-        string(REGEX MATCH "^[ \t]*#" IS_COMMENT "${LINE}")
-        if (IS_COMMENT)
-            continue()
-        endif ()
-        string(STRIP "${LINE}" LINE)
-        if ("${LINE}" STREQUAL "")
-            continue()
-        endif ()
-
-        string(REGEX MATCH "^([a-z_]+)[ \t]*=[ \t]*(.*)$" MATCH "${LINE}")
-        if (MATCH)
-            set(KEY "${CMAKE_MATCH_1}")
-            set(VALUE "${CMAKE_MATCH_2}")
-            string(STRIP "${VALUE}" VALUE)
-
-            if (KEY STREQUAL "core" AND VALUE STREQUAL "true")
-                set(${OUT_PREFIX}_CORE TRUE PARENT_SCOPE)
-            elseif (KEY STREQUAL "after")
-                set(${OUT_PREFIX}_AFTER "${VALUE}" PARENT_SCOPE)
-            elseif (KEY STREQUAL "caps")
-                set(${OUT_PREFIX}_CAPS "${VALUE}" PARENT_SCOPE)
-            elseif (KEY STREQUAL "mount")
-                set(${OUT_PREFIX}_MOUNT "${VALUE}" PARENT_SCOPE)
-            elseif (KEY STREQUAL "respawn" AND VALUE STREQUAL "true")
-                set(${OUT_PREFIX}_RESPAWN TRUE PARENT_SCOPE)
-            elseif (KEY STREQUAL "path")
-                set(${OUT_PREFIX}_PATH "${VALUE}" PARENT_SCOPE)
-            elseif (KEY STREQUAL "profile")
-                set(${OUT_PREFIX}_PROFILE "${VALUE}" PARENT_SCOPE)
-            elseif (KEY STREQUAL "handles")
-                set(${OUT_PREFIX}_HANDLES "${VALUE}" PARENT_SCOPE)
-            elseif (KEY STREQUAL "provides")
-                set(${OUT_PREFIX}_PROVIDES "${VALUE}" PARENT_SCOPE)
-            elseif (KEY STREQUAL "requires")
-                set(${OUT_PREFIX}_REQUIRES "${VALUE}" PARENT_SCOPE)
-            elseif (KEY STREQUAL "wants")
-                set(${OUT_PREFIX}_WANTS "${VALUE}" PARENT_SCOPE)
-            endif ()
-        endif ()
-    endforeach ()
-endfunction()
-
-# ============================================
 # 核心服务列表直接硬编码 核心服务是固定的
 # ============================================
 set(CORE_SERVICES
@@ -128,75 +64,11 @@ set(CORE_SERVICES
         ttyd
         klogd
         devfsd
+        wsd
         # shell - 移到 /bin/，不是系统服务
 )
 
 set(USER_SERVICES "")
-
-# 扫描 Servers(保留占位)
-foreach (SERVER ${SERVER_NAMES})
-    set(SVC_CONF "${CMAKE_CURRENT_SOURCE_DIR}/servers/${SERVER}/service.conf")
-    parse_service_conf("${SVC_CONF}" "SVC")
-
-    if (SVC_CORE)
-        list(APPEND CORE_SERVICES "${SERVER}")
-        set(SVC_${SERVER}_CORE TRUE CACHE INTERNAL "")
-    else ()
-        list(APPEND USER_SERVICES "${SERVER}")
-        set(SVC_${SERVER}_CORE FALSE CACHE INTERNAL "")
-    endif ()
-
-    set(SVC_${SERVER}_TYPE "server" CACHE INTERNAL "")
-    set(SVC_${SERVER}_AFTER "${SVC_AFTER}" CACHE INTERNAL "")
-    set(SVC_${SERVER}_HANDLES "${SVC_HANDLES}" CACHE INTERNAL "")
-    set(SVC_${SERVER}_MOUNT "${SVC_MOUNT}" CACHE INTERNAL "")
-    set(SVC_${SERVER}_RESPAWN "${SVC_RESPAWN}" CACHE INTERNAL "")
-    set(SVC_${SERVER}_PROFILE "${SVC_PROFILE}" CACHE INTERNAL "")
-    set(SVC_${SERVER}_PROVIDES "${SVC_PROVIDES}" CACHE INTERNAL "")
-    set(SVC_${SERVER}_REQUIRES "${SVC_REQUIRES}" CACHE INTERNAL "")
-    set(SVC_${SERVER}_WANTS "${SVC_WANTS}" CACHE INTERNAL "")
-    set(SVC_${SERVER}_HANDLES "${SVC_HANDLES}" CACHE INTERNAL "")
-    # 路径：优先用 service.conf 指定的，否则默认
-    if (SVC_PATH)
-        set(SVC_${SERVER}_PATH "${SVC_PATH}" CACHE INTERNAL "")
-    else ()
-        set(SVC_${SERVER}_PATH "/sys/drivers/${SERVER}.elf" CACHE INTERNAL "")
-    endif ()
-endforeach ()
-
-# 扫描应用
-foreach (APP ${APP_NAMES})
-    set(SVC_CONF "${CMAKE_CURRENT_SOURCE_DIR}/apps/${APP}/service.conf")
-    if (EXISTS ${SVC_CONF})
-        parse_service_conf("${SVC_CONF}" "SVC")
-
-        # apps 也可以是 core
-        if (SVC_CORE)
-            list(APPEND CORE_SERVICES "${APP}")
-            set(SVC_${APP}_CORE TRUE CACHE INTERNAL "")
-        else ()
-            list(APPEND USER_SERVICES "${APP}")
-            set(SVC_${APP}_CORE FALSE CACHE INTERNAL "")
-        endif ()
-
-        set(SVC_${APP}_TYPE "app" CACHE INTERNAL "")
-        set(SVC_${APP}_AFTER "${SVC_AFTER}" CACHE INTERNAL "")
-        set(SVC_${APP}_HANDLES "${SVC_HANDLES}" CACHE INTERNAL "")
-        set(SVC_${APP}_MOUNT "${SVC_MOUNT}" CACHE INTERNAL "")
-        set(SVC_${APP}_RESPAWN "${SVC_RESPAWN}" CACHE INTERNAL "")
-        set(SVC_${APP}_PROFILE "${SVC_PROFILE}" CACHE INTERNAL "")
-        set(SVC_${APP}_PROVIDES "${SVC_PROVIDES}" CACHE INTERNAL "")
-        set(SVC_${APP}_REQUIRES "${SVC_REQUIRES}" CACHE INTERNAL "")
-        set(SVC_${APP}_WANTS "${SVC_WANTS}" CACHE INTERNAL "")
-        set(SVC_${APP}_HANDLES "${SVC_HANDLES}" CACHE INTERNAL "")
-        # 路径：优先用 service.conf 指定的，否则默认
-        if (SVC_PATH)
-            set(SVC_${APP}_PATH "${SVC_PATH}" CACHE INTERNAL "")
-        else ()
-            set(SVC_${APP}_PATH "/sys/bin/${APP}.elf" CACHE INTERNAL "")
-        endif ()
-    endif ()
-endforeach ()
 
 # 所有 bin 工具全部打包到 /bin
 set(CORE_BIN_TOOLS ${BIN_TOOL_NAMES})
@@ -209,46 +81,6 @@ message(STATUS "[user] Core services: ${CORE_SERVICES}")
 message(STATUS "[user] Core bin tools: ${CORE_BIN_TOOLS}")
 message(STATUS "[user] User bin tools: ${USER_BIN_TOOLS}")
 message(STATUS "[user] User services: ${USER_SERVICES}")
-
-# 拓扑排序核心服务
-set(SORTED_CORE "")
-set(REMAINING ${CORE_SERVICES})
-
-while (REMAINING)
-    set(FOUND FALSE)
-    foreach (SVC ${REMAINING})
-        set(DEPS_MET TRUE)
-        if (SVC_${SVC}_AFTER)
-            string(REPLACE " " ";" AFTER_LIST "${SVC_${SVC}_AFTER}")
-            foreach (DEP ${AFTER_LIST})
-                list(FIND SORTED_CORE ${DEP} DEP_IDX)
-                if (DEP_IDX EQUAL -1)
-                    list(FIND CORE_SERVICES ${DEP} IS_CORE)
-                    if (NOT IS_CORE EQUAL -1)
-                        set(DEPS_MET FALSE)
-                        break()
-                    endif ()
-                endif ()
-            endforeach ()
-        endif ()
-
-        if (DEPS_MET)
-            list(APPEND SORTED_CORE ${SVC})
-            list(REMOVE_ITEM REMAINING ${SVC})
-            set(FOUND TRUE)
-            break()
-        endif ()
-    endforeach ()
-
-    if (NOT FOUND AND REMAINING)
-        list(GET REMAINING 0 FIRST)
-        list(APPEND SORTED_CORE ${FIRST})
-        list(REMOVE_ITEM REMAINING ${FIRST})
-    endif ()
-endwhile ()
-
-set(CORE_SERVICES ${SORTED_CORE})
-message(STATUS "[user] Sorted core: ${CORE_SERVICES}")
 
 # ============================================
 # 无需生成头文件

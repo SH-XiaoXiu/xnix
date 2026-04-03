@@ -138,6 +138,19 @@ static void apic_chip_init(void) {
     outb(0x21, 0xFF); /* PIC1 */
     outb(0xA1, 0xFF); /* PIC2 */
 
+    /*
+     * 清空 PS/2 控制器输出缓冲区.
+     *
+     * PIC 禁用后,PS/2 控制器可能仍有残留数据(POST 自检/ACK 等).
+     * 这些数据会使 IRQ1/IRQ12 线保持高电平.
+     * IOAPIC 使用边沿触发——如果在启用 IOAPIC entry 时
+     * IRQ 线已经是高电平,就检测不到上升沿,中断永远不会触发.
+     */
+    int drain_timeout = 1024;
+    while ((inb(0x64) & 0x01) && --drain_timeout > 0) {
+        (void)inb(0x60);
+    }
+
     /* 如果存在 IMCR,将外部中断从 PIC 重定向到 APIC */
     outb(0x22, 0x70);
     outb(0x23, inb(0x23) | 0x01);
@@ -152,6 +165,17 @@ static void apic_chip_enable(uint8_t irq) {
 
     if (!g_smp_info.apic_available) {
         return;
+    }
+
+    /*
+     * PS/2 IRQ (1=keyboard, 12=mouse): 清空输出缓冲区
+     * 确保 IRQ 线为低电平,这样 IOAPIC 能检测到下一次上升沿
+     */
+    if (irq == 1 || irq == 12) {
+        int timeout = 1024;
+        while ((inb(0x64) & 0x01) && --timeout > 0) {
+            (void)inb(0x60);
+        }
     }
 
     /* 将 IRQ 路由到 BSP (LAPIC ID 0) */

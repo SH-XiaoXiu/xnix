@@ -287,9 +287,9 @@ static void *keyboard_thread(void *arg) {
     /* 绑定 IRQ1 */
     int ret = sys_irq_bind(IRQ_KEYBOARD, -1, 0);
     if (ret < 0) {
+        ulog_errf("[kbd] IRQ bind failed: %d\n", ret);
         return NULL;
     }
-
     while (1) {
         uint8_t scancode;
 
@@ -298,7 +298,6 @@ static void *keyboard_thread(void *arg) {
         if (ret <= 0) {
             continue;
         }
-
         /* 生成输入事件 (GUI 路径) */
         struct input_event ev;
         if (scancode_to_event(scancode, &ev) == 0) {
@@ -326,6 +325,7 @@ static void *keyboard_thread(void *arg) {
 }
 
 int main(void) {
+    _stdio_force_debug_mode(); /* TODO: 无 tty 服务的 stdio 需要统一修复 */
     pthread_mutex_init(&input_lock, NULL);
     pthread_mutex_init(&pending_lock, NULL);
     pthread_mutex_init(&event_lock, NULL);
