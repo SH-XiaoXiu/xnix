@@ -21,6 +21,7 @@ BOOT_MODE="iso"  # iso | disk
 DEBUG=false
 CONFIG_PATH=""
 QEMU_EXTRA=""
+SERIAL_MODE="stdio"  # stdio | vc | telnet[:port]
 EXTRA_DISKS=()   # 挂载的磁盘列表，格式 "file:type"
 
 # 帮助信息
@@ -39,6 +40,7 @@ Xnix 构建运行脚本
   -d, --debug           调试模式（GDB 端口 1234）
   -c, --config PATH     用户服务配置路径
   --attach FILE[:TYPE]  附加磁盘镜像（可重复，TYPE: ide/virtio/scsi，默认 ide）
+  --serial MODE         串口模式: stdio(默认), vc(QEMU窗口), telnet[:port](默认4321)
   --qemu "ARGS"         额外 QEMU 参数
 
 示例:
@@ -50,6 +52,8 @@ Xnix 构建运行脚本
   ./run --attach build/disk_template.img            # 附加 IDE 磁盘，/mnt/sda1 可见
   ./run --attach sda.img --attach sdb.img:ide       # 挂载两块 IDE 磁盘
   ./run --attach data.img:virtio                    # 附加 VirtIO 磁盘
+  ./run --serial vc                               # 串口输出到 QEMU 窗口 tab
+  ./run --serial telnet                            # 串口走 telnet (localhost:4321)
   ./run --qemu "-m 256M -smp 4"
 EOF
 }
@@ -87,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --attach)
             EXTRA_DISKS+=("$2")
+            shift 2
+            ;;
+        --serial)
+            SERIAL_MODE="$2"
             shift 2
             ;;
         --qemu)
@@ -151,7 +159,34 @@ fi
 
 # 构建 QEMU 命令
 QEMU_CMD="qemu-system-i386"
-QEMU_ARGS="-serial stdio -no-reboot -m 4096M -smp 2"
+
+# 串口模式
+case "$SERIAL_MODE" in
+    stdio)
+        SERIAL_ARG="-serial stdio"
+        ;;
+    vc)
+        SERIAL_ARG="-serial vc"
+        ;;
+    telnet*)
+        TELNET_PORT="${SERIAL_MODE#telnet:}"
+        if [ "$TELNET_PORT" = "$SERIAL_MODE" ] || [ "$TELNET_PORT" = "telnet" ]; then
+            TELNET_PORT=4321
+        fi
+        SERIAL_ARG="-serial telnet:localhost:$TELNET_PORT,server,nowait"
+        echo "串口 telnet: telnet localhost $TELNET_PORT"
+        ;;
+    *)
+        SERIAL_ARG="-serial $SERIAL_MODE"
+        ;;
+esac
+
+# 串口非 stdio 时，把 QEMU monitor 接到终端 (可用 quit 命令退出)
+if [ "$SERIAL_MODE" != "stdio" ]; then
+    SERIAL_ARG="$SERIAL_ARG -monitor stdio"
+fi
+
+QEMU_ARGS="$SERIAL_ARG -no-reboot -m 4096M -smp 2"
 
 # 附加磁盘（每块先复制到 build/disk_<n>.img，保护原始镜像）
 disk_idx=0

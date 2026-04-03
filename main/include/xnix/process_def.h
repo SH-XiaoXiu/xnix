@@ -82,6 +82,9 @@ struct process {
     /* 子进程退出等待 */
     void *wait_chan; /* 等待通道,用于 waitpid 阻塞 */
 
+    /* 进程组 */
+    pid_t pgid; /* 进程组 ID (默认 = 自身 pid) */
+
     /* 信号 */
     uint32_t pending_signals; /* 待处理信号位图 */
 

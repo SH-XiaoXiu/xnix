@@ -55,11 +55,8 @@ static pthread_mutex_t pending_event_lock;
  * 写入字符到输入队列
  */
 static void input_write_char(char c) {
-    /* Ctrl+C (ETX, 0x03) - 发送 SIGINT 给前台进程 */
-    if (c == 3 && foreground_pid > 1) {
-        sys_kill(foreground_pid, SIGINT);
-        return;
-    }
+    /* 控制字符 (Ctrl+C, Ctrl+Z 等) 不在 kbd 截获,
+     * 让字符正常流到 ttyd, 由 ttyd 的行规程统一处理. */
 
     pthread_mutex_lock(&input_lock);
 

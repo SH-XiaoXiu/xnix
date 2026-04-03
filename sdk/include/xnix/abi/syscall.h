@@ -77,6 +77,8 @@
 #define SYS_GETPPID        604 /* 获取父进程 PID */
 #define SYS_EXEC           605 /* 执行新程序: ebx=exec_args* */
 #define SYS_PROCLIST       606 /* 获取进程列表: ebx=proclist_args* */
+#define SYS_SETPGID        607 /* 设置进程组: ebx=pid(0=self), ecx=pgid(0=pid) */
+#define SYS_GETPGID        608 /* 获取进程组: ebx=pid(0=self) */
 
 /* 同步原语 (700-719) */
 #define SYS_MUTEX_CREATE  700 /* 创建互斥锁 */

@@ -255,6 +255,7 @@ process_t process_create(const char *name, struct perm_profile *profile) {
     proc->name      = name_copy; /* NULL 表示分配失败 */
     proc->state     = PROCESS_RUNNING;
     proc->exit_code = 0;
+    proc->pgid      = proc->pid; /* 默认: 每个进程自成一组 */
 
     /* 创建地址空间 */
     const struct mm_operations *mm = mm_get_ops();

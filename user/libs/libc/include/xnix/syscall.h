@@ -406,6 +406,24 @@ static inline int sys_kill(int pid, int sig) {
     return ret;
 }
 
+static inline int sys_setpgid(int pid, int pgid) {
+    int ret = syscall2(SYS_SETPGID, (uint32_t)pid, (uint32_t)pgid);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return 0;
+}
+
+static inline int sys_getpgid(int pid) {
+    int ret = syscall1(SYS_GETPGID, (uint32_t)pid);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
 /*
  * IRQ 绑定
  */

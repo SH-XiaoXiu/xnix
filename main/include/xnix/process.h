@@ -28,6 +28,7 @@ typedef struct process *process_t;
  */
 typedef enum {
     PROCESS_RUNNING, /* 至少有一个线程在运行 */
+    PROCESS_STOPPED, /* 被 SIGTSTP/SIGSTOP 暂停 */
     PROCESS_ZOMBIE,  /* 已退出,等待父进程回收 */
 } process_state_t;
 

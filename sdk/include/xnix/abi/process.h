@@ -68,7 +68,8 @@ struct abi_exec_image_args {
 struct abi_proc_info {
     int32_t  pid;                     /* 进程 ID */
     int32_t  ppid;                    /* 父进程 ID */
-    uint8_t  state;                   /* 0=RUNNING, 1=ZOMBIE */
+    int32_t  pgid;                    /* 进程组 ID */
+    uint8_t  state;                   /* 0=RUNNING, 1=STOPPED, 2=ZOMBIE */
     uint8_t  reserved[3];             /* 保留 */
     uint32_t thread_count;            /* 线程数量 */
     uint64_t cpu_ticks;               /* 累计 CPU ticks(所有线程总和) */

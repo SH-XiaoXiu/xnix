@@ -125,10 +125,13 @@ void process_exit(struct process *proc, int exit_code) {
     /* 将子进程托管给 init */
     process_reparent_children(proc);
 
-    /* 唤醒等待的父进程(仅当父进程在 waitpid 中等待时) */
+    /* 通知父进程: SIGCHLD + 唤醒 waitpid */
     struct process *parent = proc->parent;
-    if (parent && parent->wait_chan && parent->threads) {
-        sched_wakeup_thread(parent->threads);
+    if (parent) {
+        parent->pending_signals |= sigmask(SIGCHLD);
+        if (parent->wait_chan && parent->threads) {
+            sched_wakeup_thread(parent->threads);
+        }
     }
 }
 
@@ -154,6 +157,13 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
         while (child) {
             if (pid == -1 || child->pid == pid) {
                 has_child = true;
+
+                /* STOPPED 进程: 报告给 waitpid (不从链表移除) */
+                if (child->state == PROCESS_STOPPED) {
+                    found = child;
+                    break;
+                }
+
                 if (child->state == PROCESS_ZOMBIE) {
                     found = child;
                     /* 从子进程链表移除 */
@@ -174,6 +184,20 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
 
         if (found) {
             pid_t ret_pid = found->pid;
+
+            if (found->state == PROCESS_STOPPED) {
+                /* STOPPED: 返回 -SIGTSTP 作为状态, 不回收进程 */
+                if (status) {
+                    *status = -SIGTSTP;
+                }
+                current->wait_chan = NULL;
+                spin_unlock(&process_list_lock);
+                cpu_irq_restore(flags);
+                pr_debug("[PROC] waitpid: child=%d stopped\n", ret_pid);
+                return ret_pid;
+            }
+
+            /* ZOMBIE: 回收 */
             if (status) {
                 *status = found->exit_code;
             }
@@ -202,20 +226,59 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
     }
 }
 
-int process_kill(pid_t pid, int sig) {
-    if (sig < 1 || sig >= NSIG) {
-        return -EINVAL;
+/**
+ * 暂停进程 (SIGTSTP/SIGSTOP)
+ */
+static void process_stop_current(int sig) {
+    struct process *proc = process_get_current();
+
+    proc->state = PROCESS_STOPPED;
+    proc->pending_signals &= ~sigmask(sig);
+
+    pr_debug("[PROC] stop: pid=%d sig=%d\n", proc->pid, sig);
+
+    /* 唤醒父进程 (shell 的 waitpid 需要感知到 STOPPED) */
+    struct process *parent = proc->parent;
+    if (parent && parent->wait_chan && parent->threads) {
+        sched_wakeup_thread(parent->threads);
     }
 
-    struct process *proc = process_find_by_pid(pid);
-    if (!proc) {
-        return -ESRCH;
+    /* 阻塞当前线程, 等待 SIGCONT 唤醒 */
+    sched_block(proc);
+}
+
+/**
+ * 恢复已停止的进程 (SIGCONT)
+ */
+static void process_continue(struct process *proc) {
+    if (proc->state != PROCESS_STOPPED) {
+        return;
     }
 
+    proc->state = PROCESS_RUNNING;
+    proc->pending_signals &= ~sigmask(SIGCONT);
+
+    pr_debug("[PROC] continue: pid=%d\n", proc->pid);
+
+    struct thread *t = proc->threads;
+    if (t) {
+        sched_wakeup_thread(t);
+    }
+}
+
+/**
+ * 向单个进程发送信号
+ */
+static int process_kill_one(struct process *proc, int sig) {
     /* 不能向内核进程发信号 */
     if (proc->pid == 0) {
-        process_unref(proc);
         return -EPERM;
+    }
+
+    /* SIGCONT: 立即恢复 STOPPED 进程 */
+    if (sig == SIGCONT && proc->state == PROCESS_STOPPED) {
+        process_continue(proc);
+        return 0;
     }
 
     /* 设置待处理信号 */
@@ -223,16 +286,58 @@ int process_kill(pid_t pid, int sig) {
     proc->pending_signals |= sigmask(sig);
     cpu_irq_restore(flags);
 
-    pr_debug("[PROC] kill: target=%d sig=%d from=%d\n", pid, sig, process_get_current()->pid);
-
     /* 唤醒进程的主线程处理信号 */
     struct thread *t = proc->threads;
     if (t) {
         sched_wakeup_thread(t);
     }
 
-    process_unref(proc);
     return 0;
+}
+
+int process_kill(pid_t pid, int sig) {
+    if (sig < 1 || sig >= NSIG) {
+        return -EINVAL;
+    }
+
+    /* pid > 0: 发给指定进程 */
+    if (pid > 0) {
+        struct process *proc = process_find_by_pid(pid);
+        if (!proc) {
+            return -ESRCH;
+        }
+        pr_debug("[PROC] kill: target=%d sig=%d\n", pid, sig);
+        int ret = process_kill_one(proc, sig);
+        process_unref(proc);
+        return ret;
+    }
+
+    /* pid < -1: 发给进程组 |pid| 的所有成员 */
+    if (pid < -1) {
+        pid_t target_pgid = -pid;
+        int   count       = 0;
+
+        uint32_t flags = cpu_irq_save();
+        spin_lock(&process_list_lock);
+
+        /* 遍历全局进程链表 */
+        struct process *p = process_list;
+        while (p) {
+            if (p->pgid == target_pgid && p->pid != 0 && p->state != PROCESS_ZOMBIE) {
+                process_kill_one(p, sig);
+                count++;
+            }
+            p = p->next;
+        }
+
+        spin_unlock(&process_list_lock);
+        cpu_irq_restore(flags);
+
+        pr_debug("[PROC] kill: pgid=%d sig=%d count=%d\n", target_pgid, sig, count);
+        return count > 0 ? 0 : -ESRCH;
+    }
+
+    return -EINVAL;
 }
 
 void process_check_signals(void) {
@@ -246,7 +351,27 @@ void process_check_signals(void) {
         return;
     }
 
-    /* 处理致命信号 */
+    /* SIGCONT: 恢复 (当前进程收到时清除即可,实际恢复在 process_kill 中处理) */
+    if (pending & sigmask(SIGCONT)) {
+        proc->pending_signals &= ~sigmask(SIGCONT);
+        pending &= ~sigmask(SIGCONT);
+    }
+
+    /* SIGCHLD: 清除 (通知性信号, 当前无 handler 仅唤醒 waitpid) */
+    if (pending & sigmask(SIGCHLD)) {
+        proc->pending_signals &= ~sigmask(SIGCHLD);
+        pending &= ~sigmask(SIGCHLD);
+    }
+
+    /* SIGTSTP/SIGSTOP: 暂停进程 */
+    if (pending & (sigmask(SIGTSTP) | sigmask(SIGSTOP))) {
+        int sig = (pending & sigmask(SIGSTOP)) ? SIGSTOP : SIGTSTP;
+        process_stop_current(sig);
+        /* 从 SIGCONT 唤醒后返回到这里, 继续执行 */
+        return;
+    }
+
+    /* 致命信号: 终止进程 */
     if (pending & (sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGTERM) | sigmask(SIGSEGV))) {
         int sig = 0;
         if (pending & sigmask(SIGKILL)) {

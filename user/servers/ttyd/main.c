@@ -400,10 +400,18 @@ static void try_fulfill_pending_read(struct tty_instance *tty) {
 static void tty_process_input(struct tty_instance *tty, char c) {
     struct line_discipline *ld = &tty->ldisc;
 
-    /* Ctrl+C:发送 SIGINT 给前台进程 */
+    /* Ctrl+C: SIGINT 给前台进程 */
     if (c == 0x03) {
         if (tty->foreground_pid > 0) {
             sys_kill(tty->foreground_pid, SIGINT);
+        }
+        return;
+    }
+
+    /* Ctrl+Z: SIGTSTP 给前台进程 */
+    if (c == 0x1A) {
+        if (tty->foreground_pid > 0) {
+            sys_kill(tty->foreground_pid, SIGTSTP);
         }
         return;
     }

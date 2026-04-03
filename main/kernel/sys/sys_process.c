@@ -248,6 +248,7 @@ static int32_t sys_proclist(const uint32_t *args) {
         struct abi_proc_info info;
         info.pid          = (int32_t)proc->pid;
         info.ppid         = proc->parent ? (int32_t)proc->parent->pid : 0;
+        info.pgid         = (int32_t)proc->pgid;
         info.state        = (uint8_t)proc->state;
         info.reserved[0]  = 0;
         info.reserved[1]  = 0;
@@ -309,6 +310,53 @@ static int32_t sys_proclist(const uint32_t *args) {
     return (int32_t)written;
 }
 
+/* SYS_SETPGID: ebx=pid(0=self), ecx=pgid(0=pid) */
+static int32_t sys_setpgid(const uint32_t *args) {
+    pid_t pid  = (pid_t)args[0];
+    pid_t pgid = (pid_t)args[1];
+
+    struct process *current = process_get_current();
+    struct process *target;
+
+    if (pid == 0) {
+        target = current;
+        process_ref(target);
+    } else {
+        target = process_find_by_pid(pid);
+        if (!target) {
+            return -ESRCH;
+        }
+    }
+
+    if (pgid == 0) {
+        pgid = target->pid;
+    }
+
+    target->pgid = pgid;
+    process_unref(target);
+    return 0;
+}
+
+/* SYS_GETPGID: ebx=pid(0=self) */
+static int32_t sys_getpgid(const uint32_t *args) {
+    pid_t pid = (pid_t)args[0];
+
+    struct process *target;
+    if (pid == 0) {
+        target = process_get_current();
+        process_ref(target);
+    } else {
+        target = process_find_by_pid(pid);
+        if (!target) {
+            return -ESRCH;
+        }
+    }
+
+    pid_t pgid = target->pgid;
+    process_unref(target);
+    return (int32_t)pgid;
+}
+
 void sys_process_init(void) {
     syscall_register(SYS_EXIT, sys_exit, 1, "exit");
     syscall_register(SYS_WAITPID, sys_waitpid, 3, "waitpid");
@@ -317,4 +365,6 @@ void sys_process_init(void) {
     syscall_register(SYS_KILL, sys_kill, 2, "kill");
     syscall_register(SYS_EXEC, sys_exec, 1, "exec");
     syscall_register(SYS_PROCLIST, sys_proclist, 1, "proclist");
+    syscall_register(SYS_SETPGID, sys_setpgid, 2, "setpgid");
+    syscall_register(SYS_GETPGID, sys_getpgid, 1, "getpgid");
 }

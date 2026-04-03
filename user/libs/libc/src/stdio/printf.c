@@ -91,11 +91,16 @@ static int do_printf(emit_fn emit, void *ctx, const char *fmt, va_list ap) {
 
         fmt++; /* skip '%' */
 
-        /* 解析宽度和标志 */
-        int width    = 0;
-        int pad_zero = 0;
+        /* 解析标志和宽度 */
+        int width     = 0;
+        int pad_zero  = 0;
+        int left_align = 0;
 
-        if (*fmt == '0') {
+        if (*fmt == '-') {
+            left_align = 1;
+            fmt++;
+        }
+        if (*fmt == '0' && !left_align) {
             pad_zero = 1;
             fmt++;
         }
@@ -134,10 +139,26 @@ static int do_printf(emit_fn emit, void *ctx, const char *fmt, va_list ap) {
             if (!s) {
                 s = "(null)";
             }
+            int slen = 0;
+            const char *p = s;
+            while (*p++) { slen++; }
+
+            if (width > 0 && !left_align) {
+                for (int i = slen; i < width; i++) {
+                    emit(' ', ctx);
+                    written++;
+                }
+            }
             while (*s) {
                 emit(*s, ctx);
                 written++;
                 s++;
+            }
+            if (width > 0 && left_align) {
+                for (int i = slen; i < width; i++) {
+                    emit(' ', ctx);
+                    written++;
+                }
             }
             break;
         }

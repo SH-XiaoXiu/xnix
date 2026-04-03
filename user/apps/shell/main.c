@@ -28,6 +28,63 @@
 static handle_t g_tty_ep = HANDLE_INVALID;
 static handle_t g_vfs_ep = HANDLE_INVALID;
 
+/* ============== Job Table ============== */
+
+#define MAX_JOBS 16
+
+enum job_state {
+    JOB_FREE    = 0,
+    JOB_RUNNING = 1,
+    JOB_STOPPED = 2,
+    JOB_DONE    = 3,
+};
+
+struct job {
+    int           state;
+    pid_t         pid;
+    char          cmd[64];
+};
+
+static struct job g_jobs[MAX_JOBS];
+
+static int job_add(pid_t pid, const char *cmd) {
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (g_jobs[i].state == JOB_FREE || g_jobs[i].state == JOB_DONE) {
+            g_jobs[i].state = JOB_RUNNING;
+            g_jobs[i].pid   = pid;
+            strncpy(g_jobs[i].cmd, cmd, sizeof(g_jobs[i].cmd) - 1);
+            g_jobs[i].cmd[sizeof(g_jobs[i].cmd) - 1] = '\0';
+            return i + 1; /* job id (1-based) */
+        }
+    }
+    return -1;
+}
+
+static struct job *job_find(int job_id) {
+    if (job_id < 1 || job_id > MAX_JOBS) {
+        return NULL;
+    }
+    struct job *j = &g_jobs[job_id - 1];
+    if (j->state == JOB_FREE) {
+        return NULL;
+    }
+    return j;
+}
+
+/* 收割已完成的后台 jobs (非阻塞) */
+static void jobs_reap(void) {
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (g_jobs[i].state == JOB_RUNNING) {
+            int status;
+            int ret = sys_waitpid(g_jobs[i].pid, &status, WNOHANG);
+            if (ret > 0) {
+                printf("[%d] Done    %s\n", i + 1, g_jobs[i].cmd);
+                g_jobs[i].state = JOB_DONE;
+            }
+        }
+    }
+}
+
 /* 重定向信息 */
 struct redirect_info {
     const char *stdout_file;   /* > file */
@@ -48,7 +105,8 @@ static void shell_set_foreground(pid_t pid) {
     msg.regs.data[1] = TTY_IOCTL_SET_FOREGROUND;
     msg.regs.data[2] = (uint32_t)pid;
 
-    sys_ipc_send(g_tty_ep, &msg, 100);
+    struct ipc_message reply = {0};
+    sys_ipc_call(g_tty_ep, &msg, &reply, 100);
 }
 
 /* 内置命令 */
@@ -60,6 +118,9 @@ static void cmd_kill(int argc, char **argv);
 static void cmd_path(int argc, char **argv);
 static void cmd_cd(int argc, char **argv);
 static void cmd_pwd(int argc, char **argv);
+static void cmd_jobs(int argc, char **argv);
+static void cmd_fg(int argc, char **argv);
+static void cmd_bg(int argc, char **argv);
 
 /* 内置命令表 */
 struct builtin_cmd {
@@ -76,6 +137,9 @@ static const struct builtin_cmd builtins[] = {{"help", cmd_help, "Show available
                                               {"path", cmd_path, "Manage PATH"},
                                               {"cd", cmd_cd, "Change directory"},
                                               {"pwd", cmd_pwd, "Print working directory"},
+                                              {"jobs", cmd_jobs, "List background jobs"},
+                                              {"fg", cmd_fg, "Resume job in foreground"},
+                                              {"bg", cmd_bg, "Resume job in background"},
                                               {"exit", NULL, "Exit shell"},
                                               {NULL, NULL, NULL}};
 
@@ -247,8 +311,12 @@ static void run_external(const char *path, int argc, char **argv, int background
         return;
     }
 
+    int job_id = job_add(pid, argv[0]);
+
     if (background) {
-        printf("[%d] %s\n", pid, argv[0]);
+        if (job_id > 0) {
+            printf("[%d] %d\n", job_id, pid);
+        }
         return;
     }
 
@@ -259,6 +327,25 @@ static void run_external(const char *path, int argc, char **argv, int background
 
     shell_set_foreground(0);
 
+    /* 进程被 Ctrl+Z 暂停 → 标记为 STOPPED */
+    if (status == -SIGTSTP || status == -SIGSTOP) {
+        if (job_id > 0) {
+            struct job *j = job_find(job_id);
+            if (j) {
+                j->state = JOB_STOPPED;
+            }
+            printf("\n[%d] Stopped    %s\n", job_id, argv[0]);
+        }
+        return;
+    }
+
+    /* 正常退出或被信号终止 */
+    if (job_id > 0) {
+        struct job *j = job_find(job_id);
+        if (j) {
+            j->state = JOB_DONE;
+        }
+    }
     if (status != 0) {
         printf("Process %d exited with status %d\n", pid, status);
     }
@@ -542,6 +629,112 @@ static void cmd_pwd(int argc, char **argv) {
     }
 }
 
+static void cmd_jobs(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+
+    jobs_reap();
+
+    int found = 0;
+    for (int i = 0; i < MAX_JOBS; i++) {
+        if (g_jobs[i].state == JOB_FREE || g_jobs[i].state == JOB_DONE) {
+            continue;
+        }
+        const char *state_str = "Unknown";
+        if (g_jobs[i].state == JOB_RUNNING) {
+            state_str = "Running";
+        } else if (g_jobs[i].state == JOB_STOPPED) {
+            state_str = "Stopped";
+        }
+        printf("[%d] %-10s %s (pid %d)\n", i + 1, state_str, g_jobs[i].cmd, g_jobs[i].pid);
+        found++;
+    }
+    if (!found) {
+        printf("No jobs.\n");
+    }
+}
+
+static void cmd_fg(int argc, char **argv) {
+    int job_id = 0;
+
+    if (argc >= 2) {
+        const char *arg = argv[1];
+        if (arg[0] == '%') {
+            arg++;
+        }
+        job_id = simple_atoi(arg);
+    } else {
+        /* 无参数: 找最近一个 stopped/running job */
+        for (int i = MAX_JOBS - 1; i >= 0; i--) {
+            if (g_jobs[i].state == JOB_STOPPED || g_jobs[i].state == JOB_RUNNING) {
+                job_id = i + 1;
+                break;
+            }
+        }
+    }
+
+    struct job *j = job_find(job_id);
+    if (!j) {
+        printf("fg: no such job\n");
+        return;
+    }
+
+    printf("%s\n", j->cmd);
+
+    /* 发送 SIGCONT 恢复 */
+    if (j->state == JOB_STOPPED) {
+        sys_kill(j->pid, SIGCONT);
+        j->state = JOB_RUNNING;
+    }
+
+    /* 设为前台并等待 */
+    shell_set_foreground(j->pid);
+
+    int status;
+    sys_waitpid(j->pid, &status, 0);
+
+    shell_set_foreground(0);
+
+    if (status == -SIGTSTP || status == -SIGSTOP) {
+        j->state = JOB_STOPPED;
+        printf("\n[%d] Stopped    %s\n", job_id, j->cmd);
+    } else {
+        j->state = JOB_DONE;
+        if (status != 0) {
+            printf("Process %d exited with status %d\n", j->pid, status);
+        }
+    }
+}
+
+static void cmd_bg(int argc, char **argv) {
+    int job_id = 0;
+
+    if (argc >= 2) {
+        const char *arg = argv[1];
+        if (arg[0] == '%') {
+            arg++;
+        }
+        job_id = simple_atoi(arg);
+    } else {
+        for (int i = MAX_JOBS - 1; i >= 0; i--) {
+            if (g_jobs[i].state == JOB_STOPPED) {
+                job_id = i + 1;
+                break;
+            }
+        }
+    }
+
+    struct job *j = job_find(job_id);
+    if (!j || j->state != JOB_STOPPED) {
+        printf("bg: no stopped job\n");
+        return;
+    }
+
+    sys_kill(j->pid, SIGCONT);
+    j->state = JOB_RUNNING;
+    printf("[%d] %s &\n", job_id, j->cmd);
+}
+
 int main(int argc, char **argv) {
     char line[MAX_LINE];
 
@@ -580,6 +773,8 @@ int main(int argc, char **argv) {
             if (tty_fd > STDERR_FILENO) {
                 close(tty_fd);
             }
+            /* dup2 创建了新 handle, 更新 g_tty_ep 指向有效的 */
+            g_tty_ep = fd_get_handle(STDIN_FILENO);
         }
     }
 
@@ -596,6 +791,8 @@ int main(int argc, char **argv) {
     printf("Type 'help' for available commands.\n\n");
 
     while (1) {
+        jobs_reap(); /* 收割已完成的后台 jobs */
+
         char cwd[256];
         int  cwd_ret = vfs_getcwd(cwd, sizeof(cwd));
 
