@@ -6,6 +6,7 @@
  */
 
 #include <stdio_internal.h>
+#include <xnix/protocol/devfs.h>
 #include <xnix/protocol/tty.h>
 #include <xnix/protocol/vfs.h>
 #include <errno.h>
@@ -428,6 +429,14 @@ int open(const char *path, int flags) {
         fd_flags = FD_FLAG_READ | FD_FLAG_WRITE;
     }
 
+    /* 设备类型检查: devfsd 对 TTY 设备返回 DEVFS_TYPE_TTY + endpoint handle */
+    uint32_t dev_type = reply.regs.data[2];
+    if (dev_type == DEVFS_TYPE_TTY && reply.handles.count > 0) {
+        fd_install(fd, reply.handles.handles[0], FD_TYPE_TTY, fd_flags);
+        return fd;
+    }
+
+    /* 普通 VFS 文件 */
     struct fd_entry *ent = fd_install(fd, HANDLE_INVALID, FD_TYPE_VFS, fd_flags);
     if (!ent) {
         return -EMFILE;

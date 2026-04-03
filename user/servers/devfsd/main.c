@@ -24,6 +24,7 @@
 #include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/protocol/blk.h>
+#include <xnix/protocol/devfs.h>
 #include <xnix/protocol/vfs.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
@@ -50,6 +51,7 @@ typedef enum {
     DEV_TYPE_BLOCK,     /* 块设备 */
     DEV_TYPE_NULL,      /* /dev/null */
     DEV_TYPE_ZERO,      /* /dev/zero */
+    DEV_TYPE_TTY,       /* TTY endpoint 设备 */
 } dev_type_t;
 
 /* 设备文件条目 */
@@ -236,6 +238,48 @@ static int devfs_handle_register_block(struct ipc_message *msg) {
                ent->name, parts[p].lba_start, parts[p].sector_count);
     }
 
+    return 0;
+}
+
+/* ============== TTY 设备注册 ============== */
+
+static int devfs_handle_register_tty(struct ipc_message *msg) {
+    handle_t tty_ep = HANDLE_INVALID;
+    if (msg->handles.count >= 1) {
+        tty_ep = msg->handles.handles[0];
+    }
+    if (tty_ep == HANDLE_INVALID) {
+        return -22; /* EINVAL */
+    }
+
+    /* 从 buffer 提取设备名 */
+    uint32_t name_len = msg->buffer.size;
+    if (!msg->buffer.data || name_len == 0 || name_len >= DEVFS_NAME_MAX) {
+        return -22;
+    }
+
+    char dev_name[DEVFS_NAME_MAX] = {0};
+    memcpy(dev_name, (const char *)(uintptr_t)msg->buffer.data, name_len);
+    dev_name[name_len] = '\0';
+
+    if (devfs_find(dev_name)) {
+        return -17; /* EEXIST */
+    }
+
+    int slot = devfs_alloc_slot();
+    if (slot < 0) {
+        return -28; /* ENOSPC */
+    }
+
+    struct dev_entry *ent = &g_devfs.entries[slot];
+    strncpy(ent->name, dev_name, DEVFS_NAME_MAX - 1);
+    ent->name[DEVFS_NAME_MAX - 1] = '\0';
+    ent->type = DEV_TYPE_TTY;
+    ent->blk_ep = tty_ep; /* 复用: 存储 TTY endpoint */
+    ent->valid = true;
+    g_devfs.count++;
+
+    printf("[devfsd] registered: /dev/%s (tty)\n", dev_name);
     return 0;
 }
 
@@ -519,6 +563,31 @@ static int devfsd_handler(struct ipc_message *msg) {
         msg->buffer.size = 0;
         msg->handles.count = 0;
         return 0;
+    }
+
+    if (op == UDM_DEVFS_REGISTER_TTY) {
+        int result = devfs_handle_register_tty(msg);
+        msg->regs.data[0] = op;
+        msg->regs.data[1] = (uint32_t)result;
+        msg->buffer.data = 0;
+        msg->buffer.size = 0;
+        msg->handles.count = 0;
+        return 0;
+    }
+
+    /* VFS OPEN: 对 TTY 设备返回 endpoint handle 和类型标记 */
+    if (op == UDM_VFS_OPEN) {
+        int ret = vfs_dispatch(&devfs_ops, &g_devfs, msg);
+        int32_t handle = (int32_t)msg->regs.data[1];
+        if (handle >= 0 && (uint32_t)handle < DEVFS_MAX_FILES) {
+            struct dev_entry *ent = &g_devfs.entries[handle];
+            if (ent->valid && ent->type == DEV_TYPE_TTY) {
+                msg->regs.data[2] = DEVFS_TYPE_TTY;
+                msg->handles.handles[0] = ent->blk_ep;
+                msg->handles.count = 1;
+            }
+        }
+        return ret;
     }
 
     return vfs_dispatch(&devfs_ops, &g_devfs, msg);

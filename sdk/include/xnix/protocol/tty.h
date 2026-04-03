@@ -27,7 +27,10 @@ enum tty_op {
     TTY_OP_IOCTL = 4, /* 终端控制: data[1]=cmd, data[2..]=args */
     TTY_OP_CLOSE = 5, /* 关闭 session */
     TTY_OP_PUTC  = 6, /* 输出单个字符: data[1]=char */
-    TTY_OP_INPUT = 7, /* 输入设备推送字符: data[1]=char (kbd/seriald → ttyd) */
+    TTY_OP_INPUT  = 7,  /* 输入设备推送字符: data[1]=char (kbd/seriald → ttyd) */
+    TTY_OP_CREATE = 8,  /* 动态创建 TTY
+                          * req: handles[0]=output_ep (可选,缺省走 serial)
+                          * rep: data[1]=tty_id, handles[0]=new tty endpoint */
 };
 
 /**

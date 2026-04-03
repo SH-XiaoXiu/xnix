@@ -396,10 +396,16 @@ static int vfsd_forward(struct ipc_message *msg, uint32_t pid, const char *path)
     memcpy(msg->regs.data, reply.regs.data, sizeof(msg->regs.data));
     msg->buffer = reply.buffer;
 
-    /* 对于 OPEN 操作,返回 fs_ep 供客户端后续直接通信 (必须通过 msg.handles 传递) */
+    /* 对于 OPEN 操作,返回 endpoint 供客户端后续直接通信 */
     if (op == UDM_VFS_OPEN || op == UDM_VFS_OPENDIR) {
-        msg->handles.handles[0] = fs_ep;
-        msg->handles.count      = 1;
+        if (reply.handles.count > 0) {
+            /* FS 驱动主动返回了 handle (如 devfsd 返回 TTY endpoint):透传 */
+            msg->handles = reply.handles;
+        } else {
+            /* 默认: 返回 fs_ep 供客户端后续 VFS 操作 */
+            msg->handles.handles[0] = fs_ep;
+            msg->handles.count      = 1;
+        }
     }
 
     return 0;

@@ -14,6 +14,7 @@
  * 该 tty 的服务线程中执行,input_listener 通过 IPC 投递字符.
  */
 
+#include <xnix/protocol/devfs.h>
 #include <xnix/protocol/serial.h>
 #include <xnix/protocol/tty.h>
 #include <pthread.h>
@@ -103,10 +104,16 @@ struct tty_instance {
     struct ansi_parser ansi;
 };
 
-#define MAX_TTY               2
+#define MAX_TTY               8
 #define TTY_OUTPUT_TIMEOUT_MS 50
 static struct tty_instance g_ttys[MAX_TTY];
 static int                 g_tty_count = 0;
+static handle_t            g_devfs_ep  = HANDLE_INVALID; /* devfs endpoint (用于动态注册) */
+
+/* 前向声明 */
+static void  tty_init_instance(struct tty_instance *tty, int id, handle_t ep,
+                               handle_t output, handle_t fallback, handle_t input);
+static void *tty_thread(void *arg);
 
 /* 向输入队列写入一个字符 */
 static int tty_input_put(struct tty_instance *tty, char c) {
@@ -582,6 +589,69 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
         return 0;
     }
 
+    case TTY_OP_CREATE: {
+        /* 动态创建新 TTY 实例 */
+        if (g_tty_count >= MAX_TTY) {
+            msg->regs.data[0] = (uint32_t)-1;
+            msg->regs.data[1] = (uint32_t)-28; /* ENOSPC */
+            return 0;
+        }
+
+        int new_id = g_tty_count;
+        /* 查找最大 tty id + 1 */
+        for (int i = 0; i < g_tty_count; i++) {
+            if (g_ttys[i].id >= new_id) {
+                new_id = g_ttys[i].id + 1;
+            }
+        }
+
+        char ep_name[16];
+        snprintf(ep_name, sizeof(ep_name), "tty%d", new_id);
+
+        handle_t new_ep = sys_endpoint_create(ep_name);
+        if (new_ep == HANDLE_INVALID) {
+            msg->regs.data[0] = (uint32_t)-1;
+            return 0;
+        }
+
+        /* 输出端点: 优先使用请求中携带的, 否则复用 tty1 的 serial */
+        handle_t out_ep;
+        if (msg->handles.count > 0 && msg->handles.handles[0] != HANDLE_INVALID) {
+            out_ep = msg->handles.handles[0];
+        } else {
+            out_ep = g_ttys[0].output_ep; /* tty1 的 serial */
+        }
+        tty_init_instance(&g_ttys[g_tty_count], new_id, new_ep,
+                          out_ep, g_ttys[0].fallback_output_ep, HANDLE_INVALID);
+        g_tty_count++;
+
+        /* 向 devfs 注册 */
+        if (g_devfs_ep != HANDLE_INVALID) {
+            struct ipc_message reg = {0};
+            reg.regs.data[0] = UDM_DEVFS_REGISTER_TTY;
+            reg.regs.data[1] = (uint32_t)new_id;
+            reg.handles.handles[0] = new_ep;
+            reg.handles.count = 1;
+            reg.buffer.data = (uint64_t)(uintptr_t)ep_name;
+            reg.buffer.size = strlen(ep_name);
+            struct ipc_message drep = {0};
+            sys_ipc_call(g_devfs_ep, &reg, &drep, 1000);
+        }
+
+        /* 为新 TTY 启动服务线程 */
+        pthread_t tid;
+        pthread_create(&tid, NULL, tty_thread, &g_ttys[g_tty_count - 1]);
+
+        ulog_tagf(stdout, TERM_COLOR_WHITE, "[ttyd]",
+                  " created /dev/tty%d\n", new_id);
+
+        msg->regs.data[0] = 0;
+        msg->regs.data[1] = (uint32_t)new_id;
+        msg->handles.handles[0] = new_ep;
+        msg->handles.count = 1;
+        return 0;
+    }
+
     case TTY_OP_OPEN:
     case TTY_OP_CLOSE:
         msg->regs.data[0] = 0;
@@ -760,6 +830,29 @@ int main(int argc, char **argv) {
     for (int i = 1; i < g_tty_count; i++) {
         pthread_t tid;
         pthread_create(&tid, NULL, tty_thread, &g_ttys[i]);
+    }
+
+    /* 向 devfsd 注册 /dev/ttyN 设备 */
+    g_devfs_ep = env_get_handle("devfs_ep");
+    if (g_devfs_ep != HANDLE_INVALID) {
+        for (int i = 0; i < g_tty_count; i++) {
+            struct ipc_message reg = {0};
+            reg.regs.data[0] = UDM_DEVFS_REGISTER_TTY;
+            reg.regs.data[1] = (uint32_t)g_ttys[i].id;
+            reg.handles.handles[0] = g_ttys[i].endpoint;
+            reg.handles.count = 1;
+            char name[8];
+            snprintf(name, sizeof(name), "tty%d", g_ttys[i].id);
+            reg.buffer.data = (uint64_t)(uintptr_t)name;
+            reg.buffer.size = strlen(name);
+
+            struct ipc_message reply = {0};
+            int ret = sys_ipc_call(g_devfs_ep, &reg, &reply, 1000);
+            if (ret == 0 && (int32_t)reply.regs.data[1] == 0) {
+                ulog_tagf(stdout, TERM_COLOR_WHITE, "[ttyd]",
+                          " registered /dev/%s\n", name);
+            }
+        }
     }
 
     svc_notify_ready("ttyd");
