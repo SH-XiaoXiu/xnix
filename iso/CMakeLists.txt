@@ -114,7 +114,7 @@ foreach (ENTRY ${SYSTEM_FILES})
         # 对于 bin 目录下的文件,依赖已经在 bin_tools 目标中
         if (SRC_FILE MATCHES "/bin/[^/]+\\.elf$")
             continue()
-        endif()
+        endif ()
         get_filename_component(TARGET_NAME ${SRC_FILE} NAME_WE)
         if (SRC_FILE MATCHES "^${CMAKE_BINARY_DIR}/")
             list(APPEND SYSTEM_DEPENDS ${TARGET_NAME}.elf)

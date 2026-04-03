@@ -319,21 +319,21 @@ respawn = true
 
 ### 配置字段
 
-| 字段         | 类型     | 说明                                                            |
-|------------|--------|---------------------------------------------------------------|
-| `path`     | string | ELF 路径；`ramfs://` 前缀从 initramfs 加载，普通路径从 VFS 加载               |
-| `args`     | string | 启动参数（如 `--ata --drive 1`）                                     |
-| `profile`  | string | 权限配置 Profile（如 `io_driver`、`default`）                         |
-| `after`    | string | 启动顺序依赖，空格分隔多个服务                                               |
-| `ready`    | string | 就绪等待依赖，等待服务报告就绪后才启动                                           |
-| `provides` | string | 提供的 handle 名称，空格分隔                                            |
-| `requires` | string | 需要接收的 handle，空格分隔                                             |
-| `wants`    | string | 可选 handle，有则注入，无不阻塞                                           |
-| `handles`  | string | 直接注入的 handle 名称列表                                             |
-| `mount`    | string | 服务 ready 后自动挂载到此 VFS 路径（如 `/`、`/dev`）                         |
-| `wait_path`| string | 等待指定 VFS 路径存在后才启动                                             |
-| `delay`    | int    | 延迟启动（毫秒）                                                      |
-| `respawn`  | bool   | 退出后自动重启                                                       |
+| 字段          | 类型     | 说明                                              |
+|-------------|--------|-------------------------------------------------|
+| `path`      | string | ELF 路径；`ramfs://` 前缀从 initramfs 加载，普通路径从 VFS 加载 |
+| `args`      | string | 启动参数（如 `--ata --drive 1`）                       |
+| `profile`   | string | 权限配置 Profile（如 `io_driver`、`default`）           |
+| `after`     | string | 启动顺序依赖，空格分隔多个服务                                 |
+| `ready`     | string | 就绪等待依赖，等待服务报告就绪后才启动                             |
+| `provides`  | string | 提供的 handle 名称，空格分隔                              |
+| `requires`  | string | 需要接收的 handle，空格分隔                               |
+| `wants`     | string | 可选 handle，有则注入，无不阻塞                             |
+| `handles`   | string | 直接注入的 handle 名称列表                               |
+| `mount`     | string | 服务 ready 后自动挂载到此 VFS 路径（如 `/`、`/dev`）           |
+| `wait_path` | string | 等待指定 VFS 路径存在后才启动                               |
+| `delay`     | int    | 延迟启动（毫秒）                                        |
+| `respawn`   | bool   | 退出后自动重启                                         |
 
 ### Handle 机制
 
