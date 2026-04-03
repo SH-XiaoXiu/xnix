@@ -16,18 +16,6 @@ FILE _stdin_file;
 FILE _stdout_file;
 FILE _stderr_file;
 
-/**
- * SYS_DEBUG_WRITE fallback (ttyd 就绪前)
- */
-static inline void _debug_write(const void *buf, size_t len) {
-    int ret;
-    asm volatile("int $0x80"
-                 : "=a"(ret)
-                 : "a"(SYS_DEBUG_WRITE), "b"((uint32_t)(uintptr_t)buf), "c"((uint32_t)len)
-                 : "memory");
-    (void)ret;
-}
-
 void _libc_stdio_init(void) {
     /* fd 0/1/2 已由 fd_table_init() 建立,这里只设置 FILE 结构 */
     memset(&_stdin_file, 0, sizeof(_stdin_file));
@@ -44,11 +32,6 @@ void _libc_stdio_init(void) {
     _stderr_file.fd       = STDERR_FILENO;
     _stderr_file.buf_mode = _IONBF;
     _stderr_file.flags    = _FILE_WRITE;
-}
-
-void _stdio_force_debug_mode(void) {
-    _stdout_file.fd = -1;
-    _stderr_file.fd = -1;
 }
 
 void _stdio_set_fd(FILE *f, int fd) {

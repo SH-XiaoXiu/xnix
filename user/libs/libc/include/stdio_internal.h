@@ -10,6 +10,21 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <xnix/syscall.h>
+
+/**
+ * SYS_DEBUG_WRITE fallback
+ *
+ * pre-TTY 阶段或 ttyd 自身使用,绕过 IPC 直接写内核 early console.
+ */
+static inline void _debug_write(const void *buf, size_t len) {
+    int ret;
+    asm volatile("int $0x80"
+                 : "=a"(ret)
+                 : "a"(SYS_DEBUG_WRITE), "b"((uint32_t)(uintptr_t)buf), "c"((uint32_t)len)
+                 : "memory");
+    (void)ret;
+}
 
 #define STREAM_BUF_SIZE 256
 

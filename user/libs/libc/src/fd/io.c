@@ -5,6 +5,7 @@
  * 提供 read/write/close/dup/dup2/pipe/open,按 fd 类型分发到对应的 IPC 协议.
  */
 
+#include <stdio_internal.h>
 #include <xnix/protocol/tty.h>
 #include <xnix/protocol/vfs.h>
 #include <errno.h>
@@ -92,6 +93,11 @@ static ssize_t write_ipc(struct fd_entry *ent, const void *buf, size_t n) {
 ssize_t write(int fd, const void *buf, size_t n) {
     struct fd_entry *ent = fd_get(fd);
     if (!ent) {
+        /* pre-TTY 阶段: stdout/stderr 自动降级到内核 debug console */
+        if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && buf && n > 0) {
+            _debug_write(buf, n);
+            return (ssize_t)n;
+        }
         return -EBADF;
     }
     if (!buf || n == 0) {

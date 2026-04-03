@@ -325,7 +325,6 @@ static void *keyboard_thread(void *arg) {
 }
 
 int main(void) {
-    _stdio_force_debug_mode(); /* TODO: 无 tty 服务的 stdio 需要统一修复 */
     pthread_mutex_init(&input_lock, NULL);
     pthread_mutex_init(&pending_lock, NULL);
     pthread_mutex_init(&event_lock, NULL);

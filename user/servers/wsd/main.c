@@ -343,7 +343,6 @@ static int init_framebuffer(struct ws_server *srv) {
 }
 
 int main(void) {
-    _stdio_force_debug_mode(); /* TODO: 无 tty 服务的 stdio 需要统一修复 */
     env_set_name("wsd");
     ulog_tagf(stdout, TERM_COLOR_WHITE, "[wsd]",
               " Starting window server\n");

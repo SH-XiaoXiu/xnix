@@ -687,8 +687,11 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    /* 强制 stdout/stderr 使用 debug fallback,避免 printf 发给自己死锁 */
-    _stdio_force_debug_mode();
+    /* 强制 stdout/stderr 走 debug fallback, 避免 printf 发给自己死锁.
+     * ttyd 的 fd_table_init() 会绑定 tty0/tty1 (自己提供的 endpoint),
+     * 若走正常 IPC 路径会死锁. 设置 fd=-1 触发 _debug_write 降级. */
+    _stdio_set_fd(stdout, -1);
+    _stdio_set_fd(stderr, -1);
 
     env_set_name("ttyd");
     handle_t serial_ep = env_require("serial");
