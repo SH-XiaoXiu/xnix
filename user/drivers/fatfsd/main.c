@@ -234,7 +234,8 @@ static int blk_handler(struct ipc_message *msg) {
 /* 组合 handler: VFS + BLK */
 static int combined_handler(struct ipc_message *msg) {
     uint32_t op = UDM_MSG_OPCODE(msg);
-    if (op >= 100) return blk_handler(msg);
+    /* BLK 协议: 100-199, IO 协议: 0x100+ (256+), VFS 协议: 0-99 */
+    if (op >= 100 && op < 0x100) return blk_handler(msg);
     return vfs_dispatch(fatfs_get_ops(), &g_fatfs, msg);
 }
 
