@@ -127,26 +127,26 @@ static int start_via_bootstrap(struct svc_manager *mgr, struct svc_config *cfg) 
 
     int fd = ramfs_open(ramfs, cfg->path, VFS_O_RDONLY);
     if (fd < 0) {
-        return -1;
+        return -ENOENT;
     }
 
     struct vfs_info info;
     if (ramfs_finfo(ramfs, fd, &info) < 0) {
         ramfs_close(ramfs, fd);
-        return -1;
+        return -EIO;
     }
 
     void *elf_data = malloc(info.size);
     if (!elf_data) {
         ramfs_close(ramfs, fd);
-        return -1;
+        return -ENOMEM;
     }
 
     int nread = ramfs_read(ramfs, fd, elf_data, 0, info.size);
     ramfs_close(ramfs, fd);
     if (nread < 0) {
         free(elf_data);
-        return -1;
+        return -EIO;
     }
 
     struct proc_image_builder b;
