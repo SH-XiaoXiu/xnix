@@ -669,13 +669,14 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
     /* ---- IO protocol (统一 fd 操作) ---- */
 
     case IO_WRITE: {
-        /* data[3]=size, buffer=写入数据 */
         int   len  = (int)msg->regs.data[3];
         char *data = (char *)(uintptr_t)msg->buffer.data;
         if (data && len > 0) {
             tty_output_write(tty, data, len);
         }
         msg->regs.data[0] = (uint32_t)len;
+        msg->buffer.data   = 0;
+        msg->buffer.size   = 0;
         return 0;
     }
 
@@ -719,6 +720,8 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
 
     case IO_CLOSE: {
         msg->regs.data[0] = 0;
+        msg->buffer.data   = 0;
+        msg->buffer.size   = 0;
         return 0;
     }
 

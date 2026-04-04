@@ -258,6 +258,8 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
             }
         }
         msg->regs.data[0] = (uint32_t)result;
+        msg->buffer.data   = 0;
+        msg->buffer.size   = 0;
         return 0;
     }
 
@@ -269,6 +271,8 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
             result          = ops->close(ctx, handle);
         }
         msg->regs.data[0] = (uint32_t)result;
+        msg->buffer.data   = 0;
+        msg->buffer.size   = 0;
         return 0;
     }
 
