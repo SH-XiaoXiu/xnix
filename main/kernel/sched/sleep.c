@@ -40,27 +40,29 @@ void sleep_check_wakeup(void) {
         return;
     }
 
+    extern spinlock_t sched_lock;
+    uint32_t flags = spin_lock_irqsave(&sched_lock);
+
     uint64_t        now = timer_get_ticks();
     struct thread **pp  = sched_get_blocked_list();
 
     while (*pp) {
         struct thread *t = *pp;
-        /* wakeup_tick != 0 表示这是睡眠线程 */
         if (t->wakeup_tick != 0 && now >= t->wakeup_tick) {
-            /* 从阻塞链表移除 */
             *pp            = t->next;
             t->next        = NULL;
             t->wakeup_tick = 0;
             t->wait_chan   = NULL;
-            t->state       = THREAD_READY; /* 设置状态为就绪 */
+            t->state       = THREAD_READY;
 
-            /* 重新加入运行队列 */
             cpu_id_t cpu = policy->select_cpu ? policy->select_cpu(t) : 0;
             policy->enqueue(t, cpu);
         } else {
             pp = &(*pp)->next;
         }
     }
+
+    spin_unlock_irqrestore(&sched_lock, flags);
 }
 
 /**
