@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <xnix/abi/io.h>
 #include <xnix/abi/tty.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
@@ -664,6 +665,104 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
     case TTY_OP_CLOSE:
         msg->regs.data[0] = 0;
         return 0;
+
+    /* ---- IO protocol (统一 fd 操作) ---- */
+
+    case IO_WRITE: {
+        /* data[3]=size, buffer=写入数据 */
+        int   len  = (int)msg->regs.data[3];
+        char *data = (char *)(uintptr_t)msg->buffer.data;
+        if (data && len > 0) {
+            tty_output_write(tty, data, len);
+        }
+        msg->regs.data[0] = (uint32_t)len;
+        return 0;
+    }
+
+    case IO_READ: {
+        /* data[3]=max_size */
+        uint32_t max_len = msg->regs.data[3];
+        if (max_len == 0) {
+            max_len = 1;
+        }
+
+        pthread_mutex_lock(&tty->input_lock);
+        int avail = tty_input_available(tty);
+        if (avail > 0) {
+            int to_read = avail;
+            if ((uint32_t)to_read > max_len) {
+                to_read = (int)max_len;
+            }
+            char buf[TTY_INPUT_BUF_SIZE];
+            for (int i = 0; i < to_read; i++) {
+                int c = tty_input_get(tty);
+                if (c < 0) {
+                    to_read = i;
+                    break;
+                }
+                buf[i] = (char)c;
+            }
+            pthread_mutex_unlock(&tty->input_lock);
+            msg->regs.data[0] = (uint32_t)to_read;
+            msg->buffer.data  = (uint64_t)(uintptr_t)buf;
+            msg->buffer.size  = (uint32_t)to_read;
+            return 0;
+        }
+
+        /* 延迟回复:等待输入 */
+        tty->pending_read    = 1;
+        tty->pending_tid     = msg->sender_tid;
+        tty->pending_max_len = max_len;
+        pthread_mutex_unlock(&tty->input_lock);
+        return 1; /* 延迟回复 */
+    }
+
+    case IO_CLOSE: {
+        msg->regs.data[0] = 0;
+        return 0;
+    }
+
+    case IO_IOCTL: {
+        /* data[2]=cmd, data[3..]=args -- 映射到 TTY ioctl 逻辑 */
+        uint32_t cmd = msg->regs.data[2];
+        switch (cmd) {
+        case TTY_IOCTL_SET_FOREGROUND:
+            tty->foreground_pid = (int)msg->regs.data[3];
+            msg->regs.data[0]  = 0;
+            break;
+        case TTY_IOCTL_GET_FOREGROUND:
+            msg->regs.data[0] = (uint32_t)tty->foreground_pid;
+            break;
+        case TTY_IOCTL_SET_RAW:
+            tty->ldisc.mode   = LDISC_RAW;
+            msg->regs.data[0] = 0;
+            break;
+        case TTY_IOCTL_SET_COOKED:
+            tty->ldisc.mode   = LDISC_COOKED;
+            msg->regs.data[0] = 0;
+            break;
+        case TTY_IOCTL_SET_ECHO:
+            tty->ldisc.echo   = (int)msg->regs.data[3];
+            msg->regs.data[0] = 0;
+            break;
+        case TTY_IOCTL_GET_TTY_COUNT:
+            msg->regs.data[0] = (uint32_t)g_tty_count;
+            break;
+        case TTY_IOCTL_SET_COLOR:
+            tty_output_set_color(tty, (uint8_t)msg->regs.data[3],
+                                 (uint8_t)msg->regs.data[4]);
+            msg->regs.data[0] = 0;
+            break;
+        case TTY_IOCTL_RESET_COLOR:
+            tty_output_reset_color(tty);
+            msg->regs.data[0] = 0;
+            break;
+        default:
+            msg->regs.data[0] = (uint32_t)-1;
+            break;
+        }
+        return 0;
+    }
 
     default:
         msg->regs.data[0] = (uint32_t)-1;

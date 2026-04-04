@@ -4,6 +4,7 @@
  */
 
 #include <xnix/protocol/vfs.h>
+#include <xnix/abi/io.h>
 #include <stdio.h>
 #include <string.h>
 #include <vfs/vfs.h>
@@ -214,11 +215,68 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         break;
     }
 
+    /* --- IO 协议: 寄存器布局与 UDM 完全一致, 仅回复格式不同 --- */
+
+    case IO_READ: {
+        if (!ops->read) {
+            result = -38;
+        } else {
+            uint32_t handle = msg->regs.data[1]; /* session */
+            uint32_t offset = msg->regs.data[2];
+            uint32_t size   = msg->regs.data[3];
+            if (size > VFS_BUF_SIZE) {
+                size = VFS_BUF_SIZE;
+            }
+            result = ops->read(ctx, handle, g_data_buf, offset, size);
+            if (result > 0) {
+                msg->buffer.data = (uint64_t)(uintptr_t)g_data_buf;
+                msg->buffer.size = (uint32_t)result;
+            }
+        }
+        msg->regs.data[0] = (uint32_t)result;
+        return 0;
+    }
+
+    case IO_WRITE: {
+        if (!ops->write) {
+            result = -38;
+        } else {
+            uint32_t handle = msg->regs.data[1]; /* session */
+            uint32_t offset = msg->regs.data[2];
+            uint32_t size   = msg->regs.data[3];
+            if (msg->buffer.data && msg->buffer.size > 0) {
+                if (size > msg->buffer.size) {
+                    size = msg->buffer.size;
+                }
+                if (size > VFS_BUF_SIZE) {
+                    size = VFS_BUF_SIZE;
+                }
+                memcpy(g_data_buf, (const void *)(uintptr_t)msg->buffer.data, size);
+                result = ops->write(ctx, handle, g_data_buf, offset, size);
+            } else {
+                result = -22; /* EINVAL */
+            }
+        }
+        msg->regs.data[0] = (uint32_t)result;
+        return 0;
+    }
+
+    case IO_CLOSE: {
+        if (!ops->close) {
+            result = -38;
+        } else {
+            uint32_t handle = msg->regs.data[1]; /* session */
+            result          = ops->close(ctx, handle);
+        }
+        msg->regs.data[0] = (uint32_t)result;
+        return 0;
+    }
+
     default:
         break;
     }
 
-    /* 将回复数据写回 msg,由调用者(框架)发送 */
+    /* 将回复数据写回 msg,由调用者(框架)发送 — UDM 回复格式 */
     msg->regs.data[0] = op;
     msg->regs.data[1] = (uint32_t)result;
 

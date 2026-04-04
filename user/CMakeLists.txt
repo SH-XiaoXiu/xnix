@@ -64,6 +64,7 @@ set(CORE_SERVICES
         ttyd
         klogd
         devfsd
+        syslogd
         wsd
         # shell - 移到 /bin/，不是系统服务
 )
