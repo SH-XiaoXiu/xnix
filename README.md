@@ -14,17 +14,18 @@ MyRTOS-Demo（[GitHub](https://github.com/SH-XiaoXiu/MyRTOS-Demo) / [Gitee](http
 
 ## 核心能力
 
-| 能力           | 说明                         | 示例                         |
-|--------------|----------------------------|----------------------------|
-| 微内核设计        | 最小化内核，策略与机制分离              | 内核仅含调度、IPC、内存管理            |
-| Bootstrap 自举 | Init 完全自举，内核不依赖 bootloader | 内置 ramfsd，绕过 VFS 启动核心服务    |
-| 平台抽象         | HAL + 弱符号机制，支持多平台移植        | 新增架构只需实现少量强符号              |
-| 权限系统         | 字符串节点权限，Profile 管理         | `xnix.io.port.*` 控制 I/O 访问 |
-| IPC 通信       | 同步/异步消息传递，支持 RPC 模式        | endpoint send/recv/call    |
-| 用户态驱动        | 驱动隔离，崩溃可恢复，支持热更新           | seriald、kbd 均为用户进程         |
-| 进程管理         | 完整生命周期、信号机制、进程树            | exec-based spawn、SIGTERM   |
-| FAT32 文件系统   | 支持读写 FAT32 格式磁盘            | 可挂载硬盘镜像进行文件操作              |
-| 声明式服务管理      | INI 配置、依赖管理、自动重启           | sys.conf 统一定义服务和权限         |
+| 能力           | 说明                         | 示例                              |
+|--------------|----------------------------|---------------------------------|
+| 微内核设计        | 最小化内核，策略与机制分离              | 内核仅含调度、IPC、内存管理                 |
+| Bootstrap 自举 | Init 完全自举，内核不依赖 bootloader | 内置 ramfsd，绕过 VFS 启动核心服务         |
+| 平台抽象         | HAL + 弱符号机制，支持多平台移植        | 新增架构只需实现少量强符号                   |
+| 能力系统         | uint32 位图 + Handle = 权限    | CAP_IO_PORT 控制端口, Handle 控制服务访问 |
+| 统一 IO 协议     | 所有 server 说同一种语言           | IO_READ/IO_WRITE/IO_CLOSE       |
+| IPC 通信       | 同步 rendezvous 消息传递         | endpoint send/recv/call         |
+| 用户态驱动        | 驱动隔离，崩溃可恢复，支持热更新           | seriald、kbd 均为用户进程              |
+| 进程管理         | 完整生命周期、信号机制、进程树            | exec-based spawn、SIGTERM        |
+| FAT32 文件系统   | 支持读写 FAT32 格式磁盘            | 可挂载硬盘镜像进行文件操作                   |
+| 声明式服务管理      | INI 配置、依赖管理、自动重启           | sys.conf 定义服务、依赖、handle         |
 
 ## 项目亮点
 
@@ -52,7 +53,7 @@ sudo apt install gcc gcc-multilib grub-pc-bin xorriso qemu-system-x86 make cmake
 ### 2. 构建并运行
 
 ```bash
-git clone https://github.com/user/xnix.git
+git clone https://github.com/sh-xiaoxiu/xnix.git
 cd xnix
 ./run -b -i    # 清理重建 + ISO 模式运行
 ```
