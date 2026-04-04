@@ -52,20 +52,14 @@ static ssize_t write_io(struct fd_entry *ent, const void *buf, size_t n) {
     msg.buffer.data  = (uint64_t)(uintptr_t)buf;
     msg.buffer.size  = (uint32_t)n;
 
-    int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
-    if (ret < 0) {
-        errno = EIO;
-        return -1;
-    }
+    uint32_t timeout = (ent->session == 0) ? 200 : 5000;
+
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, timeout);
+    if (ret < 0) { errno = EIO; return -1; }
 
     int32_t written = (int32_t)reply.regs.data[0];
-    if (written < 0) {
-        errno = -written;
-        return -1;
-    }
-    if (written > 0) {
-        ent->offset += (uint32_t)written;
-    }
+    if (written < 0) { errno = -written; return -1; }
+    if (written > 0) ent->offset += (uint32_t)written;
     return (ssize_t)written;
 }
 

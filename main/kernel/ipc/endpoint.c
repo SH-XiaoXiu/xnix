@@ -179,7 +179,7 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
         /* 拷贝消息到接收者 */
         ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
         receiver->ipc_peer                  = current->tid;
-        receiver->ipc_reply_msg->sender_tid = current->tid; /* 填充 sender_tid */
+        receiver->ipc_reply_msg->sender_tid = current->tid;
         sched_wakeup_thread(receiver);
 
         pr_debug("[IPC] send -> recv: sender=%d receiver=%d\n", current->tid, receiver->tid);
@@ -188,7 +188,7 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
         current->ipc_req_msg   = msg;
         current->ipc_reply_msg = reply_buf;
 
-        /* 阻塞等待回复 */
+        /* 阻塞等待回复 (rendezvous: 即使是 send 也需要等 reply 完成握手) */
         if (!sched_block_timeout(current, timeout_ms)) {
             pr_debug("[IPC] send reply timeout: sender=%d\n", current->tid);
             return -ETIMEDOUT;
