@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <xnix/abi/handle.h>
 #include <xnix/abi/irq.h>
-#include <xnix/abi/perm.h>
+#include <xnix/abi/cap.h>
 #include <xnix/abi/process.h>
 #include <xnix/abi/syscall.h>
 
@@ -111,13 +111,13 @@ static inline int sys_handle_duplicate(uint32_t src, uint32_t dst_hint, const ch
 }
 
 /**
- * 检查权限
+ * 检查能力
  *
- * @param perm_id 权限 ID
- * @return 0 有权限,-1 无权限(设置 errno)
+ * @param cap_bit 能力位 (CAP_*)
+ * @return 0 有能力, -1 无能力(设置 errno)
  */
-static inline int sys_perm_check(uint32_t perm_id) {
-    int ret = syscall1(SYS_PERM_CHECK, perm_id);
+static inline int sys_cap_check(uint32_t cap_bit) {
+    int ret = syscall1(SYS_PERM_CHECK, cap_bit);
     if (ret < 0) {
         errno = -ret;
         return -1;
@@ -627,13 +627,23 @@ static inline int sys_kmsg_read(uint32_t *seq, char *buf, uint32_t size) {
 }
 
 /**
- * 创建权限 Profile
+ * 检查当前进程的能力位图
  *
- * @param args  profile 创建参数
+ * @return cap_mask (uint32_t, 每 bit 一个 CAP_*)
+ */
+static inline uint32_t sys_cap_query(void) {
+    return (uint32_t)syscall2(SYS_PERM_QUERY, 0, 0);
+}
+
+/**
+ * 委托能力给目标进程
+ *
+ * @param pid      目标进程 ID
+ * @param cap_bits 要委托的能力位 (CAP_* 组合)
  * @return 0 成功, -1 失败(设置 errno)
  */
-static inline int sys_perm_profile_create(struct abi_profile_create_args *args) {
-    int ret = syscall1(SYS_PERM_PROFILE_CREATE, (uint32_t)(uintptr_t)args);
+static inline int sys_cap_grant_to(pid_t pid, uint32_t cap_bits) {
+    int ret = syscall2(SYS_PERM_GRANT, (uint32_t)pid, cap_bits);
     if (ret < 0) {
         errno = -ret;
         return -1;
@@ -642,46 +652,14 @@ static inline int sys_perm_profile_create(struct abi_profile_create_args *args) 
 }
 
 /**
- * 委托权限给目标进程
+ * 撤销目标进程的能力
  *
- * @param pid  目标进程 ID
- * @param node 权限节点名称(调用者必须拥有此权限且有 xnix.perm.delegate)
+ * @param pid      目标进程 ID
+ * @param cap_bits 要撤销的能力位
  * @return 0 成功, -1 失败(设置 errno)
  */
-static inline int sys_perm_grant_to(pid_t pid, const char *node) {
-    int ret = syscall2(SYS_PERM_GRANT, (uint32_t)pid, (uint32_t)(uintptr_t)node);
-    if (ret < 0) {
-        errno = -ret;
-        return -1;
-    }
-    return ret;
-}
-
-/**
- * 撤销目标进程的权限
- *
- * @param pid  目标进程 ID
- * @param node 权限节点名称
- * @return 0 成功, -1 失败(设置 errno)
- */
-static inline int sys_perm_revoke_from(pid_t pid, const char *node) {
-    int ret = syscall2(SYS_PERM_REVOKE, (uint32_t)pid, (uint32_t)(uintptr_t)node);
-    if (ret < 0) {
-        errno = -ret;
-        return -1;
-    }
-    return ret;
-}
-
-/**
- * 查询当前进程拥有的权限列表
- *
- * @param buf       输出缓冲区(struct abi_perm_info[])
- * @param max_count 最多返回条数
- * @return 实际写入条数, -1 失败(设置 errno)
- */
-static inline int sys_perm_query(struct abi_perm_info *buf, uint32_t max_count) {
-    int ret = syscall2(SYS_PERM_QUERY, (uint32_t)(uintptr_t)buf, max_count);
+static inline int sys_cap_revoke_from(pid_t pid, uint32_t cap_bits) {
+    int ret = syscall2(SYS_PERM_REVOKE, (uint32_t)pid, cap_bits);
     if (ret < 0) {
         errno = -ret;
         return -1;
@@ -698,26 +676,6 @@ static inline int sys_perm_query(struct abi_perm_info *buf, uint32_t max_count) 
  */
 static inline int sys_handle_list(struct abi_handle_info *buf, uint32_t max_count) {
     int ret = syscall2(SYS_HANDLE_LIST, (uint32_t)(uintptr_t)buf, max_count);
-    if (ret < 0) {
-        errno = -ret;
-        return -1;
-    }
-    return ret;
-}
-
-/**
- * 向已存在的 profile 追加规则
- *
- * @param profile_name profile 名称
- * @param rules        规则数组
- * @param count        规则数量
- * @return 0 成功, -1 失败(设置 errno)
- */
-static inline int sys_perm_profile_add_rules(const char *profile_name,
-                                             struct abi_perm_rule *rules,
-                                             uint32_t count) {
-    int ret = syscall3(SYS_PERM_PROFILE_ADD_RULES, (uint32_t)(uintptr_t)profile_name,
-                       (uint32_t)(uintptr_t)rules, count);
     if (ret < 0) {
         errno = -ret;
         return -1;

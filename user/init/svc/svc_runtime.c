@@ -152,9 +152,6 @@ static int start_via_bootstrap(struct svc_manager *mgr, struct svc_config *cfg) 
     struct proc_image_builder b;
     proc_image_init(&b, cfg->name, elf_data, (size_t)nread);
 
-    if (cfg->profile[0]) {
-        proc_image_set_profile(&b, cfg->profile);
-    }
 
     inject_svc_handles_image(&b, mgr, cfg);
 
@@ -170,9 +167,7 @@ static int start_via_exec(struct svc_manager *mgr, struct svc_config *cfg) {
     struct proc_builder b;
     proc_init(&b, cfg->path);
 
-    if (cfg->profile[0]) {
-        proc_set_profile(&b, cfg->profile);
-    }
+    /* TODO(Phase 5): 用 proc_set_caps 传递能力位图 */
 
     inject_svc_handles(&b, mgr, cfg);
 

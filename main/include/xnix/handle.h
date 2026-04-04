@@ -11,9 +11,10 @@
 #define XNIX_HANDLE_H
 
 #include <xnix/abi/handle.h>
-#include <xnix/perm.h>
 #include <xnix/sync.h>
 #include <xnix/types.h>
+
+struct process;
 
 /**
  * @brief Handle 表项
@@ -25,10 +26,6 @@ struct handle_entry {
     void         *object;                /* 内核对象指针 */
     char          name[HANDLE_NAME_MAX]; /* 可选名称(用于按名查找) */
     uint32_t      rights;                /* handle 权限位 (HANDLE_RIGHT_*) */
-
-    /* 缓存的权限 ID(用于加速 syscall 检查) */
-    perm_id_t perm_send; /* 用于 HANDLE_ENDPOINT: 发送权限 */
-    perm_id_t perm_recv; /* 用于 HANDLE_ENDPOINT: 接收权限 */
 };
 
 /**
@@ -126,11 +123,11 @@ void handle_object_put(handle_type_t type, void *object);
  * @param proc          调用进程
  * @param h             Handle 值
  * @param expected_type 期望的对象类型 (HANDLE_NONE 表示不检查类型)
- * @param required_perm 需要的权限 ID (PERM_ID_INVALID 表示不检查权限)
+ * @param required_cap 需要的能力位 (0 表示不检查)
  * @return 内核对象指针,验证失败返回 NULL
  */
 void *handle_resolve(struct process *proc, handle_t h, handle_type_t expected_type,
-                     perm_id_t required_perm);
+                     uint32_t required_cap);
 
 /**
  * @brief 按名称查找 Handle

@@ -12,15 +12,14 @@
 #ifndef XNIX_PROCESS_DEF_H
 #define XNIX_PROCESS_DEF_H
 
+#include <xnix/abi/cap.h>
 #include <xnix/abi/process.h>
 #include <xnix/handle.h>
-#include <xnix/perm.h>
 #include <xnix/process.h>
 #include <xnix/sync.h>
 #include <xnix/types.h>
 
 struct handle_table; /* 前向声明 */
-struct perm_state;   /* 前向声明 */
 struct thread;       /* 前向声明 */
 struct page_table;   /* 前向声明 */
 
@@ -55,8 +54,10 @@ struct process {
     /* Handle 表 */
     struct handle_table *handles;
 
-    /* 权限状态 */
-    struct perm_state *perms;
+    /* 能力 (Capability) */
+    uint32_t  cap_mask;       /* 能力位图 (CAP_*) */
+    uint8_t  *ioport_bitmap;  /* IO 端口访问表 (8KB, 按需分配, NULL=无) */
+    uint32_t  irq_mask;       /* IRQ 访问位图 (bit N = IRQ N) */
 
     /* 线程列表 */
     struct thread *threads;      /* 属于此进程的线程链表 */
@@ -168,7 +169,7 @@ int process_load_elf(struct process *proc, void *elf_data, uint32_t elf_size, ui
  */
 pid_t process_spawn(const char *name, void *elf_data, uint32_t elf_size,
                     const struct spawn_handle *handles, uint32_t handle_count,
-                    struct perm_profile *profile, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
+                    const struct spawn_caps *caps, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
                     uint32_t flags);
 
 /**

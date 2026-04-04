@@ -12,7 +12,7 @@
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
@@ -48,11 +48,9 @@ void process_subsystem_init(void) {
     kernel_process.exit_code     = 0;
     kernel_process.page_dir_phys = NULL; /* 内核进程使用当前(或内核)页表 */
     kernel_process.handles       = handle_table_create();
-    kernel_process.perms         = perm_state_create(NULL); /* 内核进程拥有所有权限(隐式) */
-    /* 显式授予内核进程所有权限 */
-    if (kernel_process.perms) {
-        perm_grant(kernel_process.perms, "xnix.*");
-    }
+    kernel_process.cap_mask      = CAP_ALL;
+    kernel_process.irq_mask      = 0xFFFFFFFF;
+    kernel_process.ioport_bitmap = NULL; /* 内核进程隐式拥有所有 IO 端口 */
 
     kernel_process.threads      = NULL;
     kernel_process.thread_count = 0;
@@ -71,9 +69,7 @@ void process_subsystem_init(void) {
 
     process_list = &kernel_process;
 
-    /* 初始化权限注册表和 Profile 系统 */
-    perm_registry_init();
-    perm_profile_init();
+    /* 能力系统不需要额外初始化: cap_mask 为位图, O(1) 检查 */
 
     pr_info("Process subsystem initialized (kernel PID 0)");
 }
@@ -188,8 +184,9 @@ void process_unref(struct process *proc) {
         if (proc->handles) {
             handle_table_destroy(proc->handles);
         }
-        if (proc->perms) {
-            perm_state_destroy(proc->perms);
+        if (proc->ioport_bitmap) {
+            kfree(proc->ioport_bitmap);
+            proc->ioport_bitmap = NULL;
         }
         if (proc->thread_lock) {
             mutex_destroy(proc->thread_lock);
@@ -233,7 +230,7 @@ void process_unref(struct process *proc) {
     cpu_irq_restore(flags);
 }
 
-process_t process_create(const char *name, struct perm_profile *profile) {
+process_t process_create(const char *name, const struct spawn_caps *caps) {
     struct process *proc = kzalloc(sizeof(struct process));
     if (!proc) {
         return NULL;
@@ -270,7 +267,16 @@ process_t process_create(const char *name, struct perm_profile *profile) {
     }
 
     proc->handles = handle_table_create();
-    proc->perms   = perm_state_create(profile);
+
+    /* 能力初始化: 默认无能力, 由 caps 参数赋予 */
+    proc->cap_mask       = 0;
+    proc->ioport_bitmap  = NULL;
+    proc->irq_mask       = 0;
+    if (caps) {
+        proc->cap_mask      = caps->cap_mask;
+        proc->ioport_bitmap = cap_build_ioport_bitmap(caps);
+        proc->irq_mask      = cap_build_irq_mask(caps);
+    }
 
     proc->threads      = NULL;
     proc->thread_count = 0;
@@ -286,7 +292,7 @@ process_t process_create(const char *name, struct perm_profile *profile) {
         proc->sync_table->mutex_bitmap = 0;
     }
 
-    if (!proc->handles || !proc->perms || !proc->thread_lock || !proc->sync_table) {
+    if (!proc->handles || !proc->thread_lock || !proc->sync_table) {
         if (proc->page_dir_phys) {
             if (mm->destroy_as) {
                 mm->destroy_as(proc->page_dir_phys);
@@ -295,8 +301,8 @@ process_t process_create(const char *name, struct perm_profile *profile) {
         if (proc->handles) {
             handle_table_destroy(proc->handles);
         }
-        if (proc->perms) {
-            perm_state_destroy(proc->perms);
+        if (proc->ioport_bitmap) {
+            kfree(proc->ioport_bitmap);
         }
         if (proc->thread_lock) {
             mutex_destroy(proc->thread_lock);

@@ -121,13 +121,6 @@ struct svc_config {
     char     wait_path[SVC_PATH_MAX]; /* 路径存在等待 */
     uint32_t delay_ms;                /* 启动前延时 */
 
-    /* Profile */
-    char profile[32];
-
-    /* Permission overrides (格式: "xnix.io.port.0x3f8-0x3ff=true") */
-    char perms[8][64]; /* 最多 8 个权限覆盖 */
-    int  perm_count;
-
     /* Handle 传递 */
     struct svc_handle_desc handles[SVC_HANDLES_MAX];
     int                    handle_count;
@@ -155,24 +148,6 @@ struct svc_runtime {
 };
 
 /**
- * Permission profile (权限模板)
- */
-#define SVC_MAX_PROFILES   8
-#define SVC_PERM_NODES_MAX 32
-
-struct svc_perm_entry {
-    char name[64]; /* 权限节点名称,如 "xnix.ipc.send" */
-    bool value;    /* true=允许, false=拒绝 */
-};
-
-struct svc_profile {
-    char                  name[32];                  /* Profile 名称 */
-    char                  inherit[32];               /* 继承的 profile */
-    struct svc_perm_entry perms[SVC_PERM_NODES_MAX]; /* 权限列表 */
-    int                   perm_count;
-};
-
-/**
  * 服务管理器
  */
 struct svc_manager {
@@ -191,10 +166,6 @@ struct svc_manager {
 
     /* init_notify endpoint (动态注入到每个服务) */
     handle_t init_notify_ep;
-
-    /* Permission profiles */
-    struct svc_profile profiles[SVC_MAX_PROFILES];
-    int                profile_count;
 };
 
 /**

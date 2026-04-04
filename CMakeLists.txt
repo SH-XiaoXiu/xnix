@@ -124,7 +124,7 @@ set(CFG_IRQ_USER_BUF_SIZE 64 CACHE STRING "IRQ user-mode buffer size")
 # 进程/权限配置
 # ============================================
 set(CFG_PROCESS_MUTEX_SLOTS 32 CACHE STRING "Per-process user mutex slots (<= 32)")
-set(CFG_PERM_MAX_PROFILES 128 CACHE STRING "Max permission profiles")
+# CFG_PERM_MAX_PROFILES removed — capability bitmap replaces profile system
 
 # ============================================
 # 日志配置
@@ -177,9 +177,8 @@ if (CFG_ENABLE_VFS)
     list(APPEND KERNEL_CORE_SOURCES ${VFS_C})
 endif ()
 
-# Permission System
-file(GLOB_RECURSE PERM_C "${CMAKE_SOURCE_DIR}/main/kernel/perm/*.c")
-list(APPEND KERNEL_CORE_SOURCES ${PERM_C})
+# Capability System (replaces old perm/)
+list(APPEND KERNEL_CORE_SOURCES "${CMAKE_SOURCE_DIR}/main/kernel/cap.c")
 
 # Handle System
 file(GLOB_RECURSE HANDLE_C CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/main/kernel/handle/*.c")

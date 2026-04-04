@@ -3,7 +3,6 @@
 #include <ipc/endpoint.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
-#include <xnix/perm.h>
 #include <xnix/physmem.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
@@ -62,18 +61,6 @@ handle_t handle_alloc(struct process *proc, handle_type_t type, void *object, co
         entry->name[0] = '\0';
     }
 
-    /* 缓存权限 ID(用于加速 IPC 检查) */
-    if (type == HANDLE_ENDPOINT) {
-        char        perm_send[64], perm_recv[64];
-        const char *ep_name = (name && name[0]) ? name : "unknown";
-        snprintf(perm_send, sizeof(perm_send), "xnix.ipc.endpoint.%s.send", ep_name);
-        snprintf(perm_recv, sizeof(perm_recv), "xnix.ipc.endpoint.%s.recv", ep_name);
-        entry->perm_send = perm_register(perm_send);
-        entry->perm_recv = perm_register(perm_recv);
-    } else {
-        entry->perm_send = PERM_ID_INVALID;
-        entry->perm_recv = PERM_ID_INVALID;
-    }
 
     spin_unlock(&table->lock);
     pr_debug("[HANDLE] alloc: proc=%d type=%d name=%s -> %d\n", proc->pid, type,
@@ -130,18 +117,6 @@ handle_t handle_alloc_at(struct process *proc, handle_type_t type, void *object,
         entry->name[0] = '\0';
     }
 
-    /* 缓存权限 ID(用于加速 IPC 检查) */
-    if (type == HANDLE_ENDPOINT) {
-        char        perm_send[64], perm_recv[64];
-        const char *ep_name = (name && name[0]) ? name : "unknown";
-        snprintf(perm_send, sizeof(perm_send), "xnix.ipc.endpoint.%s.send", ep_name);
-        snprintf(perm_recv, sizeof(perm_recv), "xnix.ipc.endpoint.%s.recv", ep_name);
-        entry->perm_send = perm_register(perm_send);
-        entry->perm_recv = perm_register(perm_recv);
-    } else {
-        entry->perm_send = PERM_ID_INVALID;
-        entry->perm_recv = PERM_ID_INVALID;
-    }
 
     spin_unlock(&table->lock);
     pr_debug("[HANDLE] alloc_at: proc=%d type=%d name=%s hint=%d -> %d\n", proc->pid, type,

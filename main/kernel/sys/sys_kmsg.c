@@ -9,7 +9,7 @@
 #include <xnix/errno.h>
 #include <xnix/kmsg.h>
 #include <xnix/mm.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process.h>
 #include <xnix/stdio.h>
 #include <xnix/syscall.h>
@@ -36,7 +36,7 @@ static int32_t sys_kmsg_read(const uint32_t *args) {
 
     /* 权限检查 */
     struct process *proc = (struct process *)process_current();
-    if (!perm_check_name(proc, "xnix.kernel.kmsg")) {
+    if (!cap_check(proc, CAP_KERNEL_KMSG)) {
         return -EPERM;
     }
 

@@ -30,7 +30,7 @@
 #include <unistd.h>
 #include <vfs_client.h>
 #include <xnix/abi/handle.h>
-#include <xnix/abi/perm.h>
+#include <xnix/abi/cap.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
 #include <xnix/ulog.h>
@@ -43,47 +43,6 @@ static struct svc_manager g_mgr;
 /* 内置 ramfsd 服务(需要被 svc_runtime.c 访问)*/
 struct ramfsd_service g_ramfsd;
 
-
-/**
- * 从管理器的 profile 配置创建内核 profile
- */
-static void create_profiles_from_config(struct svc_manager *mgr) {
-    for (int i = 0; i < mgr->profile_count; i++) {
-        struct svc_profile *prof = &mgr->profiles[i];
-
-        struct abi_profile_create_args args;
-        memset(&args, 0, sizeof(args));
-        strncpy(args.name, prof->name, sizeof(args.name) - 1);
-        if (prof->inherit[0] != '\0') {
-            strncpy(args.parent, prof->inherit, sizeof(args.parent) - 1);
-        }
-
-        args.rule_count = 0;
-        for (int j = 0; j < prof->perm_count && args.rule_count < ABI_PERM_RULE_MAX; j++) {
-            strncpy(args.rules[args.rule_count].node, prof->perms[j].name, ABI_PERM_NODE_MAX - 1);
-            args.rules[args.rule_count].value = prof->perms[j].value ? 1 : 0;
-            args.rule_count++;
-        }
-
-        int ret = sys_perm_profile_create(&args);
-        if (ret < 0) {
-            char buf[80];
-            early_set_color(10, 0);
-            early_puts("[INIT] ");
-            early_reset_color();
-            snprintf(buf, sizeof(buf), "WARNING: profile '%s' create failed: %s\n", prof->name,
-                     strerror(-ret));
-            early_puts(buf);
-        } else {
-            char buf[64];
-            early_set_color(10, 0);
-            early_puts("[INIT] ");
-            early_reset_color();
-            snprintf(buf, sizeof(buf), "profile '%s' created\n", prof->name);
-            early_puts(buf);
-        }
-    }
-}
 
 static void drain_ready_notifications(handle_t init_notify_ep) {
     if (init_notify_ep == HANDLE_INVALID) {
@@ -312,9 +271,6 @@ int main(int argc, char **argv) {
                  g_mgr.graph_valid);
         early_puts(buf);
     }
-
-    /* 在启动服务之前,通过 syscall 在内核中注册 profile */
-    create_profiles_from_config(&g_mgr);
 
     /* 初始化 VFS 客户端(直连 ramfsd) */
     early_set_color(10, 0);

@@ -1,6 +1,6 @@
 #include <xnix/errno.h>
 #include <xnix/handle.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process_def.h>
 #include <xnix/string.h>
 
@@ -42,11 +42,11 @@ int handle_acquire(struct process *proc, handle_t h, handle_type_t expected_type
  * @param proc          拥有 Handle 的进程
  * @param h             Handle ID
  * @param expected_type 期望的 Handle 类型
- * @param required_perm 需要的权限 ID(PERM_ID_INVALID 表示不检查)
+ * @param required_cap 需要的能力位(0 表示不检查)
  * @return 内核对象指针,失败返回 NULL
  */
 void *handle_resolve(struct process *proc, handle_t h, handle_type_t expected_type,
-                     perm_id_t required_perm) {
+                     uint32_t required_cap) {
     if (!proc || !proc->handles) {
         return NULL;
     }
@@ -71,10 +71,10 @@ void *handle_resolve(struct process *proc, handle_t h, handle_type_t expected_ty
     void *object = entry->object;
     spin_unlock(&table->lock);
 
-    /* 权限检查(如果需要) */
-    if (required_perm != PERM_ID_INVALID) {
-        if (!perm_check(proc, required_perm)) {
-            return NULL; /* 权限拒绝 */
+    /* 能力检查(如果需要) */
+    if (required_cap != 0) {
+        if (!cap_check(proc, required_cap)) {
+            return NULL; /* 能力拒绝 */
         }
     }
 

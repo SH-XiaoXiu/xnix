@@ -18,7 +18,7 @@ static int32_t sys_sleep(const uint32_t *args) {
 }
 
 #ifdef CONFIG_DEBUG_CONSOLE
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process.h>
 #include <xnix/usraccess.h>
 
@@ -27,7 +27,7 @@ static int32_t sys_debug_write(const uint32_t *args) {
     struct process *proc = (struct process *)process_current();
 
     /* 检查权限 */
-    if (!perm_check_name(proc, "xnix.debug.console")) {
+    if (!cap_check(proc, CAP_DEBUG_CONSOLE)) {
         return -EPERM;
     }
 
@@ -56,7 +56,7 @@ static int32_t sys_debug_write(const uint32_t *args) {
 static int32_t sys_debug_set_color(const uint32_t *args) {
     struct process *proc = (struct process *)process_current();
 
-    if (!perm_check_name(proc, "xnix.debug.console")) {
+    if (!cap_check(proc, CAP_DEBUG_CONSOLE)) {
         return -EPERM;
     }
 
@@ -70,7 +70,7 @@ static int32_t sys_debug_reset_color(const uint32_t *args) {
     (void)args;
     struct process *proc = (struct process *)process_current();
 
-    if (!perm_check_name(proc, "xnix.debug.console")) {
+    if (!cap_check(proc, CAP_DEBUG_CONSOLE)) {
         return -EPERM;
     }
 

@@ -11,7 +11,7 @@
 #include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
@@ -129,9 +129,9 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
         struct process *dst_proc = dst->owner;
 
         if (src_proc && dst_proc) {
-            if (!perm_check_name(src_proc, PERM_NODE_HANDLE_GRANT)) {
+            if (!cap_check(src_proc, CAP_HANDLE_GRANT)) {
                 pr_warn("handle transfer denied: process '%s' (pid=%d) lacks "
-                        "'xnix.handle.grant' permission, %u handle(s) dropped\n",
+                        "CAP_HANDLE_GRANT capability, %u handle(s) dropped\n",
                         src_proc->name ? src_proc->name : "?", src_proc->pid,
                         src_msg->handles.count);
                 return;
@@ -243,10 +243,9 @@ int ipc_send(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms) {
     }
 
     struct ipc_endpoint *ep = entry.object;
-    if (!(entry.rights & HANDLE_RIGHT_WRITE) || entry.perm_send == PERM_ID_INVALID ||
-        !perm_check(proc, entry.perm_send)) {
-        pr_debug("[IPC] send denied: proc=%d handle=%d rights=0x%x perm=%d\n",
-                 proc->pid, ep_handle, entry.rights, entry.perm_send);
+    if (!(entry.rights & HANDLE_RIGHT_WRITE) || !cap_check(proc, CAP_IPC_SEND)) {
+        pr_debug("[IPC] send denied: proc=%d handle=%d rights=0x%x\n",
+                 proc->pid, ep_handle, entry.rights);
         handle_object_put(entry.type, entry.object);
         return -EPERM;
     }
@@ -269,8 +268,7 @@ int ipc_call(handle_t ep_handle, struct ipc_message *request, struct ipc_message
     }
 
     struct ipc_endpoint *ep = entry.object;
-    if (!(entry.rights & HANDLE_RIGHT_WRITE) || entry.perm_send == PERM_ID_INVALID ||
-        !perm_check(proc, entry.perm_send)) {
+    if (!(entry.rights & HANDLE_RIGHT_WRITE) || !cap_check(proc, CAP_IPC_SEND)) {
         handle_object_put(entry.type, entry.object);
         return -EPERM;
     }
@@ -303,10 +301,9 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
     }
 
     struct ipc_endpoint *ep = entry.object;
-    if (!(entry.rights & HANDLE_RIGHT_READ) || entry.perm_recv == PERM_ID_INVALID ||
-        !perm_check(proc, entry.perm_recv)) {
-        pr_debug("[IPC] recv denied: proc=%d handle=%d rights=0x%x perm=%d\n",
-                 proc->pid, ep_handle, entry.rights, entry.perm_recv);
+    if (!(entry.rights & HANDLE_RIGHT_READ) || !cap_check(proc, CAP_IPC_RECV)) {
+        pr_debug("[IPC] recv denied: proc=%d handle=%d rights=0x%x\n",
+                 proc->pid, ep_handle, entry.rights);
         handle_object_put(entry.type, entry.object);
         return -EPERM;
     }
@@ -467,8 +464,7 @@ handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms) {
 
         if (entry.type == HANDLE_ENDPOINT) {
             /* 检查 recv 权限 */
-            if (!(entry.rights & HANDLE_RIGHT_READ) || entry.perm_recv == PERM_ID_INVALID ||
-                !perm_check(proc, entry.perm_recv)) {
+            if (!(entry.rights & HANDLE_RIGHT_READ) || !cap_check(proc, CAP_IPC_RECV)) {
                 handle_object_put(entry.type, entry.object);
                 continue;
             }

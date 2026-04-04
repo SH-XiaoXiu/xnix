@@ -71,30 +71,10 @@ static bool parse_handle_section(const char *section, char *name, size_t name_si
     return true;
 }
 
-static bool parse_profile_section(const char *section, char *name, size_t name_size) {
-    const char *prefix     = "profile.";
-    size_t      prefix_len = strlen(prefix);
-
-    if (strncmp(section, prefix, prefix_len) != 0) {
-        return false;
-    }
-
-    const char *profile_name = section + prefix_len;
-    size_t      len          = strlen(profile_name);
-    if (len == 0 || len >= name_size) {
-        return false;
-    }
-
-    memcpy(name, profile_name, len);
-    name[len] = '\0';
-    return true;
-}
-
 struct ini_ctx {
     struct svc_manager    *mgr;
     struct svc_config     *current;
     struct svc_handle_def *current_handle;
-    struct svc_profile    *current_profile;
 };
 
 static bool ini_handler(const char *section, const char *key, const char *value, void *ctx) {
@@ -174,13 +154,6 @@ static bool ini_handler(const char *section, const char *key, const char *value,
             }
             memcpy(cfg->mount, value, len);
             cfg->mount[len] = '\0';
-        } else if (strcmp(key, "profile") == 0) {
-            size_t len = strlen(value);
-            if (len >= sizeof(cfg->profile)) {
-                len = sizeof(cfg->profile) - 1;
-            }
-            memcpy(cfg->profile, value, len);
-            cfg->profile[len] = '\0';
         } else if (strcmp(key, "provides") == 0) {
             int idx = svc_find_by_name(mgr, cfg->name);
             if (idx >= 0) {
@@ -199,11 +172,6 @@ static bool ini_handler(const char *section, const char *key, const char *value,
                 struct svc_graph_node *node = &mgr->graph[idx];
                 node->wants_count           = parse_dep_list(value, node->wants, SVC_DEPS_MAX);
             }
-        } else if (key[0] == 'x' && strncmp(key, "xnix.", 5) == 0) {
-            if (cfg->perm_count < 8) {
-                snprintf(cfg->perms[cfg->perm_count], 64, "%s=%s", key, value);
-                cfg->perm_count++;
-            }
         }
 
         return true;
@@ -211,8 +179,7 @@ static bool ini_handler(const char *section, const char *key, const char *value,
 
     char handle_name[SVC_HANDLE_NAME_MAX];
     if (parse_handle_section(section, handle_name, sizeof(handle_name))) {
-        ictx->current         = NULL;
-        ictx->current_profile = NULL;
+        ictx->current = NULL;
 
         if (ictx->current_handle == NULL || strcmp(ictx->current_handle->name, handle_name) != 0) {
             ictx->current_handle = handle_def_get_or_add(mgr, handle_name);
@@ -234,62 +201,16 @@ static bool ini_handler(const char *section, const char *key, const char *value,
         return true;
     }
 
-    char profile_name[32];
-    if (parse_profile_section(section, profile_name, sizeof(profile_name))) {
-        ictx->current        = NULL;
-        ictx->current_handle = NULL;
-
-        if (ictx->current_profile == NULL ||
-            strcmp(ictx->current_profile->name, profile_name) != 0) {
-            struct svc_profile *prof = NULL;
-            for (int i = 0; i < mgr->profile_count; i++) {
-                if (strcmp(mgr->profiles[i].name, profile_name) == 0) {
-                    prof = &mgr->profiles[i];
-                    break;
-                }
-            }
-
-            if (!prof && mgr->profile_count < SVC_MAX_PROFILES) {
-                prof = &mgr->profiles[mgr->profile_count++];
-                memset(prof, 0, sizeof(*prof));
-                strncpy(prof->name, profile_name, sizeof(prof->name) - 1);
-            }
-
-            ictx->current_profile = prof;
-        }
-
-        struct svc_profile *prof = ictx->current_profile;
-        if (!prof) {
-            printf("Too many profiles\n");
-            return true;
-        }
-
-        if (strcmp(key, "inherit") == 0) {
-            strncpy(prof->inherit, value, sizeof(prof->inherit) - 1);
-        } else if (key[0] == 'x' && strncmp(key, "xnix.", 5) == 0) {
-            if (prof->perm_count < SVC_PERM_NODES_MAX) {
-                struct svc_perm_entry *perm = &prof->perms[prof->perm_count++];
-                strncpy(perm->name, key, sizeof(perm->name) - 1);
-                perm->value = (strcmp(value, "true") == 0 || strcmp(value, "1") == 0);
-            }
-        }
-
-        return true;
-    }
-
-    ictx->current         = NULL;
-    ictx->current_handle  = NULL;
-    ictx->current_profile = NULL;
+    /* [profile.*] 段: 忽略 (profile 系统已移除, 能力通过 caps 直接传递) */
 
     return true;
 }
 
 int svc_load_config(struct svc_manager *mgr, const char *path) {
     struct ini_ctx ctx = {
-        .mgr             = mgr,
-        .current         = NULL,
-        .current_handle  = NULL,
-        .current_profile = NULL,
+        .mgr            = mgr,
+        .current        = NULL,
+        .current_handle = NULL,
     };
 
     int ret = ini_parse_file(path, ini_handler, &ctx);
@@ -315,10 +236,9 @@ int svc_load_config(struct svc_manager *mgr, const char *path) {
 
 int svc_load_config_string(struct svc_manager *mgr, const char *content) {
     struct ini_ctx ctx = {
-        .mgr             = mgr,
-        .current         = NULL,
-        .current_handle  = NULL,
-        .current_profile = NULL,
+        .mgr            = mgr,
+        .current        = NULL,
+        .current_handle = NULL,
     };
 
     int ret = ini_parse_buffer(content, strlen(content), ini_handler, &ctx);

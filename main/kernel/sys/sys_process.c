@@ -14,7 +14,7 @@
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/percpu.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
@@ -85,7 +85,7 @@ static int32_t sys_exec(const uint32_t *args) {
     struct abi_exec_image_args *user_args = (struct abi_exec_image_args *)(uintptr_t)args[0];
     struct process             *proc      = process_get_current();
 
-    if (!perm_check_name(proc, PERM_NODE_PROCESS_EXEC)) {
+    if (!cap_check(proc, CAP_PROCESS_EXEC)) {
         return -EPERM;
     }
 
@@ -161,33 +161,9 @@ static int32_t sys_exec(const uint32_t *args) {
 
     uint32_t flags = kargs->flags;
 
-    /* 权限处理 */
-    struct perm_profile *profile;
-    if (flags & ABI_EXEC_INHERIT_PERM) {
-        /* 继承父进程 profile */
-        profile = proc->perms ? proc->perms->profile : NULL;
-    } else if (kargs->profile_name[0] != '\0') {
-        profile = perm_profile_find(kargs->profile_name);
-        if (!profile) {
-            pr_err("Profile '%s' not found for process '%s'\n",
-                   kargs->profile_name, kargs->name);
-            free_pages(elf_paddr, page_count);
-            kfree(kargs);
-            return -ENOENT;
-        }
-        /* 权限降级检查:子进程 profile 不能超过父进程权限 */
-        if (proc->perms && !perm_profile_is_subset(profile, proc->perms)) {
-            free_pages(elf_paddr, page_count);
-            kfree(kargs);
-            return -EPERM;
-        }
-    } else {
-        /* profile_name 为空:继承父进程 profile */
-        profile = proc->perms ? proc->perms->profile : NULL;
-    }
-
+    /* 权限处理: caps 将在 ABI 更新后从 kargs 传入,目前传 NULL 继承父进程 */
     pid_t pid = process_spawn(kargs->name, elf_paddr, kargs->elf_size, handles, handle_count,
-                              profile, argc, kargs->argv, flags);
+                              NULL, argc, kargs->argv, flags);
     free_pages(elf_paddr, page_count);
     kfree(kargs);
 

@@ -9,7 +9,7 @@
 
 #include <sys/syscall.h>
 #include <xnix/errno.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process.h>
 #include <xnix/syscall.h>
 #include <xnix/types.h>
@@ -24,7 +24,7 @@ static int32_t sys_ioport_outb(const uint32_t *args) {
     uint8_t         val  = (uint8_t)args[1];
     struct process *proc = (struct process *)process_current();
 
-    if (!perm_check_ioport(proc, port)) {
+    if (!cap_check_ioport(proc, port)) {
         return -EPERM;
     }
 
@@ -44,7 +44,7 @@ static int32_t sys_ioport_inb(const uint32_t *args) {
     uint16_t        port = (uint16_t)args[0];
     struct process *proc = (struct process *)process_current();
 
-    if (!perm_check_ioport(proc, port)) {
+    if (!cap_check_ioport(proc, port)) {
         return -EPERM;
     }
 
@@ -64,7 +64,7 @@ static int32_t sys_ioport_outw(const uint32_t *args) {
     uint16_t        val  = (uint16_t)args[1];
     struct process *proc = (struct process *)process_current();
 
-    if (!perm_check_ioport(proc, port)) {
+    if (!cap_check_ioport(proc, port)) {
         return -EPERM;
     }
 
@@ -84,7 +84,7 @@ static int32_t sys_ioport_inw(const uint32_t *args) {
     uint16_t        port = (uint16_t)args[0];
     struct process *proc = (struct process *)process_current();
 
-    if (!perm_check_ioport(proc, port)) {
+    if (!cap_check_ioport(proc, port)) {
         return -EPERM;
     }
 

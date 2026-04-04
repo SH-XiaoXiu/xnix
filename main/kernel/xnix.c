@@ -20,7 +20,7 @@
 #include <xnix/irq.h>
 #include <xnix/kmsg.h>
 #include <xnix/mm.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
@@ -102,7 +102,6 @@ static void boot_phase_subsys(void) {
     ipc_init();
     pr_ok("IPC subsystem.");
 
-    perm_init();
     ioport_init();
     input_init();
 
@@ -197,11 +196,15 @@ static void boot_start_services(void) {
             process_spawn("init", mod_addr, mod_size, NULL, 0, NULL, 0, NULL, ABI_EXEC_INHERIT_ALL);
     }
 
-    /* 为 init 直接授予全权限(不依赖 named profile) */
+    /* 为 init 授予全能力 */
     if (init_pid != PID_INVALID) {
         struct process *init_proc = process_find_by_pid(init_pid);
-        if (init_proc && init_proc->perms) {
-            perm_grant(init_proc->perms, "xnix.*");
+        if (init_proc) {
+            init_proc->cap_mask = CAP_ALL;
+            init_proc->irq_mask = 0xFFFFFFFF;
+            /* ioport_bitmap: init 作为 root 给 CAP_ALL, 但不分配 8KB 位图.
+               init 自己不直接访问 IO 端口, 它通过 handle 委托给 driver.
+               如果需要, 可以延迟分配. */
         }
     }
 

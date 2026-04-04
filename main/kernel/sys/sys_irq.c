@@ -9,7 +9,7 @@
 #include <xnix/errno.h>
 #include <xnix/handle.h>
 #include <xnix/irq.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process.h>
 #include <xnix/stdio.h>
 #include <xnix/syscall.h>
@@ -28,14 +28,8 @@ static int32_t sys_irq_bind(const uint32_t *args) {
     }
 
     /* 检查 IRQ 绑定权限 */
-    char perm_name[32];
-    snprintf(perm_name, sizeof(perm_name), "xnix.irq.%u", irq);
-    perm_register(perm_name);
-    if (!perm_check_name(proc, perm_name)) {
-        /* 如果没有特定 IRQ 权限,检查通用权限 */
-        if (!perm_check_name(proc, "xnix.irq.all")) {
-            return -EPERM;
-        }
+    if (!cap_check_irq(proc, irq)) {
+        return -EPERM;
     }
 
     /* notification 可选 */

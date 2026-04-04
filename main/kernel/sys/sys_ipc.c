@@ -10,7 +10,7 @@
 #include <xnix/errno.h>
 #include <xnix/ipc.h>
 #include <xnix/mm.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process.h>
 #include <xnix/string.h>
 #include <xnix/syscall.h>
@@ -173,7 +173,7 @@ static int32_t sys_endpoint_create(const uint32_t *args) {
     char        kname[32] = {0};
 
     struct process *proc = process_current();
-    if (!perm_check_name(proc, PERM_NODE_IPC_ENDPOINT_CREATE)) {
+    if (!cap_check(proc, CAP_IPC_ENDPOINT)) {
         return -EPERM;
     }
 
@@ -200,7 +200,7 @@ static int32_t sys_ipc_send(const uint32_t *args) {
     uint32_t            timeout  = args[2];
 
     struct process *proc = process_current();
-    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+    if (!cap_check(proc, CAP_IPC_SEND)) {
         return -EPERM;
     }
 
@@ -222,7 +222,7 @@ static int32_t sys_ipc_recv(const uint32_t *args) {
     uint32_t            timeout  = args[2];
 
     struct process *proc = process_current();
-    if (!perm_check_name(proc, PERM_NODE_IPC_RECV)) {
+    if (!cap_check(proc, CAP_IPC_RECV)) {
         return -EPERM;
     }
 
@@ -251,7 +251,7 @@ static int32_t sys_ipc_call(const uint32_t *args) {
     uint32_t            timeout    = args[3];
 
     struct process *proc = process_current();
-    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+    if (!cap_check(proc, CAP_IPC_SEND)) {
         return -EPERM;
     }
 
@@ -286,7 +286,7 @@ static int32_t sys_ipc_reply(const uint32_t *args) {
     struct ipc_message *user_reply = (struct ipc_message *)(uintptr_t)args[0];
 
     struct process *proc = process_current();
-    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+    if (!cap_check(proc, CAP_IPC_SEND)) {
         return -EPERM;
     }
 
@@ -307,7 +307,7 @@ static int32_t sys_ipc_reply_to(const uint32_t *args) {
     struct ipc_message *user_reply = (struct ipc_message *)(uintptr_t)args[1];
 
     struct process *proc = process_current();
-    if (!perm_check_name(proc, PERM_NODE_IPC_SEND)) {
+    if (!cap_check(proc, CAP_IPC_SEND)) {
         return -EPERM;
     }
 
@@ -356,7 +356,7 @@ static int32_t sys_ipc_wait_any(const uint32_t *args) {
         return -EINVAL;
     }
 
-    if (!perm_check_name(proc, PERM_NODE_IPC_RECV)) {
+    if (!cap_check(proc, CAP_IPC_RECV)) {
         return -EPERM;
     }
 

@@ -13,7 +13,7 @@
 #include <xnix/kerr.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
 #include <xnix/string.h>
@@ -267,15 +267,28 @@ static void spawn_inherit_all_handles(struct process *dst, struct process *src) 
  */
 static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
                         const struct spawn_handle *handles, uint32_t handle_count,
-                        struct perm_profile *profile, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
-                        uint32_t flags) {
-    struct process *proc = (struct process *)process_create(name, profile);
+                        const struct spawn_caps *caps, int argc,
+                        char argv[][ABI_EXEC_MAX_ARG_LEN], uint32_t flags) {
+    struct process *proc = (struct process *)process_create(name, caps);
     if (!proc) {
         pr_err("Failed to create process");
         return PID_INVALID;
     }
 
     struct process *creator = process_get_current();
+
+    /* caps=NULL: 继承父进程的全部能力 (过渡期兼容) */
+    if (!caps && creator) {
+        proc->cap_mask = creator->cap_mask;
+        proc->irq_mask = creator->irq_mask;
+        if (creator->ioport_bitmap) {
+            proc->ioport_bitmap = kzalloc(8192);
+            if (proc->ioport_bitmap) {
+                memcpy(proc->ioport_bitmap, creator->ioport_bitmap, 8192);
+            }
+        }
+    }
+
     spawn_setup_parent(proc, creator);
 
     /* 传递 handles */
@@ -357,15 +370,13 @@ static pid_t spawn_core(const char *name, void *elf_data, uint32_t elf_size,
  */
 
 pid_t process_spawn_init(void *elf_data, uint32_t elf_size) {
-    /* init 进程不使用 named profile, 直接使用 NULL profile.
-     * spawn_core 创建进程后, init 的 perm_state 通过 perm_grant("xnix.*") 获得全权限.
-     * 详见 boot_start_services() */
+    /* init 进程传 NULL caps, 由 boot_start_services() 直接赋予 CAP_ALL */
     return spawn_core("init", elf_data, elf_size, NULL, 0, NULL, 0, NULL, ABI_EXEC_INHERIT_ALL);
 }
 
 pid_t process_spawn(const char *name, void *elf_data, uint32_t elf_size,
                     const struct spawn_handle *handles, uint32_t handle_count,
-                    struct perm_profile *profile, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
+                    const struct spawn_caps *caps, int argc, char argv[][ABI_EXEC_MAX_ARG_LEN],
                     uint32_t flags) {
-    return spawn_core(name, elf_data, elf_size, handles, handle_count, profile, argc, argv, flags);
+    return spawn_core(name, elf_data, elf_size, handles, handle_count, caps, argc, argv, flags);
 }

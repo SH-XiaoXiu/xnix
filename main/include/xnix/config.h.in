@@ -46,9 +46,8 @@
 /* IRQ 配置 */
 #define CFG_IRQ_USER_BUF_SIZE @CFG_IRQ_USER_BUF_SIZE@
 
-/* 进程/权限配置 */
+/* 进程配置 */
 #define CFG_PROCESS_MUTEX_SLOTS @CFG_PROCESS_MUTEX_SLOTS@
-#define CFG_PERM_MAX_PROFILES   @CFG_PERM_MAX_PROFILES@
 
 /* 日志配置 */
 #define CFG_KMSG_BUF_SIZE  @CFG_KMSG_BUF_SIZE@

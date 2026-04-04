@@ -13,7 +13,8 @@ set(SDK_HEADERS
         ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/framebuffer.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/handle.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/ipc.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/perm.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/cap.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/io.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/process.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/stdint.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/xnix/abi/syscall.h

@@ -8,7 +8,7 @@
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/mm_ops.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/physmem.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
@@ -139,7 +139,7 @@ static int32_t sys_mmap_phys(const uint32_t *args) {
         return -EINVAL;
     }
 
-    if (!perm_check_name(proc, PERM_NODE_MM_MMAP)) {
+    if (!cap_check(proc, CAP_MM_MMAP)) {
         return -EPERM;
     }
 
@@ -211,7 +211,7 @@ static int32_t sys_physmem_info(const uint32_t *args) {
         return -EINVAL;
     }
 
-    if (!perm_check_name(proc, PERM_NODE_MM_MMAP)) {
+    if (!cap_check(proc, CAP_MM_MMAP)) {
         return -EPERM;
     }
 
@@ -266,7 +266,7 @@ static int32_t sys_shm_create(const uint32_t *args) {
         return -EINVAL;
     }
 
-    if (!perm_check_name(proc, PERM_NODE_MM_MMAP)) {
+    if (!cap_check(proc, CAP_MM_MMAP)) {
         return -EPERM;
     }
 

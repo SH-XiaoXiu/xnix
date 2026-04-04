@@ -5,7 +5,7 @@
 #include <xnix/abi/syscall.h>
 #include <xnix/errno.h>
 #include <xnix/handle.h>
-#include <xnix/perm.h>
+#include <xnix/cap.h>
 #include <xnix/process.h>
 #include <xnix/process_def.h>
 #include <xnix/stdio.h>
@@ -69,7 +69,7 @@ static int32_t sys_handle_grant(const uint32_t *args) {
     uint32_t        rights  = args[3];
     struct process *src     = (struct process *)process_current();
 
-    if (!perm_check_name(src, PERM_NODE_HANDLE_GRANT)) {
+    if (!cap_check(src, CAP_HANDLE_GRANT)) {
         return -EPERM;
     }
 
