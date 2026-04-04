@@ -9,8 +9,6 @@
 #include <xnix/abi/handle.h>
 #include <xnix/abi/stdint.h>
 
-#define ABI_SPAWN_PROFILE_LEN 32
-
 /*
  * Handle 继承标志(用于 abi_exec_args.flags / abi_exec_image_args.flags)
  */
@@ -18,7 +16,7 @@
 #define ABI_EXEC_INHERIT_STDIO   0x01  /* 自动继承 stdin/stdout/stderr */
 #define ABI_EXEC_INHERIT_NAMED   0x02  /* 继承父进程所有有名称的 handle */
 #define ABI_EXEC_INHERIT_ALL     0x04  /* 继承父进程所有 handle */
-#define ABI_EXEC_INHERIT_PERM    0x08  /* 继承父进程权限(忽略 profile_name)*/
+#define ABI_EXEC_INHERIT_PERM    0x08  /* 继承父进程权限 */
 
 /*
  * exec 系统调用参数限制
@@ -34,7 +32,6 @@
  */
 struct abi_exec_args {
     char                path[ABI_EXEC_PATH_MAX];                       /* 可执行文件路径 */
-    char                profile_name[ABI_SPAWN_PROFILE_LEN];           /* 权限 profile 名称 */
     int32_t             argc;                                          /* 参数数量 */
     char                argv[ABI_EXEC_MAX_ARGS][ABI_EXEC_MAX_ARG_LEN]; /* 参数数组 */
     uint32_t            flags;                                         /* 执行标志(保留) */
@@ -47,7 +44,6 @@ struct abi_exec_args {
  */
 struct abi_exec_image_args {
     char                name[ABI_PROC_NAME_MAX];                       /* 进程名称 */
-    char                profile_name[ABI_SPAWN_PROFILE_LEN];           /* 权限 profile 名称 */
     uint32_t            elf_ptr;                                       /* ELF 镜像地址 */
     uint32_t            elf_size;                                      /* ELF 镜像大小 */
     int32_t             argc;                                          /* 参数数量 */

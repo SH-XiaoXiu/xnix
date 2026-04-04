@@ -201,8 +201,6 @@ static bool ini_handler(const char *section, const char *key, const char *value,
         return true;
     }
 
-    /* [profile.*] 段: 忽略 (profile 系统已移除, 能力通过 caps 直接传递) */
-
     return true;
 }
 

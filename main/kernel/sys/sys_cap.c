@@ -2,7 +2,6 @@
  * @file sys_perm.c
  * @brief 能力 (Capability) 相关系统调用
  *
- * 沿用 SYS_PERM_* 编号保持 ABI 兼容.
  */
 
 #include <sys/syscall.h>
@@ -65,16 +64,9 @@ static int32_t sys_cap_query(const uint32_t *args) {
     return (int32_t)proc->cap_mask;
 }
 
-static int32_t sys_stub_enosys(const uint32_t *args) {
-    (void)args;
-    return -ENOSYS;
-}
-
-void sys_perm_init(void) {
-    syscall_register(SYS_PERM_CHECK, sys_cap_check, 1, "cap_check");
-    syscall_register(SYS_PERM_PROFILE_CREATE, sys_stub_enosys, 1, "stub");
-    syscall_register(SYS_PERM_GRANT, sys_cap_grant, 2, "cap_grant");
-    syscall_register(SYS_PERM_REVOKE, sys_cap_revoke, 2, "cap_revoke");
-    syscall_register(SYS_PERM_QUERY, sys_cap_query, 2, "cap_query");
-    syscall_register(SYS_PERM_PROFILE_ADD_RULES, sys_stub_enosys, 3, "stub");
+void sys_cap_init(void) {
+    syscall_register(SYS_CAP_CHECK, sys_cap_check, 1, "cap_check");
+    syscall_register(SYS_CAP_GRANT, sys_cap_grant, 2, "cap_grant");
+    syscall_register(SYS_CAP_REVOKE, sys_cap_revoke, 2, "cap_revoke");
+    syscall_register(SYS_CAP_QUERY, sys_cap_query, 2, "cap_query");
 }

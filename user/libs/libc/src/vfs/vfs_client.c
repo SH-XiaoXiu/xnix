@@ -6,8 +6,8 @@
  * 文件操作使用统一 fd 表.
  */
 
+#include <xnix/abi/io.h>
 #include <xnix/protocol/devfs.h>
-#include <xnix/protocol/tty.h>
 #include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <stddef.h>
@@ -143,14 +143,14 @@ int vfs_open(const char *path, uint32_t flags) {
  */
 int vfs_close(int fd) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->session == 0) {
+    if (!ent) {
         return -EBADF;
     }
 
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
-    msg.regs.data[0] = UDM_VFS_CLOSE;
+    msg.regs.data[0] = IO_CLOSE;
     msg.regs.data[1] = ent->session;
 
     sys_ipc_call(ent->handle, &msg, &reply, 1000);
@@ -160,45 +160,12 @@ int vfs_close(int fd) {
 }
 
 /**
- * 读取文件(直接与 FS 驱动通信) - 使用统一 fd 表
- * 注意: 对于 TTY 设备，使用 TTY IPC 协议
+ * 读取文件(直接与 FS 驱动通信) - 使用统一 IO 协议
  */
 ssize_t vfs_read(int fd, void *buf, size_t size) {
     struct fd_entry *ent = fd_get(fd);
     if (!ent) {
         return -EBADF;
-    }
-
-    /* 对于 stream (session == 0)，使用 TTY 协议读取 */
-    if (ent->session == 0) {
-        if (!buf || size == 0) {
-            return 0;
-        }
-        struct ipc_message req   = {0};
-        struct ipc_message reply = {0};
-        char               recv_buf[64];
-
-        req.regs.data[0] = TTY_OP_READ;
-        req.regs.data[1] = (uint32_t)size;
-
-        size_t recv_size  = (size < sizeof(recv_buf)) ? size : sizeof(recv_buf);
-        reply.buffer.data = (uint64_t)(uintptr_t)recv_buf;
-        reply.buffer.size = (uint32_t)recv_size;
-
-        int ret = sys_ipc_call(ent->handle, &req, &reply, 0);
-        if (ret < 0) {
-            return -EIO;
-        }
-
-        int count = (int)reply.regs.data[0];
-        if (count <= 0) {
-            return count;
-        }
-        if ((size_t)count > size) {
-            count = (int)size;
-        }
-        memcpy(buf, recv_buf, (size_t)count);
-        return count;
     }
 
     if (!buf || size == 0) {
@@ -208,7 +175,7 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
-    msg.regs.data[0] = UDM_VFS_READ;
+    msg.regs.data[0] = IO_READ;
     msg.regs.data[1] = ent->session;
     msg.regs.data[2] = ent->offset;
     msg.regs.data[3] = size;
@@ -216,12 +183,15 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
     reply.buffer.data = (uint64_t)(uintptr_t)buf;
     reply.buffer.size = (uint32_t)size;
 
-    int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
+    /* stream (session==0): infinite wait for input; file: 5s timeout */
+    uint32_t timeout = (ent->session == 0) ? 0 : 5000;
+
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, timeout);
     if (ret < 0) {
         return ret;
     }
 
-    int32_t result = (int32_t)reply.regs.data[1];
+    int32_t result = (int32_t)reply.regs.data[0];
     if (result < 0) {
         return result;
     }
@@ -233,11 +203,11 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
 }
 
 /**
- * 写入文件(直接与 FS 驱动通信) - 使用统一 fd 表
+ * 写入文件(直接与 FS 驱动通信) - 使用统一 IO 协议
  */
 ssize_t vfs_write(int fd, const void *buf, size_t size) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->session == 0) {
+    if (!ent) {
         return -EBADF;
     }
 
@@ -248,7 +218,7 @@ ssize_t vfs_write(int fd, const void *buf, size_t size) {
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
-    msg.regs.data[0] = UDM_VFS_WRITE;
+    msg.regs.data[0] = IO_WRITE;
     msg.regs.data[1] = ent->session;
     msg.regs.data[2] = ent->offset;
     msg.regs.data[3] = size;
@@ -260,7 +230,7 @@ ssize_t vfs_write(int fd, const void *buf, size_t size) {
         return ret;
     }
 
-    int32_t result = (int32_t)reply.regs.data[1];
+    int32_t result = (int32_t)reply.regs.data[0];
     if (result > 0) {
         ent->offset += result;
     }

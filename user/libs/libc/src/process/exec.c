@@ -87,11 +87,6 @@ int sys_exec(struct abi_exec_args *args) {
     struct abi_exec_image_args img_args;
     memset(&img_args, 0, sizeof(img_args));
     derive_proc_name(img_args.name, args->path);
-    if (args->profile_name[0] != '\0') {
-        size_t profile_len = strnlen(args->profile_name, ABI_SPAWN_PROFILE_LEN - 1);
-        memcpy(img_args.profile_name, args->profile_name, profile_len);
-        img_args.profile_name[profile_len] = '\0';
-    }
     img_args.elf_ptr  = (uint32_t)(uintptr_t)elf;
     img_args.elf_size = st.size;
     img_args.flags    = args->flags;

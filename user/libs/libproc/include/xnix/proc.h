@@ -30,11 +30,6 @@ void proc_init(struct proc_builder *b, const char *path);
 void proc_new(struct proc_builder *b, const char *path);
 
 /**
- * 设置 profile
- */
-void proc_set_profile(struct proc_builder *b, const char *profile);
-
-/**
  * 设置 flags
  */
 void proc_set_flags(struct proc_builder *b, uint32_t flags);
@@ -112,11 +107,6 @@ struct proc_image_builder {
  */
 void proc_image_init(struct proc_image_builder *b, const char *name,
                      const void *elf_data, size_t elf_size);
-
-/**
- * 设置 profile
- */
-void proc_image_set_profile(struct proc_image_builder *b, const char *profile);
 
 /**
  * 设置 flags

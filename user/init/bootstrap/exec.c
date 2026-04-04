@@ -8,17 +8,13 @@
 #include <xnix/proc.h>
 
 int bootstrap_exec(const void *elf_data, size_t elf_size, const char *name, char **argv,
-                   const struct spawn_handle *handles, int handle_count, const char *profile_name) {
+                   const struct spawn_handle *handles, int handle_count) {
     if (!elf_data || elf_size == 0) {
         return -1;
     }
 
     struct proc_image_builder b;
     proc_image_init(&b, name, elf_data, elf_size);
-
-    if (profile_name) {
-        proc_image_set_profile(&b, profile_name);
-    }
 
     for (int i = 0; i < handle_count; i++) {
         proc_image_add_handle(&b, handles[i].src, handles[i].name);

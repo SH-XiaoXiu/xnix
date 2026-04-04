@@ -5,7 +5,7 @@
  * 循环读取 kmsg 内核日志,转发到 tty 终端输出.
  */
 
-#include <xnix/protocol/tty.h>
+#include <xnix/abi/io.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -27,13 +27,17 @@ static void tty_write(const char *s, uint32_t len) {
     }
 
     struct ipc_message msg;
+    struct ipc_message reply;
     memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = TTY_OP_WRITE;
-    msg.regs.data[1] = len;
+    memset(&reply, 0, sizeof(reply));
+    msg.regs.data[0] = IO_WRITE;
+    msg.regs.data[1] = 0; /* session */
+    msg.regs.data[2] = 0; /* offset */
+    msg.regs.data[3] = len;
     msg.buffer.data  = (uint64_t)(uintptr_t)s;
     msg.buffer.size  = len;
 
-    sys_ipc_send(g_tty_ep, &msg, 100);
+    sys_ipc_call(g_tty_ep, &msg, &reply, 100);
 }
 
 /**

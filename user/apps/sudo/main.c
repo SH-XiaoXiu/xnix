@@ -2,9 +2,9 @@
  * @file main.c
  * @brief sudo: 权限提升客户端
  *
- * Usage: sudo [--profile=<name>] <command> [args...]
+ * Usage: sudo <command> [args...]
  *
- * 通过 sudod 以提升的 profile 执行指定命令.
+ * 通过 sudod 以提升的能力执行指定命令.
  */
 
 #include <xnix/protocol/sudo.h>
@@ -54,16 +54,8 @@ static int find_in_path(const char *name, char *out, size_t out_size) {
 }
 
 int main(int argc, char **argv) {
-    const char *profile   = "sudo"; /* 默认提升到 sudo profile */
-    int         cmd_start = 1;
-
-    if (argc > 1 && strncmp(argv[1], "--profile=", 10) == 0) {
-        profile   = argv[1] + 10;
-        cmd_start = 2;
-    }
-
-    if (cmd_start >= argc) {
-        printf("Usage: sudo [--profile=<name>] <command> [args...]\n");
+    if (argc < 2) {
+        printf("Usage: sudo <command> [args...]\n");
         return 1;
     }
 
@@ -81,17 +73,16 @@ int main(int argc, char **argv) {
 
     /* 路径解析 */
     char path[ABI_EXEC_PATH_MAX];
-    if (find_in_path(argv[cmd_start], path, sizeof(path)) < 0) {
-        printf("sudo: %s: command not found\n", argv[cmd_start]);
+    if (find_in_path(argv[1], path, sizeof(path)) < 0) {
+        printf("sudo: %s: command not found\n", argv[1]);
         return 1;
     }
 
     /* 使用 proc_builder 构建 exec_args */
     struct proc_builder b;
     proc_new(&b, path);
-    proc_set_profile(&b, profile);
     proc_inherit_named(&b);
-    for (int i = cmd_start; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         proc_add_arg(&b, argv[i]);
     }
 

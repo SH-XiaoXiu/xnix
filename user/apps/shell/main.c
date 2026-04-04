@@ -5,6 +5,7 @@
 
 #include "path.h"
 
+#include <xnix/abi/io.h>
 #include <xnix/protocol/tty.h>
 #include <xnix/protocol/vfs.h>
 #include <errno.h>
@@ -101,9 +102,10 @@ static void shell_set_foreground(pid_t pid) {
     }
     struct ipc_message msg;
     memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = TTY_OP_IOCTL;
-    msg.regs.data[1] = TTY_IOCTL_SET_FOREGROUND;
-    msg.regs.data[2] = (uint32_t)pid;
+    msg.regs.data[0] = IO_IOCTL;
+    msg.regs.data[1] = 0; /* session */
+    msg.regs.data[2] = TTY_IOCTL_SET_FOREGROUND;
+    msg.regs.data[3] = (uint32_t)pid;
 
     struct ipc_message reply = {0};
     sys_ipc_call(g_tty_ep, &msg, &reply, 100);

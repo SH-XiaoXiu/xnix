@@ -2,7 +2,7 @@
  * @file cap.c
  * @brief 能力 (Capability) 检查实现
  *
- * 整个能力系统的内核实现. 用位图 AND 替代字符串匹配 + Profile + 通配符.
+ * 整个能力系统的内核实现. 基于 uint32_t 位图做能力检查与子集验证.
  */
 
 #include <xnix/cap.h>

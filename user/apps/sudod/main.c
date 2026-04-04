@@ -2,8 +2,8 @@
  * @file main.c
  * @brief sudod: 权限提升守护进程
  *
- * 由 init 以 "sudo" profile (xnix.*) 启动.
- * 监听 "sudo_ep" endpoint, 接收执行请求并以指定 profile 创建进程.
+ * 由 init 以提升的能力启动.
+ * 监听 "sudo_ep" endpoint, 接收执行请求并以提升的能力创建进程.
  *
  * 当前为原型实现: 允许所有请求, 无认证检查.
  */

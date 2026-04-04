@@ -26,15 +26,6 @@ void proc_new(struct proc_builder *b, const char *path) {
     proc_inherit_stdio(b);
 }
 
-void proc_set_profile(struct proc_builder *b, const char *profile) {
-    size_t len = strlen(profile);
-    if (len >= ABI_SPAWN_PROFILE_LEN) {
-        len = ABI_SPAWN_PROFILE_LEN - 1;
-    }
-    memcpy(b->args.profile_name, profile, len);
-    b->args.profile_name[len] = '\0';
-}
-
 void proc_set_flags(struct proc_builder *b, uint32_t flags) {
     b->args.flags = flags;
 }
@@ -178,15 +169,6 @@ void proc_image_init(struct proc_image_builder *b, const char *name,
         memcpy(b->args.name, name, len);
         b->args.name[len] = '\0';
     }
-}
-
-void proc_image_set_profile(struct proc_image_builder *b, const char *profile) {
-    size_t len = strlen(profile);
-    if (len >= ABI_SPAWN_PROFILE_LEN) {
-        len = ABI_SPAWN_PROFILE_LEN - 1;
-    }
-    memcpy(b->args.profile_name, profile, len);
-    b->args.profile_name[len] = '\0';
 }
 
 void proc_image_set_flags(struct proc_image_builder *b, uint32_t flags) {

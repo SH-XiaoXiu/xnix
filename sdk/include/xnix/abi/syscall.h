@@ -1,6 +1,6 @@
 /**
  * @file abi/syscall.h
- * @brief 系统调用号定义(Handle + Permission 模型)
+ * @brief 系统调用号定义(Handle + Capability 模型)
  *
  * 重新组织的系统调用分类,基于微内核机制设计.
  */
@@ -12,10 +12,10 @@
  * 系统调用分类(使用清晰的编号范围)
  *
  * 设计原则:
- *   - 内核只提供机制(IPC, 调度, 内存, 句柄, 权限)
+ *   - 内核只提供机制(IPC, 调度, 内存, 句柄, 能力)
  *   - 策略由用户态服务实现
- *   - Handle 和 Permission 分离检查
- *   - I/O 端口访问基于权限(无需 handle)
+ *   - Handle 和 Capability 分离检查
+ *   - I/O 端口访问基于能力位(无需 handle)
  */
 
 /* IPC (100-119) */
@@ -51,20 +51,18 @@
 #define SYS_HANDLE_DUPLICATE 403 /* 复制 handle: ebx=src, ecx=dst_hint, edx=name */
 #define SYS_HANDLE_LIST      404 /* 列出 handle: ebx=buf, ecx=max_count, 返回条目数 */
 
-/* 权限 (420-439) */
-#define SYS_PERM_CHECK          420 /* 检查权限: ebx=perm_id */
-#define SYS_PERM_PROFILE_CREATE 421 /* 创建权限 profile: ebx=abi_profile_create_args* */
-#define SYS_PERM_GRANT          422 /* 委托权限: ebx=pid, ecx=node_ptr */
-#define SYS_PERM_REVOKE         423 /* 撤销权限: ebx=pid, ecx=node_ptr */
-#define SYS_PERM_QUERY          424 /* 查询权限: ebx=buf, ecx=max_count, 返回条目数 */
-#define SYS_PERM_PROFILE_ADD_RULES 425 /* 追加规则: ebx=profile_name, ecx=rules, edx=count */
+/* 能力 (420-439) */
+#define SYS_CAP_CHECK  420 /* 检查能力: ebx=cap_bit */
+#define SYS_CAP_GRANT  422 /* 委托能力: ebx=pid, ecx=cap_bits */
+#define SYS_CAP_REVOKE 423 /* 撤销能力: ebx=pid, ecx=cap_bits */
+#define SYS_CAP_QUERY  424 /* 查询能力: 返回当前进程 cap_mask */
 
-/* 硬件访问 (500-519) - 基于权限 */
-#define SYS_IOPORT_OUTB 500 /* 写端口 8位: ebx=port, ecx=val (需 xnix.io.port.<port> 权限) */
+/* 硬件访问 (500-519) - 基于能力位 */
+#define SYS_IOPORT_OUTB 500 /* 写端口 8位: ebx=port, ecx=val (需 CAP_IO_PORT) */
 #define SYS_IOPORT_INB  501 /* 读端口 8位: ebx=port */
 #define SYS_IOPORT_OUTW 502 /* 写端口 16位: ebx=port, ecx=val */
 #define SYS_IOPORT_INW  503 /* 读端口 16位: ebx=port */
-#define SYS_IRQ_BIND    504 /* 绑定 IRQ: ebx=irq, ecx=notif_handle (需 xnix.irq.<n> 权限) */
+#define SYS_IRQ_BIND    504 /* 绑定 IRQ: ebx=irq, ecx=notif_handle (需 CAP_IRQ) */
 #define SYS_IRQ_UNBIND  505 /* 解绑 IRQ: ebx=irq */
 #define SYS_IRQ_WAIT    506 /* 等待 IRQ: ebx=notif_handle */
 #define SYS_IRQ_READ    507 /* 读取 IRQ 数据: ebx=irq, ecx=buf, edx=size, esi=flags */

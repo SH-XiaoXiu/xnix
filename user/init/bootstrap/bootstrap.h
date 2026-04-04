@@ -23,11 +23,10 @@
  * @param argv 参数数组(可为 NULL)
  * @param handles handle 传递数组
  * @param handle_count handle 数量
- * @param profile_name 权限 profile 名称
  * @return 进程 PID,负数失败
  */
 struct spawn_handle;
 int bootstrap_exec(const void *elf_data, size_t elf_size, const char *name, char **argv,
-                   const struct spawn_handle *handles, int handle_count, const char *profile_name);
+                   const struct spawn_handle *handles, int handle_count);
 
 #endif /* BOOTSTRAP_H */

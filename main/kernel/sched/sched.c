@@ -196,8 +196,6 @@ void sched_init(void) {
     /* 初始化 idle 线程 */
     thread_init_idle();
 
-    /* 注册 THREAD 能力类型(已废弃,改为 Handle) */
-    /* cap_register_type(CAP_TYPE_THREAD, ...); */
 }
 
 void sched_set_policy(struct sched_policy *policy) {

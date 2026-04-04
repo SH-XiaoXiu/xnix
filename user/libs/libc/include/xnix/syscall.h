@@ -117,7 +117,7 @@ static inline int sys_handle_duplicate(uint32_t src, uint32_t dst_hint, const ch
  * @return 0 有能力, -1 无能力(设置 errno)
  */
 static inline int sys_cap_check(uint32_t cap_bit) {
-    int ret = syscall1(SYS_PERM_CHECK, cap_bit);
+    int ret = syscall1(SYS_CAP_CHECK, cap_bit);
     if (ret < 0) {
         errno = -ret;
         return -1;
@@ -632,7 +632,7 @@ static inline int sys_kmsg_read(uint32_t *seq, char *buf, uint32_t size) {
  * @return cap_mask (uint32_t, 每 bit 一个 CAP_*)
  */
 static inline uint32_t sys_cap_query(void) {
-    return (uint32_t)syscall2(SYS_PERM_QUERY, 0, 0);
+    return (uint32_t)syscall2(SYS_CAP_QUERY, 0, 0);
 }
 
 /**
@@ -643,7 +643,7 @@ static inline uint32_t sys_cap_query(void) {
  * @return 0 成功, -1 失败(设置 errno)
  */
 static inline int sys_cap_grant_to(pid_t pid, uint32_t cap_bits) {
-    int ret = syscall2(SYS_PERM_GRANT, (uint32_t)pid, cap_bits);
+    int ret = syscall2(SYS_CAP_GRANT, (uint32_t)pid, cap_bits);
     if (ret < 0) {
         errno = -ret;
         return -1;
@@ -659,7 +659,7 @@ static inline int sys_cap_grant_to(pid_t pid, uint32_t cap_bits) {
  * @return 0 成功, -1 失败(设置 errno)
  */
 static inline int sys_cap_revoke_from(pid_t pid, uint32_t cap_bits) {
-    int ret = syscall2(SYS_PERM_REVOKE, (uint32_t)pid, cap_bits);
+    int ret = syscall2(SYS_CAP_REVOKE, (uint32_t)pid, cap_bits);
     if (ret < 0) {
         errno = -ret;
         return -1;

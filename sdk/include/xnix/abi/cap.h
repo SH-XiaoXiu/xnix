@@ -5,9 +5,6 @@
  * 内核强制的能力位图. 每个进程持有一个 uint32_t cap_mask,
  * 每 bit 对应一个内核级能力. 其他"权限"靠 handle 控制:
  * 没有 handle 就访问不了对应的服务.
- *
- * 内核只管硬件/CPU 特权相关的能力, 不做字符串匹配,
- * 不做 Profile, 不做通配符.
  */
 
 #ifndef XNIX_ABI_CAP_H

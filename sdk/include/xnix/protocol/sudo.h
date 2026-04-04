@@ -9,7 +9,7 @@
 #define XNIX_PROTOCOL_SUDO_H
 
 /* sudod IPC 操作码 */
-#define SUDO_OP_EXEC       0x5001 /* 请求以指定 profile 执行程序 */
+#define SUDO_OP_EXEC       0x5001 /* 请求以指定能力执行程序 */
 #define SUDO_OP_EXEC_REPLY 0x5002 /* 返回 PID */
 
 /*

@@ -38,7 +38,6 @@ static const char *kerr_messages[] = {
     [ENOSYS]       = "function not implemented",
     [ENOTEMPTY]    = "directory not empty",
     [ENOHANDLE]    = "invalid handle",
-    [ENOPERM_NODE] = "permission node not found",
     [EENDPOINT]    = "invalid endpoint",
     [ETIMEOUT]     = "timed out",
 };

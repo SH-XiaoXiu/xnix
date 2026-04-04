@@ -78,7 +78,6 @@ static const char *error_messages[] = {
     [XNIX_ENOTCONN]        = "Transport endpoint not connected",
     [XNIX_ESHUTDOWN]       = "Endpoint has been shut down",
     [XNIX_ENOHANDLE]       = "Invalid handle",
-    [XNIX_ENOPERM_NODE]    = "Permission node not found",
     [XNIX_EENDPOINT]       = "Invalid endpoint",
     [XNIX_ETIMEOUT]        = "Operation timed out",
 };

@@ -92,7 +92,6 @@
 #define XNIX_ENOTCONN     60 /* Transport endpoint not connected */
 #define XNIX_ESHUTDOWN    61 /* Endpoint has been shut down */
 #define XNIX_ENOHANDLE    62 /* Invalid handle */
-#define XNIX_ENOPERM_NODE 63 /* Permission node not found */
 #define XNIX_EENDPOINT    64 /* Invalid endpoint */
 #define XNIX_ETIMEOUT     65 /* Operation timed out */
 
@@ -171,7 +170,6 @@
 #define ENOTCONN        XNIX_ENOTCONN
 #define ESHUTDOWN       XNIX_ESHUTDOWN
 #define ENOHANDLE       XNIX_ENOHANDLE
-#define ENOPERM_NODE    XNIX_ENOPERM_NODE
 #define EENDPOINT       XNIX_EENDPOINT
 #define ETIMEOUT        XNIX_ETIMEOUT
 #define EWOULDBLOCK     XNIX_EWOULDBLOCK
