@@ -184,6 +184,15 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
 
         pr_debug("[IPC] send -> recv: sender=%d receiver=%d\n", current->tid, receiver->tid);
 
+        /* 检查 NOREPLY 标志 */
+        bool no_reply = (msg->flags & IPC_FLAG_NOREPLY) != 0;
+
+        /* NOREPLY: 不保存状态,不阻塞,立即返回 */
+        if (no_reply) {
+            pr_debug("[IPC] send NOREPLY: sender=%d receiver=%d\n", current->tid, receiver->tid);
+            return 0;
+        }
+
         /* 保存发送和回复缓冲区 */
         current->ipc_req_msg   = msg;
         current->ipc_reply_msg = reply_buf;
@@ -205,9 +214,19 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
 
     pr_debug("[IPC] send enqueue: sender=%d ep=%p\n", current->tid, ep);
 
+    /* 检查 NOREPLY 标志 */
+    bool no_reply = (msg->flags & IPC_FLAG_NOREPLY) != 0;
+
     /* 保存状态 */
     current->ipc_req_msg   = msg;
     current->ipc_reply_msg = reply_buf;
+
+    /* NOREPLY: 不阻塞,标记自己为 no-reply,立即返回 */
+    if (no_reply) {
+        pr_debug("[IPC] send NOREPLY enqueued: sender=%d ep=%p\n", current->tid, ep);
+        current->ipc_req_msg = NULL;  /* 标记: 不期望回复 */
+        return 0;
+    }
 
     /* 阻塞等待接收者 */
     if (!sched_block_timeout(current, timeout_ms)) {
@@ -328,6 +347,16 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
         msg->sender_tid   = sender->tid; /* 填充 sender_tid 用于延迟回复 */
 
         pr_debug("[IPC] recv <- send: receiver=%d sender=%d\n", current->tid, sender->tid);
+
+        /* 检查发送者是否为 NOREPLY (ipc_req_msg == NULL) */
+        bool sender_no_reply = (sender->ipc_req_msg == NULL);
+
+        /* NOREPLY 发送者: 不期望回复,发送者已经返回 */
+        if (sender_no_reply) {
+            pr_debug("[IPC] recv from NOREPLY sender: receiver=%d sender=%d\n", current->tid, sender->tid);
+            handle_object_put(entry.type, entry.object);
+            return 0;
+        }
 
         /* 注意 不要唤醒 Sender!!!!!!!!!!!!!!!!!!!!!! Sender 继续阻塞等待 Reply */
         /* 只从 send_queue 移除了 Sender, 但它依然在 blocked_list 中 (wait_chan=Sender) */

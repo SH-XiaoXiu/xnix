@@ -52,6 +52,26 @@ int ipc_send_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout
     return 0;
 }
 
+int ipc_send_simple_noreply(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout) {
+    if (ep == HANDLE_INVALID) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    struct abi_ipc_message msg = {0};
+
+    msg.regs.data[0] = opcode;
+    msg.regs.data[1] = arg;
+    msg.flags = ABI_IPC_FLAG_NOREPLY;
+
+    int ret = sys_ipc_send(ep, (struct ipc_message *)&msg, timeout);
+    if (ret < 0) {
+        return -1; /* errno 已由系统调用包装器设置 */
+    }
+
+    return 0;
+}
+
 void ipc_builder_init(struct ipc_builder *builder, uint32_t opcode) {
     if (!builder) {
         return;

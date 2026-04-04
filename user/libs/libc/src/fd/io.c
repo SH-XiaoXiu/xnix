@@ -54,6 +54,16 @@ static ssize_t write_io(struct fd_entry *ent, const void *buf, size_t n) {
 
     uint32_t timeout = (ent->session == 0) ? 200 : 5000;
 
+    /* TTY 设备 (session == 0) 使用 NOREPLY 提高流式写入性能 */
+    if (ent->session == 0) {
+        msg.flags = ABI_IPC_FLAG_NOREPLY;
+        int ret = sys_ipc_send(ent->handle, &msg, timeout);
+        if (ret < 0) { errno = EIO; return -1; }
+        /* 不等待回复,假设流式写入成功 */
+        return (ssize_t)n;
+    }
+
+    /* 普通 IO: call with reply */
     int ret = sys_ipc_call(ent->handle, &msg, &reply, timeout);
     if (ret < 0) { errno = EIO; return -1; }
 

@@ -19,6 +19,7 @@
 #include <xnix/protocol/tty.h>
 #include <pthread.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -828,9 +829,12 @@ static void *tty_thread(void *arg) {
         }
 
         int ret = tty_handle_msg(tty, &msg);
-        if (ret == 0) {
+        /* 检查是否为 NOREPLY 消息 */
+        bool was_noreply = (msg.flags & ABI_IPC_FLAG_NOREPLY) != 0;
+        if (ret == 0 && !was_noreply) {
             sys_ipc_reply(&msg);
         }
+        /* NOREPLY: 跳过回复,发送者已经返回 */
     }
     return NULL;
 }

@@ -40,6 +40,7 @@ struct ipc_message {
 /* 消息标志 */
 #define IPC_FLAG_NO_BLOCK ABI_IPC_FLAG_NONBLOCK
 #define IPC_FLAG_TIMEOUT  ABI_IPC_FLAG_TIMEOUT
+#define IPC_FLAG_NOREPLY  ABI_IPC_FLAG_NOREPLY
 
 /*
  * 错误处理

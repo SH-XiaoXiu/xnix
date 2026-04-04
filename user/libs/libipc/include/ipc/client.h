@@ -61,6 +61,17 @@ int ipc_call_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t *result
 int ipc_send_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout);
 
 /**
+ * 简单的单参数单向消息 (NOEPLY, fire-and-forget)
+ *
+ * @param ep      Endpoint handle
+ * @param opcode  操作码
+ * @param arg     参数
+ * @param timeout 超时(毫秒,0 表示无限等待)
+ * @return 0 成功,负数失败
+ */
+int ipc_send_simple_noreply(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout);
+
+/**
  * Builder 模式(栈上分配)
  */
 
