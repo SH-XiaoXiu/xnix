@@ -29,7 +29,7 @@ int svc_connect(const char *service_name) {
         return -1;
     }
 
-    if (!fd_install(fd, h, FD_TYPE_IPC, FD_FLAG_READ | FD_FLAG_WRITE)) {
+    if (!fd_install(fd, h, 0, 0, FD_FLAG_READ | FD_FLAG_WRITE)) {
         fd_free(fd);
         errno = EMFILE;
         return -1;
@@ -51,7 +51,7 @@ int svc_create(const char *service_name) {
         return -1;
     }
 
-    if (!fd_install(fd, (handle_t)ep, FD_TYPE_IPC, FD_FLAG_READ | FD_FLAG_WRITE)) {
+    if (!fd_install(fd, (handle_t)ep, 0, 0, FD_FLAG_READ | FD_FLAG_WRITE)) {
         sys_handle_close((uint32_t)ep);
         fd_free(fd);
         errno = EMFILE;
@@ -63,7 +63,7 @@ int svc_create(const char *service_name) {
 
 int svc_send(int fd, const void *msg, size_t len) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->type != FD_TYPE_IPC) {
+    if (!ent) {
         errno = EBADF;
         return -1;
     }
@@ -82,7 +82,7 @@ int svc_send(int fd, const void *msg, size_t len) {
 
 int svc_recv(int fd, void *msg, size_t len) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->type != FD_TYPE_IPC) {
+    if (!ent) {
         errno = EBADF;
         return -1;
     }

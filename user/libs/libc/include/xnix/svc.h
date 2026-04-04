@@ -24,7 +24,7 @@ int svc_notify_ready(const char *name);
 /**
  * 连接到已有服务(按名称查找 endpoint)
  *
- * 查找名称对应的 IPC endpoint handle,包装为 FD_TYPE_IPC 的 fd.
+ * 查找名称对应的 IPC endpoint handle,包装为 fd.
  *
  * @param service_name endpoint 名称(如 "vfs_ep", "sudo_ep")
  * @return fd >= 0 成功, -1 失败(设置 errno)
@@ -34,7 +34,7 @@ int svc_connect(const char *service_name);
 /**
  * 创建服务 endpoint 并返回 fd
  *
- * 创建新的 IPC endpoint,包装为 FD_TYPE_IPC 的 fd.
+ * 创建新的 IPC endpoint,包装为 fd.
  *
  * @param service_name endpoint 名称
  * @return fd >= 0 成功, -1 失败(设置 errno)
@@ -44,7 +44,7 @@ int svc_create(const char *service_name);
 /**
  * 通过 fd 发送 IPC 消息
  *
- * @param fd   FD_TYPE_IPC 的文件描述符
+ * @param fd   IPC 文件描述符
  * @param msg  消息缓冲区
  * @param len  消息长度
  * @return 0 成功, -1 失败(设置 errno)
@@ -54,7 +54,7 @@ int svc_send(int fd, const void *msg, size_t len);
 /**
  * 通过 fd 接收 IPC 消息
  *
- * @param fd   FD_TYPE_IPC 的文件描述符
+ * @param fd   IPC 文件描述符
  * @param msg  接收缓冲区
  * @param len  缓冲区大小
  * @return 实际接收字节数, -1 失败(设置 errno)

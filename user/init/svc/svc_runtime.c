@@ -230,7 +230,7 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
         if (log_ep != HANDLE_INVALID) {
             int log_fd = fd_alloc();
             if (log_fd >= 0) {
-                fd_install(log_fd, log_ep, FD_TYPE_TTY, FD_FLAG_WRITE);
+                fd_install(log_fd, log_ep, 0, 0, FD_FLAG_WRITE);
                 dup2(log_fd, STDOUT_FILENO);
                 dup2(log_fd, STDERR_FILENO);
                 if (log_fd != STDOUT_FILENO && log_fd != STDERR_FILENO) {

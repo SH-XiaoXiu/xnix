@@ -119,23 +119,21 @@ int vfs_open(const char *path, uint32_t flags) {
     /* 设备类型检查: devfsd 对 TTY 设备返回 DEVFS_TYPE_TTY + endpoint handle */
     uint32_t dev_type = reply.regs.data[2];
     if (dev_type == DEVFS_TYPE_TTY && reply.handles.count > 0) {
-        fd_install(fd, reply.handles.handles[0], FD_TYPE_TTY,
+        fd_install(fd, reply.handles.handles[0], 0, 0,
                    FD_FLAG_READ | FD_FLAG_WRITE);
         return fd;
     }
 
+    handle_t fs_ep = HANDLE_INVALID;
+    if (reply.handles.count > 0) {
+        fs_ep = reply.handles.handles[0];
+    }
+
     struct fd_entry *ent =
-        fd_install(fd, HANDLE_INVALID, FD_TYPE_VFS, FD_FLAG_READ | FD_FLAG_WRITE);
+        fd_install(fd, fs_ep, (uint32_t)result, 0, FD_FLAG_READ | FD_FLAG_WRITE);
     if (!ent) {
         return -EMFILE;
     }
-
-    ent->vfs.fs_handle = (uint32_t)result;
-    if (reply.handles.count > 0) {
-        ent->vfs.fs_ep = reply.handles.handles[0];
-    }
-    ent->vfs.flags  = flags;
-    ent->vfs.offset = 0;
 
     return fd;
 }
@@ -145,7 +143,7 @@ int vfs_open(const char *path, uint32_t flags) {
  */
 int vfs_close(int fd) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->type != FD_TYPE_VFS) {
+    if (!ent || ent->session == 0) {
         return -EBADF;
     }
 
@@ -153,9 +151,9 @@ int vfs_close(int fd) {
     struct ipc_message reply = {0};
 
     msg.regs.data[0] = UDM_VFS_CLOSE;
-    msg.regs.data[1] = ent->vfs.fs_handle;
+    msg.regs.data[1] = ent->session;
 
-    sys_ipc_call(ent->vfs.fs_ep, &msg, &reply, 1000);
+    sys_ipc_call(ent->handle, &msg, &reply, 1000);
 
     fd_free(fd);
     return 0;
@@ -171,8 +169,8 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
         return -EBADF;
     }
 
-    /* 对于 TTY 类型，使用 TTY 协议读取 */
-    if (ent->type == FD_TYPE_TTY) {
+    /* 对于 stream (session == 0)，使用 TTY 协议读取 */
+    if (ent->session == 0) {
         if (!buf || size == 0) {
             return 0;
         }
@@ -203,10 +201,6 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
         return count;
     }
 
-    if (ent->type != FD_TYPE_VFS) {
-        return -EBADF;
-    }
-
     if (!buf || size == 0) {
         return 0;
     }
@@ -215,14 +209,14 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
     struct ipc_message reply = {0};
 
     msg.regs.data[0] = UDM_VFS_READ;
-    msg.regs.data[1] = ent->vfs.fs_handle;
-    msg.regs.data[2] = ent->vfs.offset;
+    msg.regs.data[1] = ent->session;
+    msg.regs.data[2] = ent->offset;
     msg.regs.data[3] = size;
 
     reply.buffer.data = (uint64_t)(uintptr_t)buf;
     reply.buffer.size = (uint32_t)size;
 
-    int ret = sys_ipc_call(ent->vfs.fs_ep, &msg, &reply, 5000);
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) {
         return ret;
     }
@@ -233,7 +227,7 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
     }
 
     if (result > 0) {
-        ent->vfs.offset += (uint32_t)result;
+        ent->offset += (uint32_t)result;
     }
     return result;
 }
@@ -243,7 +237,7 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
  */
 ssize_t vfs_write(int fd, const void *buf, size_t size) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->type != FD_TYPE_VFS) {
+    if (!ent || ent->session == 0) {
         return -EBADF;
     }
 
@@ -255,20 +249,20 @@ ssize_t vfs_write(int fd, const void *buf, size_t size) {
     struct ipc_message reply = {0};
 
     msg.regs.data[0] = UDM_VFS_WRITE;
-    msg.regs.data[1] = ent->vfs.fs_handle;
-    msg.regs.data[2] = ent->vfs.offset;
+    msg.regs.data[1] = ent->session;
+    msg.regs.data[2] = ent->offset;
     msg.regs.data[3] = size;
     msg.buffer.data  = (uint64_t)(uintptr_t)(void *)buf;
     msg.buffer.size  = size;
 
-    int ret = sys_ipc_call(ent->vfs.fs_ep, &msg, &reply, 5000);
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) {
         return ret;
     }
 
     int32_t result = (int32_t)reply.regs.data[1];
     if (result > 0) {
-        ent->vfs.offset += result;
+        ent->offset += result;
     }
 
     return result;
@@ -401,15 +395,16 @@ int vfs_opendir(const char *path) {
         return result;
     }
 
-    struct fd_entry *ent = fd_install(fd, HANDLE_INVALID, FD_TYPE_VFS, FD_FLAG_READ);
+    handle_t dir_ep = HANDLE_INVALID;
+    if (reply.handles.count > 0) {
+        dir_ep = reply.handles.handles[0];
+    }
+
+    struct fd_entry *ent =
+        fd_install(fd, dir_ep, (uint32_t)result, 0, FD_FLAG_READ);
     if (!ent) {
         return -EMFILE;
     }
-
-    ent->vfs.fs_handle = (uint32_t)result;
-    ent->vfs.fs_ep     = reply.handles.handles[0];
-    ent->vfs.flags     = 0;
-    ent->vfs.offset    = 0;
 
     return fd;
 }
@@ -419,7 +414,7 @@ int vfs_opendir(const char *path) {
  */
 int vfs_readdir(int fd, char *name, size_t size) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->type != FD_TYPE_VFS) {
+    if (!ent || ent->session == 0) {
         return -EBADF;
     }
 
@@ -432,13 +427,13 @@ int vfs_readdir(int fd, char *name, size_t size) {
     char               tmp_name[256];
 
     msg.regs.data[0] = UDM_VFS_READDIR;
-    msg.regs.data[1] = ent->vfs.fs_handle;
-    msg.regs.data[2] = ent->vfs.offset;
+    msg.regs.data[1] = ent->session;
+    msg.regs.data[2] = ent->offset;
 
     reply.buffer.data = (uint64_t)(uintptr_t)tmp_name;
     reply.buffer.size = sizeof(tmp_name);
 
-    int ret = sys_ipc_call(ent->vfs.fs_ep, &msg, &reply, 5000);
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) {
         return ret;
     }
@@ -454,7 +449,7 @@ int vfs_readdir(int fd, char *name, size_t size) {
     }
     memcpy(name, tmp_name, copy_size);
     name[copy_size] = '\0';
-    ent->vfs.offset++;
+    ent->offset++;
     return 1;
 }
 
@@ -555,7 +550,7 @@ int vfs_copy_cwd_to_child(pid_t child_pid) {
  */
 int vfs_readdir_index(int fd, uint32_t index, struct vfs_dirent *dirent) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->type != FD_TYPE_VFS) {
+    if (!ent || ent->session == 0) {
         return -EBADF;
     }
 
@@ -567,13 +562,13 @@ int vfs_readdir_index(int fd, uint32_t index, struct vfs_dirent *dirent) {
     struct ipc_message reply = {0};
 
     msg.regs.data[0] = UDM_VFS_READDIR;
-    msg.regs.data[1] = ent->vfs.fs_handle;
+    msg.regs.data[1] = ent->session;
     msg.regs.data[2] = index;
 
     reply.buffer.data = (uint64_t)(uintptr_t)dirent;
     reply.buffer.size = sizeof(*dirent);
 
-    int ret = sys_ipc_call(ent->vfs.fs_ep, &msg, &reply, 5000);
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) {
         return ret;
     }

@@ -2,12 +2,13 @@
  * @file io.c
  * @brief 统一 POSIX I/O 函数
  *
- * 提供 read/write/close/dup/dup2/pipe/open,按 fd 类型分发到对应的 IPC 协议.
+ * write/read 只有两条路径: pipe 和 IO 协议.
+ * 不关心对端是 TTY/VFS/syslog/其他 — 全部走 IO_READ/IO_WRITE.
  */
 
 #include <stdio_internal.h>
+#include <xnix/abi/io.h>
 #include <xnix/protocol/devfs.h>
-#include <xnix/protocol/tty.h>
 #include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -25,44 +26,6 @@
 
 /* ---- write ---- */
 
-static ssize_t write_tty(struct fd_entry *ent, const void *buf, size_t n) {
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = TTY_OP_WRITE;
-    msg.regs.data[1] = (uint32_t)n;
-    msg.buffer.data  = (uint64_t)(uintptr_t)buf;
-    msg.buffer.size  = (uint32_t)n;
-
-    int ret = sys_ipc_send(ent->handle, &msg, 100);
-    if (ret < 0) {
-        return -EIO;
-    }
-    return (ssize_t)n;
-}
-
-static ssize_t write_vfs(struct fd_entry *ent, const void *buf, size_t n) {
-    struct ipc_message msg   = {0};
-    struct ipc_message reply = {0};
-
-    msg.regs.data[0] = UDM_VFS_WRITE;
-    msg.regs.data[1] = ent->vfs.fs_handle;
-    msg.regs.data[2] = ent->vfs.offset;
-    msg.regs.data[3] = (uint32_t)n;
-    msg.buffer.data  = (uint64_t)(uintptr_t)buf;
-    msg.buffer.size  = (uint32_t)n;
-
-    int ret = sys_ipc_call(ent->vfs.fs_ep, &msg, &reply, 5000);
-    if (ret < 0) {
-        return ret;
-    }
-
-    int32_t result = (int32_t)reply.regs.data[1];
-    if (result > 0) {
-        ent->vfs.offset += (uint32_t)result;
-    }
-    return result;
-}
-
 static ssize_t write_pipe(struct fd_entry *ent, const void *buf, size_t n) {
     struct ipc_message msg;
     memset(&msg, 0, sizeof(msg));
@@ -78,103 +41,55 @@ static ssize_t write_pipe(struct fd_entry *ent, const void *buf, size_t n) {
     return (ssize_t)n;
 }
 
-static ssize_t write_ipc(struct fd_entry *ent, const void *buf, size_t n) {
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.buffer.data = (uint64_t)(uintptr_t)buf;
-    msg.buffer.size = (uint32_t)n;
+static ssize_t write_io(struct fd_entry *ent, const void *buf, size_t n) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
 
-    int ret = sys_ipc_send(ent->handle, &msg, 5000);
+    msg.regs.data[0] = IO_WRITE;
+    msg.regs.data[1] = ent->session;
+    msg.regs.data[2] = ent->offset;
+    msg.regs.data[3] = (uint32_t)n;
+    msg.buffer.data  = (uint64_t)(uintptr_t)buf;
+    msg.buffer.size  = (uint32_t)n;
+
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) {
-        return -EIO;
+        errno = EIO;
+        return -1;
     }
-    return (ssize_t)n;
+
+    int32_t written = (int32_t)reply.regs.data[0];
+    if (written < 0) {
+        errno = -written;
+        return -1;
+    }
+    if (written > 0) {
+        ent->offset += (uint32_t)written;
+    }
+    return (ssize_t)written;
 }
 
 ssize_t write(int fd, const void *buf, size_t n) {
     struct fd_entry *ent = fd_get(fd);
     if (!ent) {
-        /* pre-TTY 阶段: stdout/stderr 自动降级到内核 debug console */
         if ((fd == STDOUT_FILENO || fd == STDERR_FILENO) && buf && n > 0) {
             _debug_write(buf, n);
             return (ssize_t)n;
         }
-        return -EBADF;
+        errno = EBADF;
+        return -1;
     }
     if (!buf || n == 0) {
         return 0;
     }
 
-    switch (ent->type) {
-    case FD_TYPE_TTY:
-        return write_tty(ent, buf, n);
-    case FD_TYPE_VFS:
-        return write_vfs(ent, buf, n);
-    case FD_TYPE_PIPE:
+    if (ent->flags & FD_FLAG_PIPE) {
         return write_pipe(ent, buf, n);
-    case FD_TYPE_IPC:
-        return write_ipc(ent, buf, n);
-    default:
-        return -EBADF;
     }
+    return write_io(ent, buf, n);
 }
 
 /* ---- read ---- */
-
-static ssize_t read_tty(struct fd_entry *ent, void *buf, size_t n) {
-    struct ipc_message req;
-    struct ipc_message reply;
-    char               recv_buf[64];
-
-    memset(&req, 0, sizeof(req));
-    memset(&reply, 0, sizeof(reply));
-
-    req.regs.data[0] = TTY_OP_READ;
-    req.regs.data[1] = (uint32_t)n;
-
-    size_t recv_size  = (n < sizeof(recv_buf)) ? n : sizeof(recv_buf);
-    reply.buffer.data = (uint64_t)(uintptr_t)recv_buf;
-    reply.buffer.size = (uint32_t)recv_size;
-
-    int ret = sys_ipc_call(ent->handle, &req, &reply, 0);
-    if (ret < 0) {
-        return -EIO;
-    }
-
-    int count = (int)reply.regs.data[0];
-    if (count <= 0) {
-        return count;
-    }
-    if ((size_t)count > n) {
-        count = (int)n;
-    }
-    memcpy(buf, recv_buf, (size_t)count);
-    return count;
-}
-
-static ssize_t read_vfs(struct fd_entry *ent, void *buf, size_t n) {
-    struct ipc_message msg   = {0};
-    struct ipc_message reply = {0};
-
-    msg.regs.data[0] = UDM_VFS_READ;
-    msg.regs.data[1] = ent->vfs.fs_handle;
-    msg.regs.data[2] = ent->vfs.offset;
-    msg.regs.data[3] = (uint32_t)n;
-
-    reply.buffer.data = (uint64_t)(uintptr_t)buf;
-    reply.buffer.size = (uint32_t)n;
-
-    int ret = sys_ipc_call(ent->vfs.fs_ep, &msg, &reply, 5000);
-    if (ret < 0) {
-        return ret;
-    }
-
-    int32_t result = (int32_t)reply.regs.data[1];
-    if (result > 0) {
-        ent->vfs.offset += (uint32_t)result;
-    }
-    return result;
-}
 
 static ssize_t read_pipe(struct fd_entry *ent, void *buf, size_t n) {
     struct ipc_message msg;
@@ -196,40 +111,49 @@ static ssize_t read_pipe(struct fd_entry *ent, void *buf, size_t n) {
     return (ssize_t)msg.regs.data[1];
 }
 
-static ssize_t read_ipc(struct fd_entry *ent, void *buf, size_t n) {
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.buffer.data = (uint64_t)(uintptr_t)buf;
-    msg.buffer.size = (uint32_t)n;
+static ssize_t read_io(struct fd_entry *ent, void *buf, size_t n) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
 
-    int ret = sys_ipc_receive(ent->handle, &msg, 0);
+    msg.regs.data[0] = IO_READ;
+    msg.regs.data[1] = ent->session;
+    msg.regs.data[2] = ent->offset;
+    msg.regs.data[3] = (uint32_t)n;
+
+    reply.buffer.data = (uint64_t)(uintptr_t)buf;
+    reply.buffer.size = (uint32_t)n;
+
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, 30000);
     if (ret < 0) {
-        return -EIO;
+        errno = EIO;
+        return -1;
     }
-    return (ssize_t)msg.buffer.size;
+
+    int32_t nread = (int32_t)reply.regs.data[0];
+    if (nread < 0) {
+        errno = -nread;
+        return -1;
+    }
+    if (nread > 0) {
+        ent->offset += (uint32_t)nread;
+    }
+    return (ssize_t)nread;
 }
 
 ssize_t read(int fd, void *buf, size_t n) {
     struct fd_entry *ent = fd_get(fd);
     if (!ent) {
-        return -EBADF;
+        errno = EBADF;
+        return -1;
     }
     if (!buf || n == 0) {
         return 0;
     }
 
-    switch (ent->type) {
-    case FD_TYPE_TTY:
-        return read_tty(ent, buf, n);
-    case FD_TYPE_VFS:
-        return read_vfs(ent, buf, n);
-    case FD_TYPE_PIPE:
+    if (ent->flags & FD_FLAG_PIPE) {
         return read_pipe(ent, buf, n);
-    case FD_TYPE_IPC:
-        return read_ipc(ent, buf, n);
-    default:
-        return -EBADF;
     }
+    return read_io(ent, buf, n);
 }
 
 /* ---- close ---- */
@@ -237,16 +161,16 @@ ssize_t read(int fd, void *buf, size_t n) {
 int close(int fd) {
     struct fd_entry *ent = fd_get(fd);
     if (!ent) {
-        return -EBADF;
+        errno = EBADF;
+        return -1;
     }
 
-    /* VFS 文件需要通知 FS 驱动 */
-    if (ent->type == FD_TYPE_VFS) {
+    if (!(ent->flags & FD_FLAG_PIPE) && ent->session != 0) {
         struct ipc_message msg   = {0};
         struct ipc_message reply = {0};
-        msg.regs.data[0]         = UDM_VFS_CLOSE;
-        msg.regs.data[1]         = ent->vfs.fs_handle;
-        sys_ipc_call(ent->vfs.fs_ep, &msg, &reply, 1000);
+        msg.regs.data[0] = IO_CLOSE;
+        msg.regs.data[1] = ent->session;
+        sys_ipc_call(ent->handle, &msg, &reply, 1000);
     }
 
     sys_handle_close(ent->handle);
@@ -259,31 +183,24 @@ int close(int fd) {
 int dup(int oldfd) {
     struct fd_entry *ent = fd_get(oldfd);
     if (!ent) {
-        return -EBADF;
+        errno = EBADF;
+        return -1;
     }
 
     int new_handle = sys_handle_duplicate(ent->handle, HANDLE_INVALID, NULL);
     if (new_handle < 0) {
-        return -EMFILE;
+        errno = EMFILE;
+        return -1;
     }
 
     int newfd = fd_alloc();
     if (newfd < 0) {
         sys_handle_close((uint32_t)new_handle);
-        return -EMFILE;
+        errno = EMFILE;
+        return -1;
     }
 
-    struct fd_entry *dst = fd_install(newfd, (handle_t)new_handle, ent->type, ent->flags);
-    if (!dst) {
-        sys_handle_close((uint32_t)new_handle);
-        return -EMFILE;
-    }
-
-    /* 复制 VFS 状态 */
-    if (ent->type == FD_TYPE_VFS) {
-        dst->vfs = ent->vfs;
-    }
-
+    fd_install(newfd, (handle_t)new_handle, ent->session, ent->offset, ent->flags);
     return newfd;
 }
 
@@ -291,43 +208,35 @@ int dup(int oldfd) {
 
 int dup2(int oldfd, int newfd) {
     if (oldfd == newfd) {
-        /* POSIX: 如果 oldfd 有效, 返回 newfd */
         if (!fd_get(oldfd)) {
-            return -EBADF;
+            errno = EBADF;
+            return -1;
         }
         return newfd;
     }
 
     struct fd_entry *ent = fd_get(oldfd);
     if (!ent) {
-        return -EBADF;
+        errno = EBADF;
+        return -1;
     }
 
     if (newfd < 0 || newfd >= FD_MAX) {
-        return -EBADF;
+        errno = EBADF;
+        return -1;
     }
 
-    /* 如果 newfd 已打开,先关闭 */
     if (fd_get(newfd)) {
         close(newfd);
     }
 
     int new_handle = sys_handle_duplicate(ent->handle, (handle_t)newfd, NULL);
     if (new_handle < 0) {
-        return -EMFILE;
+        errno = EMFILE;
+        return -1;
     }
 
-    struct fd_entry *dst = fd_install(newfd, (handle_t)new_handle, ent->type, ent->flags);
-    if (!dst) {
-        sys_handle_close((uint32_t)new_handle);
-        return -EMFILE;
-    }
-
-    /* 复制 VFS 状态 */
-    if (ent->type == FD_TYPE_VFS) {
-        dst->vfs = ent->vfs;
-    }
-
+    fd_install(newfd, (handle_t)new_handle, ent->session, ent->offset, ent->flags);
     return newfd;
 }
 
@@ -336,32 +245,34 @@ int dup2(int oldfd, int newfd) {
 int pipe(int fds[2]) {
     int ep = sys_endpoint_create(NULL);
     if (ep < 0) {
-        return -EMFILE;
+        errno = EMFILE;
+        return -1;
     }
 
     int dup_ep = sys_handle_duplicate((uint32_t)ep, HANDLE_INVALID, NULL);
     if (dup_ep < 0) {
         sys_handle_close((uint32_t)ep);
-        return -EMFILE;
+        errno = EMFILE;
+        return -1;
     }
 
-    /* 读端 */
     int rfd = fd_alloc();
     if (rfd < 0) {
         sys_handle_close((uint32_t)ep);
         sys_handle_close((uint32_t)dup_ep);
-        return -EMFILE;
+        errno = EMFILE;
+        return -1;
     }
-    fd_install(rfd, (handle_t)ep, FD_TYPE_PIPE, FD_FLAG_READ);
+    fd_install(rfd, (handle_t)ep, 0, 0, FD_FLAG_READ | FD_FLAG_PIPE);
 
-    /* 写端 */
     int wfd = fd_alloc();
     if (wfd < 0) {
         close(rfd);
         sys_handle_close((uint32_t)dup_ep);
-        return -EMFILE;
+        errno = EMFILE;
+        return -1;
     }
-    fd_install(wfd, (handle_t)dup_ep, FD_TYPE_PIPE, FD_FLAG_WRITE);
+    fd_install(wfd, (handle_t)dup_ep, 0, 0, FD_FLAG_WRITE | FD_FLAG_PIPE);
 
     fds[0] = rfd;
     fds[1] = wfd;
@@ -370,7 +281,6 @@ int pipe(int fds[2]) {
 
 /* ---- open ---- */
 
-/* vfsd endpoint (延迟初始化) */
 static uint32_t g_io_vfsd_ep = HANDLE_INVALID;
 
 static int io_ensure_vfsd(void) {
@@ -379,7 +289,8 @@ static int io_ensure_vfsd(void) {
     }
     uint32_t h = env_get_handle("vfs_ep");
     if (h == HANDLE_INVALID) {
-        return -ENOENT;
+        errno = ENOENT;
+        return -1;
     }
     g_io_vfsd_ep = h;
     return 0;
@@ -387,20 +298,21 @@ static int io_ensure_vfsd(void) {
 
 int open(const char *path, int flags) {
     if (!path) {
-        return -EINVAL;
+        errno = EINVAL;
+        return -1;
     }
 
     int ret = io_ensure_vfsd();
     if (ret < 0) {
-        return ret;
+        return -1;
     }
 
     int fd = fd_alloc();
     if (fd < 0) {
-        return -EMFILE;
+        errno = EMFILE;
+        return -1;
     }
 
-    /* IPC 到 vfsd (UDM_VFS_OPEN) */
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
@@ -412,12 +324,16 @@ int open(const char *path, int flags) {
 
     ret = sys_ipc_call(g_io_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        fd_free(fd);
+        errno = EIO;
+        return -1;
     }
 
     int32_t result = (int32_t)reply.regs.data[1];
     if (result < 0) {
-        return result;
+        fd_free(fd);
+        errno = -result;
+        return -1;
     }
 
     uint8_t fd_flags = 0;
@@ -429,25 +345,24 @@ int open(const char *path, int flags) {
         fd_flags = FD_FLAG_READ | FD_FLAG_WRITE;
     }
 
-    /* 设备类型检查: devfsd 对 TTY 设备返回 DEVFS_TYPE_TTY + endpoint handle */
+    /* io_ep: 服务端返回的直接 endpoint (用于后续 IO_READ/IO_WRITE) */
+    handle_t io_ep = HANDLE_INVALID;
+    if (reply.handles.count > 0) {
+        io_ep = reply.handles.handles[0];
+    }
+
+    /* 设备类型: TTY 设备返回 endpoint, session=0 (stream) */
     uint32_t dev_type = reply.regs.data[2];
-    if (dev_type == DEVFS_TYPE_TTY && reply.handles.count > 0) {
-        fd_install(fd, reply.handles.handles[0], FD_TYPE_TTY, fd_flags);
+    if (dev_type == DEVFS_TYPE_TTY && io_ep != HANDLE_INVALID) {
+        fd_install(fd, io_ep, 0, 0, fd_flags);
         return fd;
     }
 
-    /* 普通 VFS 文件 */
-    struct fd_entry *ent = fd_install(fd, HANDLE_INVALID, FD_TYPE_VFS, fd_flags);
-    if (!ent) {
-        return -EMFILE;
+    /* 普通 VFS 文件: session=fs_handle, handle=fs_ep */
+    uint32_t session = (uint32_t)result;
+    if (io_ep == HANDLE_INVALID) {
+        io_ep = g_io_vfsd_ep;
     }
-
-    ent->vfs.fs_handle = (uint32_t)result;
-    if (reply.handles.count > 0) {
-        ent->vfs.fs_ep = reply.handles.handles[0];
-    }
-    ent->vfs.offset = 0;
-    ent->vfs.flags  = (uint32_t)flags;
-
+    fd_install(fd, io_ep, session, 0, fd_flags);
     return fd;
 }

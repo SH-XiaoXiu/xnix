@@ -760,7 +760,7 @@ int main(int argc, char **argv) {
         /* 创建新的 fd 指向 tty_ep, 然后 dup2 到 0/1/2 */
         int tty_fd = fd_alloc();
         if (tty_fd >= 0) {
-            fd_install(tty_fd, g_tty_ep, FD_TYPE_TTY, FD_FLAG_READ | FD_FLAG_WRITE);
+            fd_install(tty_fd, g_tty_ep, 0, 0, FD_FLAG_READ | FD_FLAG_WRITE);
             if (tty_fd != STDIN_FILENO) {
                 dup2(tty_fd, STDIN_FILENO);
             }
