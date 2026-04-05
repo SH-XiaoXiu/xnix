@@ -32,25 +32,15 @@ char *gets_s(char *buf, size_t size) {
         }
 
         if (c == '\n' || c == '\r') {
-            /* 回车,结束输入 */
-            putchar('\n');
             break;
         }
         if (c == '\b' || c == 127) {
             /* 退格 */
             if (pos > 0) {
                 pos--;
-                /* 回显:退格 + 空格 + 退格 */
-                putchar('\b');
-                putchar(' ');
-                putchar('\b');
-                fflush(stdout);
             }
         } else if (c >= 32 && c < 127) {
-            /* 可打印字符 */
             buf[pos++] = (char)c;
-            putchar(c);
-            fflush(stdout);
         }
         /* 忽略其他控制字符 */
     }

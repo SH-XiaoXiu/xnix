@@ -18,7 +18,8 @@
 
 #include "driver_internal.h"
 
-static int chardev_handle_msg(struct char_device *dev, struct ipc_message *msg) {
+static int chardev_handle_msg(struct char_device *dev, struct ipc_message *msg,
+                              char *reply_buf) {
     uint32_t op = msg->regs.data[0];
 
     switch (op) {
@@ -32,19 +33,18 @@ static int chardev_handle_msg(struct char_device *dev, struct ipc_message *msg) 
         if (max_size == 0) {
             max_size = 1;
         }
-
-        char buf[CHARDEV_IO_MAX];
         if (max_size > CHARDEV_IO_MAX) {
             max_size = CHARDEV_IO_MAX;
         }
 
-        int n = dev->ops->read(dev, buf, max_size);
+        /* 使用 chardev_thread 传入的 reply_buf，生命周期覆盖 sys_ipc_reply */
+        int n = dev->ops->read(dev, reply_buf, max_size);
         if (n < 0) {
             msg->regs.data[0] = (uint32_t)n;
         } else {
             msg->regs.data[0] = (uint32_t)n;
             if (n > 0) {
-                msg->buffer.data = (uint64_t)(uintptr_t)buf;
+                msg->buffer.data = (uint64_t)(uintptr_t)reply_buf;
                 msg->buffer.size = (uint32_t)n;
             }
         }
@@ -113,7 +113,7 @@ static void *chardev_thread(void *arg) {
             continue;
         }
 
-        chardev_handle_msg(dev, &msg);
+        chardev_handle_msg(dev, &msg, recv_buf);
         sys_ipc_reply(&msg);
     }
     return NULL;

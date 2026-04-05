@@ -70,20 +70,19 @@ int main(int argc, char **argv) {
         g_tty_ep = env_get_handle("tty0");
     }
 
-    svc_notify_ready("klogd");
-
-    /* 从 seq 0 开始,先读取已有的日志 */
     uint32_t seq = 0;
     char     buf[KMSG_BUF_SIZE];
 
-    /* 读取积压的历史日志 */
+    /* 丢弃历史 kmsg: 早期阶段已通过 serial early console 输出过,
+     * 再回放到 tty 会造成日志重复和顺序错乱。 */
     while (1) {
         int ret = sys_kmsg_read(&seq, buf, sizeof(buf));
         if (ret <= 0) {
             break;
         }
-        output_entry(buf, ret);
     }
+
+    svc_notify_ready("klogd");
 
     /* 主循环:轮询新日志 */
     while (1) {

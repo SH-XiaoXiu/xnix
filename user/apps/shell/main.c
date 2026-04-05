@@ -29,6 +29,22 @@
 static handle_t g_tty_ep = HANDLE_INVALID;
 static handle_t g_vfs_ep = HANDLE_INVALID;
 
+static void shell_tty_ioctl(uint32_t cmd, uint32_t arg) {
+    if (g_tty_ep == HANDLE_INVALID) {
+        return;
+    }
+
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+
+    msg.regs.data[0] = IO_IOCTL;
+    msg.regs.data[1] = 0;
+    msg.regs.data[2] = cmd;
+    msg.regs.data[3] = arg;
+
+    sys_ipc_call(g_tty_ep, &msg, &reply, 100);
+}
+
 /* ============== Job Table ============== */
 
 #define MAX_JOBS 16
@@ -752,6 +768,9 @@ int main(int argc, char **argv) {
      * 不再需要手动查找 tty handle 和 dup2 重绑定. */
     g_tty_ep = fd_get_handle(STDIN_FILENO);
     g_vfs_ep = env_get_handle("vfs_ep");
+
+    shell_tty_ioctl(TTY_IOCTL_SET_COOKED, 0);
+    shell_tty_ioctl(TTY_IOCTL_SET_ECHO, 1);
 
     /* 初始化 VFS 客户端 */
     vfs_client_init(g_vfs_ep);

@@ -332,7 +332,8 @@ static void *input_thread(void *arg) {
 
 /* ============== 服务线程 ============== */
 
-static int term_handle_msg(struct terminal *t, struct ipc_message *msg) {
+static int term_handle_msg(struct terminal *t, struct ipc_message *msg,
+                           char *reply_buf) {
     uint32_t op = msg->regs.data[0];
 
     switch (op) {
@@ -359,17 +360,16 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg) {
             if ((uint32_t)to_read > max_len)
                 to_read = (int)max_len;
 
-            char buf[TERM_INPUT_BUF_SIZE];
-            int  actual = 0;
+            int actual = 0;
             for (int i = 0; i < to_read; i++) {
                 int c = input_get(t);
                 if (c < 0) break;
-                buf[actual++] = (char)c;
+                reply_buf[actual++] = (char)c;
             }
             pthread_mutex_unlock(&t->input_lock);
 
             msg->regs.data[0] = (uint32_t)actual;
-            msg->buffer.data = (uint64_t)(uintptr_t)buf;
+            msg->buffer.data = (uint64_t)(uintptr_t)reply_buf;
             msg->buffer.size = (uint32_t)actual;
             return 0;
         }
@@ -437,7 +437,7 @@ static void *service_thread(void *arg) {
         if (sys_ipc_receive(t->term_ep, &msg, 0) < 0)
             continue;
 
-        int ret = term_handle_msg(t, &msg);
+        int ret = term_handle_msg(t, &msg, recv_buf);
         bool noreply = (msg.flags & ABI_IPC_FLAG_NOREPLY) != 0;
         if (ret == 0 && !noreply)
             sys_ipc_reply(&msg);
