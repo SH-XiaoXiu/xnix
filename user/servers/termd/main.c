@@ -398,22 +398,12 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* tty0 (VGA 终端): input=kbd, output=暂用 serial fallback */
-    if (kbd_ep != HANDLE_INVALID) {
-        handle_t tty0_ep = env_get_handle(ABI_TTY0_HANDLE_NAME);
-        if (tty0_ep == HANDLE_INVALID)
-            tty0_ep = sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
-
-        if (tty0_ep != HANDLE_INVALID) {
-            /* VGA 输出: 未来用 fbcond/vgad 的 displaydev,
-               当前暂用 serial 作为输出 fallback */
-            handle_t output = serial_ep;
-            /* TODO Phase 5: 接入 fbcond displaydev 后替换 */
-
-            term_init(&g_terms[g_term_count], 0, tty0_ep, kbd_ep, output);
-            g_term_count++;
-        }
-    }
+    /* tty0 (VGA 终端): 需要 displaydev (fbcond) + inputdev (kbd) 协议支持
+       Phase 5 重写 kbd/fbcond 后启用. 当前只创建 endpoint 供 init 依赖解析 */
+    (void)kbd_ep;
+    handle_t tty0_ep = env_get_handle(ABI_TTY0_HANDLE_NAME);
+    if (tty0_ep == HANDLE_INVALID)
+        sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
 
     /* 启动各终端的输入线程 + 服务线程 */
     for (int i = 0; i < g_term_count; i++) {
