@@ -219,6 +219,8 @@ int main(void) {
         g_ports[i].present = false;
         g_ports[i].rx_head = 0;
         g_ports[i].rx_tail = 0;
+        g_ports[i].write_dev.endpoint = HANDLE_INVALID;
+        g_ports[i].read_dev.endpoint  = HANDLE_INVALID;
         pthread_mutex_init(&g_ports[i].rx_lock, NULL);
         pthread_mutex_init(&g_ports[i].tx_lock, NULL);
 

@@ -118,7 +118,7 @@ int displaydev_register(struct display_device *dev) {
         return -1;
     }
 
-    if (dev->endpoint == HANDLE_INVALID || dev->endpoint == 0) {
+    if (dev->endpoint == HANDLE_INVALID) {
         char ep_name[32];
         snprintf(ep_name, sizeof(ep_name), "%s%d", dev->name, dev->instance);
 

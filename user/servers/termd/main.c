@@ -332,6 +332,14 @@ static void *input_thread(void *arg) {
 
 /* ============== 服务线程 ============== */
 
+/* debug: 直接写串口，绕过所有 IPC */
+static inline void _dbg(const char *s) {
+    int r;
+    asm volatile("int $0x80" : "=a"(r)
+                 : "a"(901), "b"((uint32_t)(uintptr_t)s), "c"((uint32_t)strlen(s))
+                 : "memory");
+}
+
 static int term_handle_msg(struct terminal *t, struct ipc_message *msg) {
     uint32_t op = msg->regs.data[0];
 
@@ -339,9 +347,16 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg) {
     case IO_WRITE: {
         uint32_t size = msg->regs.data[3];
         char    *data = (char *)(uintptr_t)msg->buffer.data;
+        {
+            char d[80];
+            snprintf(d, sizeof(d), "[termd] IO_WRITE tty%d size=%u proto=%d\n",
+                     t->id, size, t->output_proto);
+            _dbg(d);
+        }
         if (data && size > 0) {
             term_output_write(t, data, size);
         }
+        _dbg("[termd] IO_WRITE done\n");
         msg->regs.data[0] = (uint32_t)size;
         msg->buffer.data = 0;
         msg->buffer.size = 0;
@@ -429,6 +444,9 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg) {
 static void *service_thread(void *arg) {
     struct terminal *t = (struct terminal *)arg;
     char recv_buf[4096];
+    char dbg[64];
+    snprintf(dbg, sizeof(dbg), "[termd] svc_thread tty%d started, ep=%u\n", t->id, t->term_ep);
+    _dbg(dbg);
 
     while (1) {
         struct ipc_message msg = {0};
@@ -521,6 +539,14 @@ int main(int argc, char **argv) {
 
         pthread_t stid;
         pthread_create(&stid, NULL, service_thread, &g_terms[i]);
+    }
+
+    /* smoke test: 直接通过 chardev 写串口 */
+    if (serial_ep != HANDLE_INVALID) {
+        int r = chardev_write(serial_ep, "[termd] SMOKE TEST\n", 19);
+        char d[64];
+        snprintf(d, sizeof(d), "[termd] smoke chardev_write ret=%d\n", r);
+        _dbg(d);
     }
 
     svc_notify_ready("termd");

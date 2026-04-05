@@ -125,7 +125,7 @@ int chardev_register(struct char_device *dev) {
     }
 
     /* 如果驱动已预设 endpoint (如 init 注入), 直接使用 */
-    if (dev->endpoint == HANDLE_INVALID || dev->endpoint == 0) {
+    if (dev->endpoint == HANDLE_INVALID) {
         char ep_name[32];
         snprintf(ep_name, sizeof(ep_name), "%s%d", dev->name, dev->instance);
 
