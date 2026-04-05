@@ -61,7 +61,7 @@ set(CORE_SERVICES
         vgad
         fbd
         fbcond
-        ttyd
+        termd
         klogd
         devfsd
         syslogd
