@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <xnix/ipc.h>
-#include <xnix/ulog.h>
 
 void svc_handle_ready_notification(struct svc_manager *mgr, struct ipc_message *msg) {
     if (msg->regs.data[0] != SVC_MSG_READY) {
@@ -37,6 +36,6 @@ void svc_handle_ready_notification(struct svc_manager *mgr, struct ipc_message *
         if (mgr->configs[idx].mount[0] == '\0') {
             mgr->runtime[idx].ready = true;
         }
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[INIT] ", "Service '%s' reported ready\n", name);
+        printf("[INIT] Service '%s' reported ready\n", name);
     }
 }

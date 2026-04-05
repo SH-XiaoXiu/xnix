@@ -13,18 +13,6 @@
 
 static struct fd_entry g_fd_table[FD_MAX];
 
-static handle_t find_tty_ep(void) {
-    handle_t h = env_get_handle("tty1");
-    if (h != HANDLE_INVALID) {
-        return h;
-    }
-    h = env_get_handle("tty0");
-    if (h != HANDLE_INVALID) {
-        return h;
-    }
-    return HANDLE_INVALID;
-}
-
 void fd_table_init(void) {
     memset(g_fd_table, 0, sizeof(g_fd_table));
 
@@ -32,13 +20,8 @@ void fd_table_init(void) {
     handle_t out = env_get_handle(HANDLE_STDIO_STDOUT);
     handle_t err = env_get_handle(HANDLE_STDIO_STDERR);
 
-    /* fallback: tty handle */
-    if (in == HANDLE_INVALID || out == HANDLE_INVALID || err == HANDLE_INVALID) {
-        handle_t tty = find_tty_ep();
-        if (in  == HANDLE_INVALID) in  = tty;
-        if (out == HANDLE_INVALID) out = tty;
-        if (err == HANDLE_INVALID) err = tty;
-    }
+    /* 不做 fallback: 没有 stdio handle 时 fd 0/1/2 不安装,
+     * stdio 层会自动使用 DEBUG 通道 (SYS_DEBUG_WRITE). */
 
     if (in  != HANDLE_INVALID) fd_install(0, in,  0, 0, FD_FLAG_READ);
     if (out != HANDLE_INVALID) fd_install(1, out, 0, 0, FD_FLAG_WRITE);

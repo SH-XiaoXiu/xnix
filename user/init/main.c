@@ -14,16 +14,17 @@
  *      从此所有 VFS 路径解析走 fatfsd (system.img 由 fatfsd 自行挂载)
  *   7. 普通路径服务通过 VFS sys_exec 启动
  *   8. 系统就绪 (shell 可用)
+ *
+ * init 永久使用 DEBUG 通道 (SYS_DEBUG_WRITE) 输出,
+ * 不依赖任何 IPC 服务,始终可用.
  */
 
-#include "early_console.h"
 #include "initramfs.h"
 #include "ramfs.h"
 #include "ramfsd_service.h"
 #include "svc_manager.h"
 
 #include <errno.h>
-#include <libs/serial/serial.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,14 +34,13 @@
 #include <xnix/abi/cap.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
-#include <xnix/ulog.h>
 
 #include "bootstrap/bootstrap.h"
 
 /* 服务管理器 */
 static struct svc_manager g_mgr;
 
-/* 内置 ramfsd 服务(需要被 svc_runtime.c 访问)*/
+/* 内置 ramfsd 服务(需要被 svc_runtime.c 访问) */
 struct ramfsd_service g_ramfsd;
 
 
@@ -58,10 +58,7 @@ static void drain_ready_notifications(handle_t init_notify_ep) {
         int ipc_ret = sys_ipc_receive((uint32_t)init_notify_ep, &msg, 10);
         if (ipc_ret != 0) {
             if (errno == EPERM) {
-                char errbuf[80];
-                snprintf(errbuf, sizeof(errbuf),
-                         "[INIT] ERROR: init_notify recv denied (EPERM)\n");
-                early_puts(errbuf);
+                printf("[INIT] ERROR: init_notify recv denied (EPERM)\n");
             }
             break;
         }
@@ -98,11 +95,7 @@ static void reap_children(void) {
 int main(int argc, char **argv) {
     int ret;
 
-    /* 使用早期控制台输出(seriald 启动前)*/
-    early_set_color(10, 0);
-    early_puts("[INIT] ");
-    early_reset_color();
-    early_puts("init started\n");
+    printf("[INIT] init started\n");
 
     /* 解析启动参数 */
     if (argc > 0) {
@@ -113,20 +106,11 @@ int main(int argc, char **argv) {
     svc_manager_init(&g_mgr);
 
     /* 启动内置 ramfsd 服务 */
-    early_set_color(10, 0);
-    early_puts("[INIT] ");
-    early_reset_color();
-    early_puts("starting ramfsd service...\n");
+    printf("[INIT] starting ramfsd service...\n");
 
     ret = ramfsd_service_start(&g_ramfsd);
     if (ret < 0) {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_set_color(12, 0);
-        early_puts("FATAL");
-        early_reset_color();
-        early_puts(": failed to start ramfsd\n");
+        printf("[INIT] FATAL: failed to start ramfsd\n");
         while (1) {
             msleep(1000);
         }
@@ -136,20 +120,11 @@ int main(int argc, char **argv) {
     msleep(50);
 
     /* 提取 initramfs.img 到 ramfs */
-    early_set_color(10, 0);
-    early_puts("[INIT] ");
-    early_reset_color();
-    early_puts("extracting initramfs...\n");
+    printf("[INIT] extracting initramfs...\n");
 
     handle_t initramfs_h = sys_handle_find("boot.initramfs");
     if (initramfs_h == HANDLE_INVALID) {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_set_color(12, 0);
-        early_puts("FATAL");
-        early_reset_color();
-        early_puts(": initramfs module not found\n");
+        printf("[INIT] FATAL: initramfs module not found\n");
         while (1) {
             msleep(1000);
         }
@@ -158,63 +133,31 @@ int main(int argc, char **argv) {
     uint32_t initramfs_size = 0;
     void    *initramfs_addr = sys_mmap_phys(initramfs_h, 0, 0, 0x03, &initramfs_size);
     if (initramfs_addr == NULL || (intptr_t)initramfs_addr < 0) {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_set_color(12, 0);
-        early_puts("FATAL");
-        early_reset_color();
-        early_puts(": failed to map initramfs\n");
+        printf("[INIT] FATAL: failed to map initramfs\n");
         while (1) {
             msleep(1000);
         }
     }
 
-    {
-        char buf[80];
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        snprintf(buf, sizeof(buf), "initramfs mapped at %p, size %u bytes\n", initramfs_addr,
-                 initramfs_size);
-        early_puts(buf);
-    }
+    printf("[INIT] initramfs mapped at %p, size %u bytes\n", initramfs_addr, initramfs_size);
 
     struct ramfs_ctx *ramfs = ramfsd_service_get_ramfs(&g_ramfsd);
     ret                     = initramfs_extract(ramfs, initramfs_addr, initramfs_size);
     if (ret < 0) {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_set_color(12, 0);
-        early_puts("FATAL");
-        early_reset_color();
-        early_puts(": failed to extract initramfs\n");
+        printf("[INIT] FATAL: failed to extract initramfs\n");
         while (1) {
             msleep(1000);
         }
     }
 
-    early_set_color(10, 0);
-    early_puts("[INIT] ");
-    early_reset_color();
-    early_puts("initramfs extracted successfully\n");
+    printf("[INIT] initramfs extracted successfully\n");
 
     /* 从 ramfs 加载核心服务配置 */
-    early_set_color(10, 0);
-    early_puts("[INIT] ");
-    early_reset_color();
-    early_puts("loading system config from ramfs...\n");
+    printf("[INIT] loading system config from ramfs...\n");
 
     int config_fd = ramfs_open(ramfs, "/etc/sys.conf", VFS_O_RDONLY);
     if (config_fd < 0) {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_set_color(12, 0);
-        early_puts("FATAL");
-        early_reset_color();
-        early_puts(": failed to open /etc/sys.conf from ramfs\n");
+        printf("[INIT] FATAL: failed to open /etc/sys.conf from ramfs\n");
         while (1) {
             msleep(1000);
         }
@@ -223,7 +166,7 @@ int main(int argc, char **argv) {
     struct vfs_info info;
     ret = ramfs_finfo(ramfs, config_fd, &info);
     if (ret < 0) {
-        early_puts("[INIT] FATAL: failed to get config file info\n");
+        printf("[INIT] FATAL: failed to get config file info\n");
         while (1) {
             msleep(1000);
         }
@@ -231,7 +174,7 @@ int main(int argc, char **argv) {
 
     char *config_buf = malloc(info.size + 1);
     if (!config_buf) {
-        early_puts("[INIT] FATAL: out of memory\n");
+        printf("[INIT] FATAL: out of memory\n");
         while (1) {
             msleep(1000);
         }
@@ -239,7 +182,7 @@ int main(int argc, char **argv) {
 
     ret = ramfs_read(ramfs, config_fd, config_buf, 0, info.size);
     if (ret < 0) {
-        early_puts("[INIT] FATAL: failed to read config file\n");
+        printf("[INIT] FATAL: failed to read config file\n");
         while (1) {
             msleep(1000);
         }
@@ -250,43 +193,23 @@ int main(int argc, char **argv) {
     ret = svc_load_config_string(&g_mgr, config_buf);
     free(config_buf);
     if (ret < 0) {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_set_color(12, 0);
-        early_puts("FATAL");
-        early_reset_color();
-        early_puts(": failed to load system config\n");
+        printf("[INIT] FATAL: failed to load system config\n");
         while (1) {
             msleep(1000);
         }
     }
 
-    {
-        char buf[64];
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        snprintf(buf, sizeof(buf), "loaded %d services, graph_valid=%d\n", g_mgr.count,
-                 g_mgr.graph_valid);
-        early_puts(buf);
-    }
+    printf("[INIT] loaded %d services, graph_valid=%d\n", g_mgr.count, g_mgr.graph_valid);
 
     /* 初始化 VFS 客户端(直连 ramfsd) */
-    early_set_color(10, 0);
-    early_puts("[INIT] ");
-    early_reset_color();
-    early_puts("initializing VFS client (direct mode)...\n");
+    printf("[INIT] initializing VFS client (direct mode)...\n");
 
     handle_t ramfs_ep = g_ramfsd.endpoint;
     if (ramfs_ep != HANDLE_INVALID) {
         vfs_client_init((uint32_t)ramfs_ep);
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_puts("VFS client initialized (ramfsd direct mode)\n");
+        printf("[INIT] VFS client initialized (ramfsd direct mode)\n");
     } else {
-        early_puts("[INIT] FATAL: ramfs_ep is invalid\n");
+        printf("[INIT] FATAL: ramfs_ep is invalid\n");
         while (1) {
             msleep(1000);
         }
@@ -295,27 +218,18 @@ int main(int argc, char **argv) {
     /* 创建 init_notify endpoint */
     handle_t init_notify_ep = sys_endpoint_create("init_notify");
     if (init_notify_ep == HANDLE_INVALID) {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_puts("failed to create init_notify endpoint\n");
+        printf("[INIT] failed to create init_notify endpoint\n");
         g_mgr.init_notify_ep = HANDLE_INVALID;
     } else {
-        early_set_color(10, 0);
-        early_puts("[INIT] ");
-        early_reset_color();
-        early_puts("init_notify endpoint created\n");
+        printf("[INIT] init_notify endpoint created\n");
         g_mgr.init_notify_ep = (handle_t)init_notify_ep;
     }
 
-    early_set_color(10, 0);
-    early_puts("[INIT] ");
-    early_reset_color();
-    early_puts("entering main loop\n");
+    printf("[INIT] entering main loop\n");
 
     /* 主循环 */
     static bool vfsserver_migrated = false;
-    bool        serial_initialized = false;
+    bool        system_ready       = false;
     int         loop_count         = 0;
 
     while (1) {
@@ -337,10 +251,7 @@ int main(int argc, char **argv) {
             if (vfsserver_idx >= 0 && g_mgr.runtime[vfsserver_idx].ready) {
                 handle_t vfs_ep = sys_handle_find("vfs_ep");
                 if (vfs_ep != HANDLE_INVALID) {
-                    early_set_color(10, 0);
-                    early_puts("[INIT] ");
-                    early_reset_color();
-                    early_puts("migrating to vfsserver...\n");
+                    printf("[INIT] migrating to vfsserver...\n");
 
                     vfs_client_init((uint32_t)vfs_ep);
 
@@ -348,12 +259,9 @@ int main(int argc, char **argv) {
                     if (ramfs_ep != HANDLE_INVALID) {
                         ret = vfs_mount("/", ramfs_ep);
                         if (ret < 0) {
-                            early_puts("[INIT] WARNING: failed to mount ramfsd via vfsserver\n");
+                            printf("[INIT] WARNING: failed to mount ramfsd via vfsserver\n");
                         } else {
-                            early_set_color(10, 0);
-                            early_puts("[INIT] ");
-                            early_reset_color();
-                            early_puts("ramfsd mounted at / via vfsserver\n");
+                            printf("[INIT] ramfsd mounted at / via vfsserver\n");
                         }
                     }
                     vfsserver_migrated = true;
@@ -361,30 +269,31 @@ int main(int argc, char **argv) {
             }
         }
 
-        /* ttyd 就绪后切换到 serial stdio */
-        if (!serial_initialized) {
-            int ttyd_idx = svc_find_by_name(&g_mgr, "ttyd");
-            if (ttyd_idx >= 0 && g_mgr.runtime[ttyd_idx].ready) {
-                early_puts("[INIT] system ready\n");
-                serial_init();
-                serial_initialized = true;
-                early_console_disable();
+        /* 所有服务就绪后输出 system ready */
+        if (!system_ready) {
+            bool all_ready = true;
+            for (int i = 0; i < g_mgr.count; i++) {
+                svc_state_t s = g_mgr.runtime[i].state;
+                if (s != SVC_STATE_RUNNING && s != SVC_STATE_STOPPED && s != SVC_STATE_FAILED) {
+                    all_ready = false;
+                    break;
+                }
+            }
+            if (all_ready && g_mgr.count > 0) {
+                printf("[INIT] system ready\n");
+                system_ready = true;
             }
         }
 
-        /* 诊断输出 */
-        if (loop_count < 5 && early_console_is_active()) {
-            char buf[80];
-            early_set_color(10, 0);
-            early_puts("[INIT] ");
-            early_reset_color();
-            snprintf(buf, sizeof(buf), "tick %d:", loop_count);
-            early_puts(buf);
-            for (int i = 0; i < g_mgr.count; i++) {
-                snprintf(buf, sizeof(buf), " %s=%d", g_mgr.configs[i].name, g_mgr.runtime[i].state);
-                early_puts(buf);
+        /* 诊断输出(前 5 个 tick) */
+        if (loop_count < 5) {
+            char buf[256];
+            int  pos = snprintf(buf, sizeof(buf), "[INIT] tick %d:", loop_count);
+            for (int i = 0; i < g_mgr.count && pos < (int)sizeof(buf) - 20; i++) {
+                pos += snprintf(buf + pos, sizeof(buf) - pos, " %s=%d",
+                                g_mgr.configs[i].name, g_mgr.runtime[i].state);
             }
-            early_puts("\n");
+            printf("%s\n", buf);
         }
 
         loop_count++;

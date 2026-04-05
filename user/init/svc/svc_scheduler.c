@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <vfs_client.h>
-#include <xnix/ulog.h>
 
 static uint32_t g_ticks           = 0;
 static uint32_t g_last_diag_ticks = 0;
@@ -55,15 +54,13 @@ static void svc_check_ready_timeouts(struct svc_manager *mgr) {
         if (rt->ready_retry < SVC_READY_MAX_RETRIES) {
             rt->ready_retry++;
             rt->start_ticks = g_ticks; /* 重置超时起点 */
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[INIT] ",
-                      "%s: ready timeout, retry %d/%d (pid=%d)\n",
-                      cfg->name, rt->ready_retry, SVC_READY_MAX_RETRIES, rt->pid);
+            printf("[INIT] %s: ready timeout, retry %d/%d (pid=%d)\n",
+                   cfg->name, rt->ready_retry, SVC_READY_MAX_RETRIES, rt->pid);
             continue;
         }
 
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[INIT] ",
-                  "Timeout: %s not ready after %d retries (pid=%d)\n",
-                  cfg->name, rt->ready_retry, rt->pid);
+        printf("[INIT] Timeout: %s not ready after %d retries (pid=%d)\n",
+               cfg->name, rt->ready_retry, rt->pid);
         rt->state = SVC_STATE_FAILED;
     }
 }
@@ -84,8 +81,7 @@ static void svc_propagate_failed_requires(struct svc_manager *mgr) {
             }
 
             if (mgr->runtime[dep].state == SVC_STATE_FAILED) {
-                ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[INIT] ", "Failed: %s requires %s\n",
-                          cfg->name, cfg->ready[j]);
+                printf("[INIT] Failed: %s requires %s\n", cfg->name, cfg->ready[j]);
                 rt->state = SVC_STATE_FAILED;
                 break;
             }
@@ -109,7 +105,7 @@ static void svc_dump_waiting(struct svc_manager *mgr) {
         return;
     }
 
-    ulog_tagf(stdout, TERM_COLOR_LIGHT_CYAN, "[INIT] ", "Services waiting:\n");
+    printf("[INIT] Services waiting:\n");
     for (int i = 0; i < mgr->count; i++) {
         struct svc_config  *cfg = &mgr->configs[i];
         struct svc_runtime *rt  = &mgr->runtime[i];

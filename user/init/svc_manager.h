@@ -129,6 +129,9 @@ struct svc_config {
     char     mount[SVC_PATH_MAX]; /* 挂载路径(可选) */
     uint32_t mount_ep;            /* 挂载使用的 endpoint handle */
 
+    /* stdio 绑定 */
+    char stdio[SVC_HANDLE_NAME_MAX]; /* stdio 绑定的 handle 名 (如 "tty1") */
+
     /* 行为 */
     bool respawn; /* 退出后自动重启 */
 };

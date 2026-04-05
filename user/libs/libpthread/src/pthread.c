@@ -224,6 +224,13 @@ int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start)
         return err;
     }
 
+    /* Touch 每个栈页面,确保 demand-paging 分配物理页.
+     * 线程从 stack_top 开始执行,如果高地址页面未映射会立即 fault. */
+    volatile uint8_t *p = (volatile uint8_t *)stack_base;
+    for (uint32_t off = 0; off < stack_size; off += PTHREAD_STACK_ALIGN) {
+        p[off] = 0;
+    }
+
     struct pthread_start_args *start_args = (struct pthread_start_args *)stack_base;
     start_args->start                     = start;
     start_args->arg                       = arg;

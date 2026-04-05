@@ -5,8 +5,6 @@
 
 #include "ramfsd_service.h"
 
-#include "early_console.h"
-
 #include <d/server.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -28,10 +26,7 @@ static int vfs_handler(struct ipc_message *msg) {
 static void *ramfsd_thread(void *arg) {
     struct ramfsd_service *service = arg;
 
-    early_set_color(10, 0);
-    early_puts("[ramfsd] ");
-    early_reset_color();
-    early_puts("service thread started\n");
+    printf("[ramfsd] service thread started\n");
 
     /* 使用 udm_server 框架处理请求 */
     struct udm_server srv = {
@@ -43,7 +38,7 @@ static void *ramfsd_thread(void *arg) {
     udm_server_init(&srv);
     udm_server_run(&srv);
 
-    early_puts("[ramfsd] service thread exiting\n");
+    printf("[ramfsd] service thread exiting\n");
     return NULL;
 }
 
@@ -57,40 +52,26 @@ int ramfsd_service_start(struct ramfsd_service *service) {
 
     /* 初始化 ramfs */
     ramfs_init(&service->ramfs);
-
-    early_set_color(10, 0);
-    early_puts("[ramfsd] ");
-    early_reset_color();
-    early_puts("ramfs initialized\n");
+    printf("[ramfsd] ramfs initialized\n");
 
     /* 创建 endpoint */
     service->endpoint = sys_endpoint_create("ramfs_ep");
     if (service->endpoint == HANDLE_INVALID) {
-        early_puts("[ramfsd] FATAL: failed to create endpoint\n");
+        printf("[ramfsd] FATAL: failed to create endpoint\n");
         return -1;
     }
 
-    {
-        char buf[64];
-        early_set_color(10, 0);
-        early_puts("[ramfsd] ");
-        early_reset_color();
-        snprintf(buf, sizeof(buf), "created endpoint: %u\n", service->endpoint);
-        early_puts(buf);
-    }
+    printf("[ramfsd] created endpoint: %u\n", service->endpoint);
 
     /* 创建服务线程 */
     service->running = true;
     if (pthread_create(&service->thread, NULL, ramfsd_thread, service) != 0) {
-        early_puts("[ramfsd] FATAL: failed to create thread\n");
+        printf("[ramfsd] FATAL: failed to create thread\n");
         sys_handle_close(service->endpoint);
         return -1;
     }
 
-    early_set_color(10, 0);
-    early_puts("[ramfsd] ");
-    early_reset_color();
-    early_puts("service thread created\n");
+    printf("[ramfsd] service thread created\n");
     return 0;
 }
 

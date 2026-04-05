@@ -154,6 +154,13 @@ static bool ini_handler(const char *section, const char *key, const char *value,
             }
             memcpy(cfg->mount, value, len);
             cfg->mount[len] = '\0';
+        } else if (strcmp(key, "stdio") == 0) {
+            size_t len = strlen(value);
+            if (len >= SVC_HANDLE_NAME_MAX) {
+                len = SVC_HANDLE_NAME_MAX - 1;
+            }
+            memcpy(cfg->stdio, value, len);
+            cfg->stdio[len] = '\0';
         } else if (strcmp(key, "provides") == 0) {
             int idx = svc_find_by_name(mgr, cfg->name);
             if (idx >= 0) {

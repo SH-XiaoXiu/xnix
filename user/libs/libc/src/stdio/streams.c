@@ -1,42 +1,84 @@
 /**
  * @file streams.c
- * @brief FILE 流实现
+ * @brief FILE 流实现 (自适应通道)
  *
- * 管理 stdin/stdout/stderr 三个标准流,通过统一 fd 层进行 I/O.
+ * 管理 stdin/stdout/stderr 三个标准流.
+ *
+ * 通道机制:
+ *   - CH_DEBUG: fd 无效时, 写入走 SYS_DEBUG_WRITE, 读取返回 EOF
+ *   - CH_FD:    fd 有效时, 走标准 write()/read() -> IPC
+ *   - 升级:     每 32 次 flush 尝试 reprobe fd, 单向 DEBUG -> FD
  */
 
 #include <stdio_internal.h>
 #include <string.h>
 #include <unistd.h>
-#include <xnix/abi/handle.h>
 #include <xnix/fd.h>
-#include <xnix/syscall.h>
+
+/* reprobe 频率: 每 32 次 flush 尝试一次 */
+#define REPROBE_INTERVAL 32
 
 FILE _stdin_file;
 FILE _stdout_file;
 FILE _stderr_file;
 
+/**
+ * 根据 fd 有效性确定初始通道
+ */
+static enum stdio_channel _detect_channel(int fd) {
+    if (fd >= 0 && fd_get(fd) != NULL) {
+        return STDIO_CH_FD;
+    }
+    return STDIO_CH_DEBUG;
+}
+
+/**
+ * 尝试升级通道: DEBUG -> FD
+ *
+ * 仅当 fd 已被外部安装(如 init handle 注入)时生效.
+ * 通过 reprobe_cnt 限制调用频率.
+ */
+static void _stdio_maybe_upgrade(FILE *f) {
+    if (f->channel == STDIO_CH_FD) {
+        return; /* 已是最佳通道 */
+    }
+
+    f->reprobe_cnt++;
+    if (f->reprobe_cnt < REPROBE_INTERVAL) {
+        return;
+    }
+    f->reprobe_cnt = 0;
+
+    if (f->fd >= 0 && fd_get(f->fd) != NULL) {
+        f->channel = STDIO_CH_FD;
+    }
+}
+
 void _libc_stdio_init(void) {
-    /* fd 0/1/2 已由 fd_table_init() 建立,这里只设置 FILE 结构 */
     memset(&_stdin_file, 0, sizeof(_stdin_file));
     _stdin_file.fd       = STDIN_FILENO;
     _stdin_file.buf_mode = _IONBF;
     _stdin_file.flags    = _FILE_READ;
+    _stdin_file.channel  = _detect_channel(STDIN_FILENO);
 
     memset(&_stdout_file, 0, sizeof(_stdout_file));
     _stdout_file.fd       = STDOUT_FILENO;
     _stdout_file.buf_mode = _IOLBF;
     _stdout_file.flags    = _FILE_WRITE;
+    _stdout_file.channel  = _detect_channel(STDOUT_FILENO);
 
     memset(&_stderr_file, 0, sizeof(_stderr_file));
     _stderr_file.fd       = STDERR_FILENO;
     _stderr_file.buf_mode = _IONBF;
     _stderr_file.flags    = _FILE_WRITE;
+    _stderr_file.channel  = _detect_channel(STDERR_FILENO);
 }
 
 void _stdio_set_fd(FILE *f, int fd) {
     if (f) {
         f->fd = fd;
+        /* fd 变化时重新检测通道 */
+        f->channel = _detect_channel(fd);
     }
 }
 
@@ -45,14 +87,20 @@ int _file_flush(FILE *f) {
         return 0;
     }
 
-    if (f->fd < 0) {
-        /* fallback: SYS_DEBUG_WRITE */
+    _stdio_maybe_upgrade(f);
+
+    switch (f->channel) {
+    case STDIO_CH_DEBUG:
         _debug_write(f->buf, f->buf_pos);
-        f->buf_pos = 0;
-        return 0;
+        break;
+    case STDIO_CH_FD:
+        write(f->fd, f->buf, f->buf_pos);
+        break;
+    case STDIO_CH_NONE:
+        /* 丢弃 */
+        break;
     }
 
-    write(f->fd, f->buf, f->buf_pos);
     f->buf_pos = 0;
     return 0;
 }
@@ -63,13 +111,21 @@ int _file_putc(FILE *f, char c) {
     }
 
     if (f->buf_mode == _IONBF) {
-        /* 无缓冲:立即发送 */
-        if (f->fd < 0) {
+        /* 无缓冲: 立即发送 */
+        _stdio_maybe_upgrade(f);
+
+        switch (f->channel) {
+        case STDIO_CH_DEBUG: {
             char ch = (char)c;
             _debug_write(&ch, 1);
-            return (unsigned char)c;
+            break;
         }
-        write(f->fd, &c, 1);
+        case STDIO_CH_FD:
+            write(f->fd, &c, 1);
+            break;
+        case STDIO_CH_NONE:
+            break;
+        }
         return (unsigned char)c;
     }
 
@@ -89,24 +145,24 @@ int _file_getc(FILE *f) {
         return EOF;
     }
 
-    for (;;) {
-        if (f->fd < 0) {
-            f->error = 1;
-            msleep(10);
-            continue;
-        }
+    _stdio_maybe_upgrade(f);
 
-        char    c;
-        ssize_t n = read(f->fd, &c, 1);
-        if (n < 0) {
-            msleep(10);
-            continue;
-        }
-        if (n == 0) {
-            msleep(1);
-            continue;
-        }
-
-        return (unsigned char)c;
+    if (f->channel != STDIO_CH_FD) {
+        /* DEBUG 通道没有输入源 */
+        f->eof = 1;
+        return EOF;
     }
+
+    char    c;
+    ssize_t n = read(f->fd, &c, 1);
+    if (n < 0) {
+        f->error = 1;
+        return EOF;
+    }
+    if (n == 0) {
+        f->eof = 1;
+        return EOF;
+    }
+
+    return (unsigned char)c;
 }

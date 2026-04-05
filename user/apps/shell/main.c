@@ -741,44 +741,17 @@ int main(int argc, char **argv) {
     char line[MAX_LINE];
 
     /* 解析命令行参数 */
-    const char *tty_name = "tty0";
     const char *svc_name = "shell";
     for (int i = 0; i < argc; i++) {
-        if (strncmp(argv[i], "--tty=", 6) == 0) {
-            tty_name = argv[i] + 6;
-        } else if (strncmp(argv[i], "--svc=", 6) == 0) {
+        if (strncmp(argv[i], "--svc=", 6) == 0) {
             svc_name = argv[i] + 6;
         }
     }
 
-    /* 查找 handles */
-    g_tty_ep = env_get_handle(tty_name);
+    /* stdio 已由 init 通过 cfg->stdio 正确注入到 fd 0/1/2.
+     * 不再需要手动查找 tty handle 和 dup2 重绑定. */
+    g_tty_ep = fd_get_handle(STDIN_FILENO);
     g_vfs_ep = env_get_handle("vfs_ep");
-
-    /* 重新绑定 stdio 到指定的 tty:
-     * 通过 dup2 把 tty handle 设置到 fd 0/1/2,
-     * 然后 stdio FILE 自然走 fd 层到正确的 tty. */
-    if (g_tty_ep != HANDLE_INVALID) {
-        /* 创建新的 fd 指向 tty_ep, 然后 dup2 到 0/1/2 */
-        int tty_fd = fd_alloc();
-        if (tty_fd >= 0) {
-            fd_install(tty_fd, g_tty_ep, 0, 0, FD_FLAG_READ | FD_FLAG_WRITE);
-            if (tty_fd != STDIN_FILENO) {
-                dup2(tty_fd, STDIN_FILENO);
-            }
-            if (tty_fd != STDOUT_FILENO) {
-                dup2(tty_fd, STDOUT_FILENO);
-            }
-            if (tty_fd != STDERR_FILENO) {
-                dup2(tty_fd, STDERR_FILENO);
-            }
-            if (tty_fd > STDERR_FILENO) {
-                close(tty_fd);
-            }
-            /* dup2 创建了新 handle, 更新 g_tty_ep 指向有效的 */
-            g_tty_ep = fd_get_handle(STDIN_FILENO);
-        }
-    }
 
     /* 初始化 VFS 客户端 */
     vfs_client_init(g_vfs_ep);

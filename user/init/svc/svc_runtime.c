@@ -1,4 +1,3 @@
-#include "early_console.h"
 #include "ramfs.h"
 #include "ramfsd_service.h"
 #include "svc_internal.h"
@@ -59,15 +58,30 @@ static int do_mount(struct svc_config *cfg) {
 }
 
 /**
- * 查找服务配置中的 tty handle,返回其 src_handle
+ * 查找服务的 stdio handle
+ *
+ * 仅使用 cfg->stdio 显式配置 (如 "stdio = tty1").
+ * 不做 fallback: 没有 stdio 配置的服务使用 DEBUG 通道.
+ * 这避免了 provides/wants 的 tty handle 被意外用作 stdio,
+ * 导致循环依赖 (如 seriald→tty1→ttyd→serial→seriald 死锁).
  */
-static uint32_t find_tty_handle(struct svc_config *cfg) {
-    for (int i = 0; i < cfg->handle_count; i++) {
-        if (strncmp(cfg->handles[i].name, "tty", 3) == 0 &&
-            cfg->handles[i].src_handle != HANDLE_INVALID) {
-            return cfg->handles[i].src_handle;
+static uint32_t find_stdio_handle(struct svc_manager *mgr, struct svc_config *cfg) {
+    if (cfg->stdio[0] == '\0') {
+        return HANDLE_INVALID;
+    }
+
+    for (int i = 0; i < mgr->handle_def_count; i++) {
+        if (strcmp(mgr->handle_defs[i].name, cfg->stdio) == 0 &&
+            mgr->handle_defs[i].handle != HANDLE_INVALID) {
+            return mgr->handle_defs[i].handle;
         }
     }
+
+    handle_t h = sys_handle_find(cfg->stdio);
+    if (h != HANDLE_INVALID) {
+        return h;
+    }
+
     return HANDLE_INVALID;
 }
 
@@ -86,12 +100,12 @@ static void inject_svc_handles_image(struct proc_image_builder *b, struct svc_ma
         proc_image_add_handle(b, mgr->init_notify_ep, "init_notify");
     }
 
-    /* stdio → tty */
-    uint32_t tty_h = find_tty_handle(cfg);
-    if (tty_h != HANDLE_INVALID) {
-        proc_image_add_handle(b, tty_h, HANDLE_STDIO_STDIN);
-        proc_image_add_handle(b, tty_h, HANDLE_STDIO_STDOUT);
-        proc_image_add_handle(b, tty_h, HANDLE_STDIO_STDERR);
+    /* stdio → 通过 cfg->stdio 配置或 fallback */
+    uint32_t stdio_h = find_stdio_handle(mgr, cfg);
+    if (stdio_h != HANDLE_INVALID) {
+        proc_image_add_handle(b, stdio_h, HANDLE_STDIO_STDIN);
+        proc_image_add_handle(b, stdio_h, HANDLE_STDIO_STDOUT);
+        proc_image_add_handle(b, stdio_h, HANDLE_STDIO_STDERR);
     }
 }
 
@@ -110,12 +124,12 @@ static void inject_svc_handles(struct proc_builder *b, struct svc_manager *mgr,
         proc_add_handle(b, mgr->init_notify_ep, "init_notify");
     }
 
-    /* stdio → tty */
-    uint32_t tty_h = find_tty_handle(cfg);
-    if (tty_h != HANDLE_INVALID) {
-        proc_add_handle(b, tty_h, HANDLE_STDIO_STDIN);
-        proc_add_handle(b, tty_h, HANDLE_STDIO_STDOUT);
-        proc_add_handle(b, tty_h, HANDLE_STDIO_STDERR);
+    /* stdio → 通过 cfg->stdio 配置或 fallback */
+    uint32_t stdio_h = find_stdio_handle(mgr, cfg);
+    if (stdio_h != HANDLE_INVALID) {
+        proc_add_handle(b, stdio_h, HANDLE_STDIO_STDIN);
+        proc_add_handle(b, stdio_h, HANDLE_STDIO_STDOUT);
+        proc_add_handle(b, stdio_h, HANDLE_STDIO_STDERR);
     }
 }
 
@@ -195,25 +209,12 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     }
 
     if (pid < 0) {
-        if (early_console_is_active()) {
-            char buf[160];
-            snprintf(buf, sizeof(buf), "[INIT] ERROR: failed to start %s: %s\n", cfg->name,
-                     strerror(-pid));
-            early_puts(buf);
-        } else {
-            printf("Failed to start %s: %s\n", cfg->name, strerror(-pid));
-        }
+        printf("[INIT] ERROR: failed to start %s: %s\n", cfg->name, strerror(-pid));
         rt->state = SVC_STATE_FAILED;
         return pid;
     }
 
-    if (early_console_is_active()) {
-        char buf[160];
-        snprintf(buf, sizeof(buf), "[INIT] started %s (pid %d)\n", cfg->name, pid);
-        early_puts(buf);
-    } else {
-        printf("%s started (pid=%d)\n", cfg->name, pid);
-    }
+    printf("[INIT] started %s (pid %d)\n", cfg->name, pid);
 
     rt->state          = SVC_STATE_RUNNING;
     rt->pid            = pid;
@@ -223,25 +224,8 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
     rt->ready          = false;
     rt->ready_retry    = 0;
 
-    if (strcmp(cfg->name, "shell") == 0) {
-        /* shell 启动后,将 init 的 stdout/stderr 重定向到 serial (tty1),
-         * 避免诊断输出干扰 shell 的 VGA 终端 (tty0). */
-        handle_t log_ep = env_get_handle("tty1");
-        if (log_ep != HANDLE_INVALID) {
-            int log_fd = fd_alloc();
-            if (log_fd >= 0) {
-                fd_install(log_fd, log_ep, 0, 0, FD_FLAG_WRITE);
-                dup2(log_fd, STDOUT_FILENO);
-                dup2(log_fd, STDERR_FILENO);
-                if (log_fd != STDOUT_FILENO && log_fd != STDERR_FILENO) {
-                    /* 仅释放 fd 槽位,不关闭底层 kernel handle -
-                     * tty1 handle 是服务管理器的共享资源,
-                     * 后续启动的 shell_serial 等服务仍需使用它. */
-                    fd_free(log_fd);
-                }
-            }
-        }
-    }
+    /* init 不再重定向自己的 stdout/stderr, 永久使用 DEBUG 通道.
+     * 服务的 stdio 通过 cfg->stdio 配置注入. */
 
     return pid;
 }

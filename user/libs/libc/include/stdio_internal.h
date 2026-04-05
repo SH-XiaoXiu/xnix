@@ -3,6 +3,7 @@
  * @brief FILE 流内部结构
  *
  * 用户态 I/O 通过统一 fd 层.
+ * 支持自适应通道: 当 fd 无效时走 SYS_DEBUG_WRITE, fd 有效后自动升级.
  */
 
 #ifndef _STDIO_INTERNAL_H
@@ -39,21 +40,36 @@ enum {
 #define _FILE_READ  1
 #define _FILE_WRITE 2
 
+/**
+ * stdio 输出通道
+ *
+ * 当 fd 无效时使用 DEBUG 通道 (SYS_DEBUG_WRITE),
+ * fd 有效后自动升级为 FD 通道 (write/read syscall).
+ * 升级单向: DEBUG -> FD, 不降级.
+ */
+enum stdio_channel {
+    STDIO_CH_NONE  = 0, /* 无输出 */
+    STDIO_CH_DEBUG = 1, /* SYS_DEBUG_WRITE 直出内核 */
+    STDIO_CH_FD    = 2, /* 正常 fd -> IPC */
+};
+
 struct _FILE {
-    int  fd; /* 底层 fd (替代原先的 tty_ep) */
-    char buf[STREAM_BUF_SIZE];
-    int  buf_pos;
-    int  buf_mode; /* _IONBF, _IOLBF, _IOFBF */
-    int  flags;    /* _FILE_READ / _FILE_WRITE */
-    int  error;
-    int  eof;
+    int                fd;          /* 底层 fd (-1 如果未绑定) */
+    enum stdio_channel channel;     /* 当前活跃通道 */
+    int                reprobe_cnt; /* reprobe 频率限制计数器 */
+    char               buf[STREAM_BUF_SIZE];
+    int                buf_pos;
+    int                buf_mode;    /* _IONBF, _IOLBF, _IOFBF */
+    int                flags;       /* _FILE_READ / _FILE_WRITE */
+    int                error;
+    int                eof;
 };
 
 /**
  * 初始化标准流
  *
  * 在 __libc_init 中调用,fd 表已由 fd_table_init() 建立,
- * 这里设置 stdin/stdout/stderr FILE 结构.
+ * 这里设置 stdin/stdout/stderr FILE 结构并确定初始通道.
  */
 void _libc_stdio_init(void);
 
