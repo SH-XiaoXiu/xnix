@@ -50,9 +50,7 @@ struct char_device {
     struct char_ops *ops;       /* 操作回调 */
     uint32_t         caps;      /* CHARDEV_CAP_READ | CHARDEV_CAP_WRITE */
     void            *priv;      /* 驱动私有数据 */
-
-    /* --- 框架内部, 驱动不要修改 --- */
-    handle_t         endpoint;  /* IPC endpoint (chardev_register 创建) */
+    handle_t         endpoint;  /* 预设 init 注入的 endpoint, 或 HANDLE_INVALID 由框架创建 */
 };
 
 /**
@@ -64,6 +62,9 @@ struct char_device {
  * @param dev  驱动填写的设备描述, 框架会填写 endpoint 字段
  * @return 0 成功, -1 失败
  */
+/** 静态初始化器, 确保 endpoint = HANDLE_INVALID */
+#define CHAR_DEVICE_INIT { .endpoint = HANDLE_INVALID }
+
 int chardev_register(struct char_device *dev);
 
 #endif /* XNIX_CHARDEV_H */

@@ -49,8 +49,7 @@ struct display_device {
     int                cols;      /* 文本列数 */
     void              *priv;      /* 驱动私有数据 */
 
-    /* --- 框架内部 --- */
-    handle_t           endpoint;
+    handle_t           endpoint;  /* 预设 endpoint 或 HANDLE_INVALID */
 };
 
 /**
@@ -58,6 +57,8 @@ struct display_device {
  *
  * @return 0 成功, -1 失败
  */
+#define DISPLAY_DEVICE_INIT { .endpoint = HANDLE_INVALID }
+
 int displaydev_register(struct display_device *dev);
 
 #endif /* XNIX_DISPLAYDEV_H */

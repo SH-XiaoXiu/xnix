@@ -36,8 +36,7 @@ struct input_device {
     uint32_t          type;      /* INPUTDEV_TYPE_KEYBOARD 等 */
     void             *priv;      /* 驱动私有数据 */
 
-    /* --- 框架内部 --- */
-    handle_t          endpoint;
+    handle_t          endpoint;  /* 预设 endpoint 或 HANDLE_INVALID */
 };
 
 /**
@@ -45,6 +44,8 @@ struct input_device {
  *
  * @return 0 成功, -1 失败
  */
+#define INPUT_DEVICE_INIT { .endpoint = HANDLE_INVALID }
+
 int inputdev_register(struct input_device *dev);
 
 #endif /* XNIX_INPUTDEV_H */
