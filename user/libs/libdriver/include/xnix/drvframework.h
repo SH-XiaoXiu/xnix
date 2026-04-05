@@ -1,5 +1,5 @@
 /**
- * @file xnix/driver.h
+ * @file xnix/drvframework.h
  * @brief 驱动框架入口
  *
  * 驱动开发者通过 chardev_register / inputdev_register / displaydev_register
@@ -7,8 +7,8 @@
  * 最后调用 driver_run() 阻塞主线程.
  */
 
-#ifndef XNIX_DRIVER_H
-#define XNIX_DRIVER_H
+#ifndef XNIX_DRVFRAMEWORK_H
+#define XNIX_DRVFRAMEWORK_H
 
 /**
  * 阻塞主线程, 等待所有设备线程运行.
@@ -20,4 +20,4 @@
  */
 void driver_run(void);
 
-#endif /* XNIX_DRIVER_H */
+#endif /* XNIX_DRVFRAMEWORK_H */

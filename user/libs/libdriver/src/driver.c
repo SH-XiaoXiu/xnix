@@ -5,7 +5,7 @@
  * 管理已注册设备的计数, 提供 driver_run() 阻塞主线程.
  */
 
-#include <xnix/driver.h>
+#include <xnix/drvframework.h>
 
 #include <pthread.h>
 #include <unistd.h>

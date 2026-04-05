@@ -2,6 +2,6 @@
 
 set(APP_NAME "seriald")
 set(APP_SOURCES main.c serial.c)
-set(APP_LIBS c d vfs pthread)
+set(APP_LIBS c driver pthread)
 
 include(${CMAKE_SOURCE_DIR}/user/app.cmake)

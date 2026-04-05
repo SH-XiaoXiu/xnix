@@ -126,23 +126,24 @@ int chardev_register(struct char_device *dev) {
         return -1;
     }
 
-    /* 尝试获取 init 注入的 endpoint, 没有则创建 */
-    char ep_name[32];
-    snprintf(ep_name, sizeof(ep_name), "%s%d", dev->name, dev->instance);
+    /* 如果驱动已预设 endpoint (如 init 注入), 直接使用 */
+    if (dev->endpoint == HANDLE_INVALID || dev->endpoint == 0) {
+        char ep_name[32];
+        snprintf(ep_name, sizeof(ep_name), "%s%d", dev->name, dev->instance);
 
-    handle_t ep = env_get_handle(ep_name);
-    if (ep == HANDLE_INVALID) {
-        /* 也尝试不带序号的名称 (如 "serial" 而非 "serial0") */
-        ep = env_get_handle(dev->name);
-    }
-    if (ep == HANDLE_INVALID) {
-        int ret = sys_endpoint_create(ep_name);
-        if (ret < 0) {
-            return -1;
+        handle_t ep = env_get_handle(ep_name);
+        if (ep == HANDLE_INVALID) {
+            ep = env_get_handle(dev->name);
         }
-        ep = (handle_t)ret;
+        if (ep == HANDLE_INVALID) {
+            int ret = sys_endpoint_create(ep_name);
+            if (ret < 0) {
+                return -1;
+            }
+            ep = (handle_t)ret;
+        }
+        dev->endpoint = ep;
     }
-    dev->endpoint = ep;
 
     driver_add_device();
 
