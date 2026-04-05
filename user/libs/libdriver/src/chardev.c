@@ -113,10 +113,8 @@ static void *chardev_thread(void *arg) {
             continue;
         }
 
-        int ret = chardev_handle_msg(dev, &msg);
-        if (ret == 0) {
-            sys_ipc_reply(&msg);
-        }
+        chardev_handle_msg(dev, &msg);
+        sys_ipc_reply(&msg);
     }
     return NULL;
 }
@@ -147,14 +145,11 @@ int chardev_register(struct char_device *dev) {
 
     driver_add_device();
 
-    /* 启动 2 个服务线程: 当一个阻塞在 read() 时, 另一个仍可处理 write() */
-    for (int i = 0; i < 2; i++) {
-        pthread_t tid;
-        if (pthread_create(&tid, NULL, chardev_thread, dev) != 0) {
-            return (i > 0) ? 0 : -1; /* 至少 1 个线程成功即可 */
-        }
-        pthread_detach(tid);
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, chardev_thread, dev) != 0) {
+        return -1;
     }
+    pthread_detach(tid);
 
     return 0;
 }

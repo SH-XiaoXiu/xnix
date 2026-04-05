@@ -51,7 +51,8 @@ struct port_context {
     /* 输出锁 */
     pthread_mutex_t   tx_lock;
 
-    struct char_device dev;
+    struct char_device read_dev;   /* 读 endpoint (阻塞在 com_read) */
+    struct char_device write_dev;  /* 写 endpoint (快速返回) */
 };
 
 static struct port_context g_ports[MAX_COM_PORTS];
@@ -136,8 +137,11 @@ static int com_write(struct char_device *dev, const void *buf, size_t len) {
     return (int)len;
 }
 
-static struct char_ops com_ops = {
-    .read  = com_read,
+static struct char_ops com_read_ops = {
+    .read = com_read,
+};
+
+static struct char_ops com_write_ops = {
     .write = com_write,
 };
 
@@ -236,31 +240,46 @@ int main(void) {
             continue;
         }
 
-        /* 创建输入唤醒 notification */
         g_ports[i].rx_notif = sys_notification_create();
 
-        /* COM1 的端点由 init 注入为 "serial" */
+        /* 写 endpoint: COM1 使用 init 注入的 "serial" */
         if (i == 0) {
             handle_t ep = env_get_handle("serial");
-            if (ep != HANDLE_INVALID) {
-                g_ports[i].dev.endpoint = ep;
-            }
+            if (ep != HANDLE_INVALID)
+                g_ports[i].write_dev.endpoint = ep;
+        }
+        g_ports[i].write_dev.name     = "com";
+        g_ports[i].write_dev.instance = i;
+        g_ports[i].write_dev.ops      = &com_write_ops;
+        g_ports[i].write_dev.caps     = CHARDEV_CAP_WRITE;
+        g_ports[i].write_dev.priv     = &g_ports[i];
+
+        if (chardev_register(&g_ports[i].write_dev) < 0) {
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]",
+                      " COM%d: write register failed\n", i + 1);
+            continue;
         }
 
-        g_ports[i].dev.name     = "com";
-        g_ports[i].dev.instance = i;
-        g_ports[i].dev.ops      = &com_ops;
-        g_ports[i].dev.caps     = CHARDEV_CAP_READ | CHARDEV_CAP_WRITE;
-        g_ports[i].dev.priv     = &g_ports[i];
+        /* 读 endpoint: 独立 endpoint，阻塞读不影响写 */
+        if (i == 0) {
+            handle_t ep = env_get_handle("serial_in");
+            if (ep != HANDLE_INVALID)
+                g_ports[i].read_dev.endpoint = ep;
+        }
+        g_ports[i].read_dev.name     = "com_in";
+        g_ports[i].read_dev.instance = i;
+        g_ports[i].read_dev.ops      = &com_read_ops;
+        g_ports[i].read_dev.caps     = CHARDEV_CAP_READ;
+        g_ports[i].read_dev.priv     = &g_ports[i];
 
-        if (chardev_register(&g_ports[i].dev) < 0) {
+        if (chardev_register(&g_ports[i].read_dev) < 0) {
             ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]",
-                      " COM%d: register failed\n", i + 1);
+                      " COM%d: read register failed\n", i + 1);
             continue;
         }
 
         ulog_tagf(stdout, TERM_COLOR_WHITE, "[seriald]",
-                  " COM%d (0x%x, IRQ %d) registered\n",
+                  " COM%d (0x%x, IRQ %d) read+write registered\n",
                   i + 1, g_ports[i].base, g_ports[i].irq);
     }
 

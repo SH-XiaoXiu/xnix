@@ -477,18 +477,19 @@ int main(int argc, char **argv) {
     _stdio_set_fd(stderr, -1);
 
     env_set_name("termd");
-    handle_t serial_ep = env_get_handle("serial");
-    handle_t kbd_ep    = env_get_handle("kbd_ep");
+    handle_t serial_ep    = env_get_handle("serial");     /* 写 endpoint */
+    handle_t serial_in_ep = env_get_handle("serial_in");  /* 读 endpoint */
+    handle_t kbd_ep       = env_get_handle("kbd_ep");
 
-    /* tty1 (serial 终端): input=seriald(chardev), output=seriald(chardev) */
-    if (serial_ep != HANDLE_INVALID) {
+    /* tty1 (serial 终端): input=serial_in(read), output=serial(write) */
+    if (serial_ep != HANDLE_INVALID && serial_in_ep != HANDLE_INVALID) {
         handle_t tty1_ep = env_get_handle(ABI_TTY1_HANDLE_NAME);
         if (tty1_ep == HANDLE_INVALID)
             tty1_ep = sys_endpoint_create(ABI_TTY1_HANDLE_NAME);
 
         if (tty1_ep != HANDLE_INVALID) {
             term_init(&g_terms[g_term_count], 1, tty1_ep,
-                      serial_ep, DEV_CHARDEV,
+                      serial_in_ep, DEV_CHARDEV,
                       serial_ep, DEV_CHARDEV);
             g_term_count++;
         }
