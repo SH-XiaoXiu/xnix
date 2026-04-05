@@ -202,9 +202,11 @@ static void boot_start_services(void) {
         if (init_proc) {
             init_proc->cap_mask = CAP_ALL;
             init_proc->irq_mask = 0xFFFFFFFF;
-            /* ioport_bitmap: init 作为 root 给 CAP_ALL, 但不分配 8KB 位图.
-               init 自己不直接访问 IO 端口, 它通过 handle 委托给 driver.
-               如果需要, 可以延迟分配. */
+            /* ioport_bitmap: init 全端口授权, 子进程继承后可访问 IO 端口 */
+            init_proc->ioport_bitmap = kzalloc(8192);
+            if (init_proc->ioport_bitmap) {
+                memset(init_proc->ioport_bitmap, 0xFF, 8192);
+            }
         }
     }
 

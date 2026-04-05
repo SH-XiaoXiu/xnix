@@ -5,7 +5,7 @@
  * 管理 stdin/stdout/stderr 三个标准流.
  *
  * 通道机制:
- *   - CH_DEBUG: fd 无效时, 写入走 SYS_DEBUG_WRITE, 读取返回 EOF
+ *   - CH_DEBUG: fd 无效时, 写入走 SYS_DEBUG_WRITE, 读取走 SYS_DEBUG_READ
  *   - CH_FD:    fd 有效时, 走标准 write()/read() -> IPC
  *   - 升级:     每 32 次 flush 尝试 reprobe fd, 单向 DEBUG -> FD
  */
@@ -147,8 +147,18 @@ int _file_getc(FILE *f) {
 
     _stdio_maybe_upgrade(f);
 
+    if (f->channel == STDIO_CH_DEBUG) {
+        /* DEBUG 通道: 通过 SYS_DEBUG_READ 阻塞读 COM1 */
+        char c;
+        int  n = _debug_read(&c, 1);
+        if (n <= 0) {
+            f->eof = 1;
+            return EOF;
+        }
+        return (unsigned char)c;
+    }
+
     if (f->channel != STDIO_CH_FD) {
-        /* DEBUG 通道没有输入源 */
         f->eof = 1;
         return EOF;
     }

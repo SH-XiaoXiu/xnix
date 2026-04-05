@@ -97,6 +97,7 @@
 #define SYS_DEBUG_WRITE       901 /* 调试控制台写(仅编译时启用): ebx=buf_ptr, ecx=len */
 #define SYS_DEBUG_SET_COLOR   902 /* 调试控制台颜色: ebx=fg, ecx=bg (仅编译时启用) */
 #define SYS_DEBUG_RESET_COLOR 903 /* 调试控制台颜色复位(仅编译时启用) */
+#define SYS_DEBUG_READ        904 /* 调试控制台读(仅编译时启用): ebx=buf_ptr, ecx=len */
 
 /*
  * 系统调用调用约定(x86)

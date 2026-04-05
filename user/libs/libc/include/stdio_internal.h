@@ -27,6 +27,20 @@ static inline void _debug_write(const void *buf, size_t len) {
     (void)ret;
 }
 
+/**
+ * SYS_DEBUG_READ fallback
+ *
+ * pre-TTY 阶段读取,阻塞读内核 COM1 (每次返回 1 字节).
+ */
+static inline int _debug_read(void *buf, size_t len) {
+    int ret;
+    asm volatile("int $0x80"
+                 : "=a"(ret)
+                 : "a"(SYS_DEBUG_READ), "b"((uint32_t)(uintptr_t)buf), "c"((uint32_t)len)
+                 : "memory");
+    return ret;
+}
+
 #define STREAM_BUF_SIZE 256
 
 /* 缓冲模式 */
