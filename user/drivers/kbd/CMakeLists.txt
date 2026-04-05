@@ -2,6 +2,6 @@
 
 set(APP_NAME "kbd")
 set(APP_SOURCES main.c scancode.c)
-set(APP_LIBS c d pthread)
+set(APP_LIBS c driver pthread)
 
 include(${CMAKE_SOURCE_DIR}/user/app.cmake)

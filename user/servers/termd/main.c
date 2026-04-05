@@ -12,8 +12,12 @@
  */
 
 #include <xnix/abi/io.h>
+#include <xnix/abi/input.h>
 #include <xnix/abi/tty.h>
 #include <xnix/protocol/chardev.h>
+#include <xnix/protocol/displaydev.h>
+#include <xnix/protocol/input.h>
+#include <xnix/protocol/inputdev.h>
 #include <xnix/protocol/tty.h>
 
 #include <pthread.h>
@@ -39,11 +43,19 @@ enum ldisc_mode {
     LDISC_COOKED = 1,
 };
 
+enum dev_proto {
+    DEV_CHARDEV    = 0, /* CHARDEV_READ/WRITE (串口) */
+    DEV_INPUTDEV   = 1, /* INPUTDEV_READ (键盘) */
+    DEV_DISPLAYDEV = 2, /* DISPDEV_WRITE (显示) */
+};
+
 struct terminal {
     int      id;
     handle_t term_ep;      /* shell 连接的 endpoint */
-    handle_t input_ep;     /* 输入设备 (chardev) */
-    handle_t output_ep;    /* 输出设备 (chardev) */
+    handle_t input_ep;     /* 输入设备 */
+    handle_t output_ep;    /* 输出设备 */
+    enum dev_proto input_proto;
+    enum dev_proto output_proto;
 
     /* 输入队列 */
     char              input_buf[TERM_INPUT_BUF_SIZE];
@@ -123,14 +135,54 @@ static int chardev_read(handle_t ep, void *buf, size_t max) {
     return (int)reply.regs.data[0];
 }
 
+static int inputdev_read_event(handle_t ep, struct input_event *ev) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+
+    msg.regs.data[0] = INPUTDEV_READ;
+
+    int ret = sys_ipc_call(ep, &msg, &reply, 0);
+    if (ret < 0) return -1;
+    if ((int32_t)reply.regs.data[0] < 0) return -1;
+
+    ev->type      = INPUT_UNPACK_TYPE(reply.regs.data[1]);
+    ev->modifiers = INPUT_UNPACK_MODIFIERS(reply.regs.data[1]);
+    ev->code      = INPUT_UNPACK_CODE(reply.regs.data[1]);
+    ev->value     = INPUT_UNPACK_VALUE(reply.regs.data[2]);
+    ev->value2    = INPUT_UNPACK_VALUE2(reply.regs.data[2]);
+    ev->timestamp = INPUT_UNPACK_TIMESTAMP(reply.regs.data[3]);
+    return 0;
+}
+
+static int displaydev_write(handle_t ep, const void *buf, size_t len) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+
+    msg.regs.data[0] = DISPDEV_WRITE;
+    msg.regs.data[1] = (uint32_t)len;
+    msg.buffer.data  = (uint64_t)(uintptr_t)buf;
+    msg.buffer.size  = (uint32_t)len;
+
+    int ret = sys_ipc_call(ep, &msg, &reply, 5000);
+    if (ret < 0) return -1;
+    return (int)reply.regs.data[0];
+}
+
 /* ============== 输出辅助 ============== */
 
+static void term_output_write(struct terminal *t, const void *buf, size_t len) {
+    if (t->output_proto == DEV_DISPLAYDEV)
+        displaydev_write(t->output_ep, buf, len);
+    else
+        chardev_write(t->output_ep, buf, len);
+}
+
 static void term_output_char(struct terminal *t, char c) {
-    chardev_write(t->output_ep, &c, 1);
+    term_output_write(t, &c, 1);
 }
 
 static void term_output_str(struct terminal *t, const char *s, size_t len) {
-    chardev_write(t->output_ep, s, len);
+    term_output_write(t, s, len);
 }
 
 /* ============== 延迟回复 ============== */
@@ -220,19 +272,59 @@ static void term_process_input(struct terminal *t, char c) {
 
 /* ============== 输入线程 ============== */
 
+/** inputdev 事件 → 字符序列 (方向键生成 ESC [ A/B/C/D) */
+static int event_to_chars(const struct input_event *ev, char *out, int max) {
+    if (ev->type != INPUT_EVENT_KEY_PRESS)
+        return 0;
+
+    uint16_t code = ev->code;
+
+    /* 方向键 → ANSI 转义序列 */
+    if (code >= INPUT_KEY_UP && code <= INPUT_KEY_RIGHT && max >= 3) {
+        static const char arrow[] = {'A', 'B', 'C', 'D'};
+        out[0] = '\033';
+        out[1] = '[';
+        out[2] = arrow[code - INPUT_KEY_UP];
+        return 3;
+    }
+
+    /* 普通可打印字符 (code 字段存的是 ASCII 码) */
+    if (code > 0 && code < 128 && max >= 1) {
+        out[0] = (char)code;
+        return 1;
+    }
+
+    return 0;
+}
+
 static void *input_thread(void *arg) {
     struct terminal *t = (struct terminal *)arg;
 
-    while (1) {
-        char buf[64];
-        int  n = chardev_read(t->input_ep, buf, sizeof(buf));
-        if (n <= 0) {
-            msleep(100);
-            continue;
-        }
+    if (t->input_proto == DEV_INPUTDEV) {
+        /* inputdev 路径: 读取 input_event → 转换为字符 */
+        while (1) {
+            struct input_event ev;
+            if (inputdev_read_event(t->input_ep, &ev) < 0) {
+                msleep(100);
+                continue;
+            }
 
-        for (int i = 0; i < n; i++) {
-            term_process_input(t, buf[i]);
+            char chars[8];
+            int n = event_to_chars(&ev, chars, sizeof(chars));
+            for (int i = 0; i < n; i++)
+                term_process_input(t, chars[i]);
+        }
+    } else {
+        /* chardev 路径: 直接读取字节流 */
+        while (1) {
+            char buf[64];
+            int  n = chardev_read(t->input_ep, buf, sizeof(buf));
+            if (n <= 0) {
+                msleep(100);
+                continue;
+            }
+            for (int i = 0; i < n; i++)
+                term_process_input(t, buf[i]);
         }
     }
     return NULL;
@@ -248,7 +340,7 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg) {
         uint32_t size = msg->regs.data[3];
         char    *data = (char *)(uintptr_t)msg->buffer.data;
         if (data && size > 0) {
-            chardev_write(t->output_ep, data, size);
+            term_output_write(t, data, size);
         }
         msg->regs.data[0] = (uint32_t)size;
         msg->buffer.data = 0;
@@ -358,14 +450,16 @@ static void *service_thread(void *arg) {
 /* ============== 终端初始化 ============== */
 
 static void term_init(struct terminal *t, int id, handle_t term_ep,
-                      handle_t input_ep, handle_t output_ep) {
+                      handle_t input_ep, enum dev_proto input_proto,
+                      handle_t output_ep, enum dev_proto output_proto) {
     memset(t, 0, sizeof(*t));
-    t->id        = id;
-    t->term_ep   = term_ep;
-    t->input_ep  = input_ep;
-    t->output_ep = output_ep;
+    t->id           = id;
+    t->term_ep      = term_ep;
+    t->input_ep     = input_ep;
+    t->input_proto  = input_proto;
+    t->output_ep    = output_ep;
+    t->output_proto = output_proto;
 
-    /* 默认 raw + echo (shell 自己做行编辑) */
     t->mode = LDISC_RAW;
     t->echo = 0;
 
@@ -386,24 +480,38 @@ int main(int argc, char **argv) {
     handle_t serial_ep = env_get_handle("serial");
     handle_t kbd_ep    = env_get_handle("kbd_ep");
 
-    /* tty1 (serial 终端): input=serial, output=serial */
+    /* tty1 (serial 终端): input=seriald(chardev), output=seriald(chardev) */
     if (serial_ep != HANDLE_INVALID) {
         handle_t tty1_ep = env_get_handle(ABI_TTY1_HANDLE_NAME);
         if (tty1_ep == HANDLE_INVALID)
             tty1_ep = sys_endpoint_create(ABI_TTY1_HANDLE_NAME);
 
         if (tty1_ep != HANDLE_INVALID) {
-            term_init(&g_terms[g_term_count], 1, tty1_ep, serial_ep, serial_ep);
+            term_init(&g_terms[g_term_count], 1, tty1_ep,
+                      serial_ep, DEV_CHARDEV,
+                      serial_ep, DEV_CHARDEV);
             g_term_count++;
         }
     }
 
-    /* tty0 (VGA 终端): 需要 displaydev (fbcond) + inputdev (kbd) 协议支持
-       Phase 5 重写 kbd/fbcond 后启用. 当前只创建 endpoint 供 init 依赖解析 */
-    (void)kbd_ep;
-    handle_t tty0_ep = env_get_handle(ABI_TTY0_HANDLE_NAME);
-    if (tty0_ep == HANDLE_INVALID)
-        sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
+    /* tty0 (VGA 终端): input=kbd(inputdev), output=fbcond(displaydev) */
+    handle_t fbcon_ep = env_get_handle("fbcon_ep");
+    if (kbd_ep != HANDLE_INVALID && fbcon_ep != HANDLE_INVALID) {
+        handle_t tty0_ep = env_get_handle(ABI_TTY0_HANDLE_NAME);
+        if (tty0_ep == HANDLE_INVALID)
+            tty0_ep = sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
+
+        if (tty0_ep != HANDLE_INVALID) {
+            term_init(&g_terms[g_term_count], 0, tty0_ep,
+                      kbd_ep, DEV_INPUTDEV,
+                      fbcon_ep, DEV_DISPLAYDEV);
+            g_term_count++;
+        }
+    } else {
+        /* fbcond 不可用时仍创建 tty0 endpoint 供依赖解析 */
+        if (env_get_handle(ABI_TTY0_HANDLE_NAME) == HANDLE_INVALID)
+            sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
+    }
 
     /* 启动各终端的输入线程 + 服务线程 */
     for (int i = 0; i < g_term_count; i++) {
