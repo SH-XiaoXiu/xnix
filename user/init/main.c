@@ -273,8 +273,11 @@ int main(int argc, char **argv) {
         if (!system_ready) {
             bool all_ready = true;
             for (int i = 0; i < g_mgr.count; i++) {
-                svc_state_t s = g_mgr.runtime[i].state;
-                if (s != SVC_STATE_RUNNING && s != SVC_STATE_STOPPED && s != SVC_STATE_FAILED) {
+                struct svc_runtime *rt = &g_mgr.runtime[i];
+                if (rt->state == SVC_STATE_FAILED || rt->state == SVC_STATE_STOPPED) {
+                    continue;
+                }
+                if (rt->state != SVC_STATE_RUNNING || !rt->ready) {
                     all_ready = false;
                     break;
                 }

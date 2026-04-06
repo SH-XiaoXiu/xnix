@@ -52,15 +52,7 @@ static ssize_t write_io(struct fd_entry *ent, const void *buf, size_t n) {
     msg.buffer.data  = (uint64_t)(uintptr_t)buf;
     msg.buffer.size  = (uint32_t)n;
 
-    uint32_t timeout = (ent->session == 0) ? 200 : 5000;
-
-    /* stream (session==0): NOREPLY 避免 seriald→tty1→seriald 循环死锁 */
-    if (ent->session == 0) {
-        msg.flags = ABI_IPC_FLAG_NOREPLY;
-        int ret = sys_ipc_send(ent->handle, &msg, timeout);
-        if (ret < 0) { errno = EIO; return -1; }
-        return (ssize_t)n;
-    }
+    uint32_t timeout = (ent->session == 0) ? 1000 : 5000;
 
     /* 普通 IO: call with reply */
     int ret = sys_ipc_call(ent->handle, &msg, &reply, timeout);

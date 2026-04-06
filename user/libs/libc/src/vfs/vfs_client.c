@@ -150,8 +150,13 @@ int vfs_close(int fd) {
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
-    msg.regs.data[0] = IO_CLOSE;
-    msg.regs.data[1] = ent->session;
+    if (ent->handle == g_vfsd_ep) {
+        msg.regs.data[0] = UDM_VFS_CLOSE;
+        msg.regs.data[1] = ent->session;
+    } else {
+        msg.regs.data[0] = IO_CLOSE;
+        msg.regs.data[1] = ent->session;
+    }
 
     sys_ipc_call(ent->handle, &msg, &reply, 1000);
 

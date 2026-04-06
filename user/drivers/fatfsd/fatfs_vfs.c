@@ -53,6 +53,7 @@ static int fresult_to_errno(FRESULT res) {
 static int alloc_handle(struct fatfs_ctx *ctx) {
     for (int i = 0; i < FATFS_MAX_HANDLES; i++) {
         if (!ctx->handles[i].in_use) {
+            memset(&ctx->handles[i], 0, sizeof(ctx->handles[i]));
             ctx->handles[i].in_use = 1;
             return i;
         }
@@ -126,6 +127,7 @@ static int fatfs_open(void *ctx, const char *path, uint32_t flags) {
         return fresult_to_errno(res);
     }
 
+    strncpy(handle->path, path, sizeof(handle->path) - 1);
     handle->type  = 0; /* file */
     handle->flags = flags;
     return h;
@@ -264,6 +266,7 @@ static int fatfs_opendir(void *ctx, const char *path) {
         return fresult_to_errno(res);
     }
 
+    strncpy(handle->path, path, sizeof(handle->path) - 1);
     handle->type  = 1; /* dir */
     handle->flags = 0;
     return h;
@@ -282,7 +285,7 @@ static int fatfs_readdir(void *ctx, uint32_t h, uint32_t index, struct vfs_diren
     f_rewinddir(&handle->obj.dir);
 
     /* 跳过前 index 项 */
-    FILINFO fno;
+    FILINFO fno = {0};
     for (uint32_t i = 0; i <= index; i++) {
         FRESULT res = f_readdir(&handle->obj.dir, &fno);
         if (res != FR_OK) {

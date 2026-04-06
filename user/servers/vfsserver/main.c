@@ -20,7 +20,6 @@ struct vfs_dir_state {
     uint32_t backend_ep;
     uint32_t backend_handle;
     uint32_t mount_count;
-    uint32_t backend_skip; /* 被挂载点遮盖而跳过的后端条目数 */
     char     mount_names[VFS_MAX_MOUNTS][VFS_NAME_MAX];
     int      active;
 };
@@ -51,9 +50,8 @@ static struct vfs_cwd_entry cwd_table[VFS_MAX_PROCESSES];
 static int vfsd_dir_alloc(void) {
     for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
         if (!dir_table[i].active) {
-            dir_table[i].active       = 1;
-            dir_table[i].mount_count  = 0;
-            dir_table[i].backend_skip = 0;
+            memset(&dir_table[i], 0, sizeof(dir_table[i]));
+            dir_table[i].active = 1;
             return i;
         }
     }
@@ -72,8 +70,7 @@ static struct vfs_dir_state *vfsd_dir_get(uint32_t h) {
 
 static void vfsd_dir_free(uint32_t h) {
     if (h < VFS_MAX_MOUNTS) {
-        dir_table[h].active      = 0;
-        dir_table[h].mount_count = 0;
+        memset(&dir_table[h], 0, sizeof(dir_table[h]));
     }
 }
 
@@ -238,6 +235,17 @@ static void vfsd_collect_mount_children(const char *base, struct vfs_dir_state *
 
         if (st->mount_count >= VFS_MAX_MOUNTS) {
             break;
+        }
+
+        for (uint32_t i = 0; i < st->mount_count; i++) {
+            if (strcmp(st->mount_names[i], rem) == 0) {
+                rem = NULL;
+                break;
+            }
+        }
+
+        if (!rem) {
+            continue;
         }
 
         size_t nlen = strlen(rem);
@@ -474,7 +482,9 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
         return 0;
     }
 
-    uint32_t backend_index = index - st->mount_count + st->backend_skip;
+    uint32_t target_visible = index - st->mount_count;
+    uint32_t backend_index  = 0;
+    uint32_t visible_index  = 0;
 
     for (;;) {
         struct ipc_message req   = {0};
@@ -511,11 +521,12 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
         }
 
         if (!shadowed) {
-            break;
+            if (visible_index == target_visible) {
+                break;
+            }
+            visible_index++;
         }
 
-        /* 被遮盖,跳过并继续读下一个后端条目 */
-        st->backend_skip++;
         backend_index++;
     }
 

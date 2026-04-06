@@ -755,6 +755,7 @@ static void cmd_bg(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     char line[MAX_LINE];
+    int  prompt_shown = 0;
 
     /* 解析命令行参数 */
     const char *svc_name = "shell";
@@ -787,21 +788,25 @@ int main(int argc, char **argv) {
     while (1) {
         jobs_reap(); /* 收割已完成的后台 jobs */
 
-        char cwd[256];
-        int  cwd_ret = vfs_getcwd(cwd, sizeof(cwd));
+        if (!prompt_shown) {
+            char cwd[256];
+            int  cwd_ret = vfs_getcwd(cwd, sizeof(cwd));
 
-        if (cwd_ret >= 0) {
-            printf("%s> ", cwd);
-            fflush(stdout);
-        } else {
-            printf("> ");
-            fflush(stdout);
+            if (cwd_ret >= 0) {
+                printf("%s> ", cwd);
+                fflush(stdout);
+            } else {
+                printf("> ");
+                fflush(stdout);
+            }
+            prompt_shown = 1;
         }
 
         if (gets_s(line, sizeof(line)) == NULL) {
             msleep(100);
             continue;
         }
+        prompt_shown = 0;
 
         /* 防止用户按住回车键时产生输入风暴 */
         if (line[0] == '\0') {

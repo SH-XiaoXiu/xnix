@@ -18,6 +18,7 @@ struct fatfs_handle {
         FIL file;
         DIR dir;
     } obj;
+    char     path[VFS_PATH_MAX];
     uint32_t flags;
     uint8_t  type; /* 0=file, 1=dir */
     uint8_t  in_use;

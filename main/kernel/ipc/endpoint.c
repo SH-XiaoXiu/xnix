@@ -221,10 +221,29 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
     current->ipc_req_msg   = msg;
     current->ipc_reply_msg = reply_buf;
 
-    /* NOREPLY: 不阻塞,标记自己为 no-reply,立即返回 */
+    /* NOREPLY 也必须等待接收者真正取走消息:
+     * 当前实现里 send_queue 只排线程,不持有独立消息副本。
+     * 若此处直接返回,sys_ipc_send 会释放 kmsg,接收者稍后出队时消息体已失效。
+     * 因此 NOREPLY 的语义是“无回复的一次交付”,而不是“无接收确认的 fire-and-forget”。 */
     if (no_reply) {
-        pr_debug("[IPC] send NOREPLY enqueued: sender=%d ep=%p\n", current->tid, ep);
-        current->ipc_req_msg = NULL;  /* 标记: 不期望回复 */
+        pr_debug("[IPC] send NOREPLY enqueue-wait: sender=%d ep=%p\n", current->tid, ep);
+
+        if (!sched_block_timeout(current, timeout_ms)) {
+            pr_debug("[IPC] send NOREPLY wait receiver timeout: sender=%d\n", current->tid);
+            spin_lock(&ep->lock);
+            struct thread **pp = &ep->send_queue;
+            while (*pp) {
+                if (*pp == current) {
+                    *pp = current->wait_next;
+                    break;
+                }
+                pp = &(*pp)->wait_next;
+            }
+            current->wait_next = NULL;
+            spin_unlock(&ep->lock);
+            endpoint_unref(ep);
+            return -ETIMEDOUT;
+        }
         return 0;
     }
 
@@ -348,12 +367,15 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
 
         pr_debug("[IPC] recv <- send: receiver=%d sender=%d\n", current->tid, sender->tid);
 
-        /* 检查发送者是否为 NOREPLY (ipc_req_msg == NULL) */
-        bool sender_no_reply = (sender->ipc_req_msg == NULL);
+        /* 检查发送者是否为 NOREPLY */
+        bool sender_no_reply =
+            (sender->ipc_req_msg && (sender->ipc_req_msg->flags & IPC_FLAG_NOREPLY) != 0);
 
-        /* NOREPLY 发送者: 不期望回复,发送者已经返回 */
+        /* NOREPLY 发送者: 不等待 reply,但需要在消息被接收后唤醒以完成交付 */
         if (sender_no_reply) {
             pr_debug("[IPC] recv from NOREPLY sender: receiver=%d sender=%d\n", current->tid, sender->tid);
+            sender->ipc_req_msg = NULL;
+            sched_wakeup_thread(sender);
             handle_object_put(entry.type, entry.object);
             return 0;
         }
