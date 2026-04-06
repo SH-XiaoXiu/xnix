@@ -1,6 +1,8 @@
 #ifndef XNIX_POSIX_SPAWN_H
 #define XNIX_POSIX_SPAWN_H
 
+#include <xnix/abi/process.h>
+
 /*
  * POSIX 风格进程启动骨架。
  *
@@ -17,5 +19,14 @@
 
 int posix_spawn(const char *path, int argc, const char **argv);
 int posix_spawnp(const char *file, int argc, const char **argv);
+
+/*
+ * 构造一个标准“继承 named handles + argv”的 exec 请求。
+ *
+ * 这是给像 sudo 这类需要把 exec 请求转交给别的服务的场景准备的高层包装，
+ * 避免普通应用直接依赖 proc builder。
+ */
+int posix_spawn_make_exec_args(struct abi_exec_args *out, const char *path,
+                               int argc, const char **argv);
 
 #endif /* XNIX_POSIX_SPAWN_H */

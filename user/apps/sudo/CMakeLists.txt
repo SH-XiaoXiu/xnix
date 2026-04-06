@@ -6,6 +6,6 @@
 
 set(APP_NAME "sudo")
 set(APP_SOURCES main.c)
-set(APP_LIBS c sys pthread proc posix)
+set(APP_LIBS c sys pthread posix)
 
 include(${CMAKE_SOURCE_DIR}/user/app.cmake)

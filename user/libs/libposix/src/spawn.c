@@ -73,3 +73,20 @@ int posix_spawnp(const char *file, int argc, const char **argv) {
     }
     return posix_spawn(path, argc, argv);
 }
+
+int posix_spawn_make_exec_args(struct abi_exec_args *out, const char *path,
+                               int argc, const char **argv) {
+    if (!out || !path) {
+        return -EINVAL;
+    }
+
+    struct proc_builder b;
+    proc_new(&b, path);
+    proc_inherit_named(&b);
+    for (int i = 0; i < argc; i++) {
+        proc_add_arg(&b, argv[i]);
+    }
+
+    memcpy(out, &b.args, sizeof(*out));
+    return 0;
+}

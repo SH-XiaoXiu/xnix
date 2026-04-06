@@ -13,10 +13,10 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <vfs_client.h>
+#include <spawn.h>
 #include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
-#include <xnix/proc.h>
 #include <xnix/syscall.h>
 
 /* 简单的 PATH 搜索 */
@@ -78,19 +78,19 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    /* 使用 proc_builder 构建 exec_args */
-    struct proc_builder b;
-    proc_new(&b, path);
-    proc_inherit_named(&b);
-    for (int i = 1; i < argc; i++) {
-        proc_add_arg(&b, argv[i]);
+    struct abi_exec_args exec_args;
+    int build_ret = posix_spawn_make_exec_args(&exec_args, path, argc - 1,
+                                               (const char **)&argv[1]);
+    if (build_ret < 0) {
+        printf("sudo: failed to build exec request: %s\n", strerror(-build_ret));
+        return 1;
     }
 
     /* 通过 IPC 发送请求给 sudod */
     struct ipc_message msg = {0};
     msg.regs.data[0]       = SUDO_OP_EXEC;
-    msg.buffer.data        = (uint64_t)(uintptr_t)&b.args;
-    msg.buffer.size        = sizeof(b.args);
+    msg.buffer.data        = (uint64_t)(uintptr_t)&exec_args;
+    msg.buffer.size        = sizeof(exec_args);
 
     struct ipc_message reply = {0};
     int                ret   = sys_ipc_call(sudo_ep, &msg, &reply, 5000);
