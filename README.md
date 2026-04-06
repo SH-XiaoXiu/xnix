@@ -22,19 +22,19 @@
 Xnix 明确按微内核方式分层：
 
 - 内核只提供机制
-  - 调度
-  - IPC
-  - 内存管理
-  - 进程/线程生命周期
-  - IRQ
-  - handle / capability
+    - 调度
+    - IPC
+    - 内存管理
+    - 进程/线程生命周期
+    - IRQ
+    - handle / capability
 - 策略在用户态
-  - 服务编排
-  - VFS
-  - 终端
-  - console/session 管理
-  - 图形系统
-  - 驱动
+    - 服务编排
+    - VFS
+    - 终端
+    - console/session 管理
+    - 图形系统
+    - 驱动
 
 当前已经完成的一些关键收口：
 
@@ -120,28 +120,30 @@ Xnix 明确按微内核方式分层：
 - `libblock`
 - `libproc`（暂留）
 
-
 ### 库职责
 
 #### `libsys`
+
 - 原始 syscall / ABI / IPC / server helper
 
 #### `libc`
+
 - C 运行时
 - `stdio` / `malloc` / `string` / `errno`
 - fd / VFS / IO 基础封装
 - 当前仍直接实现：
-  - `dup`
-  - `dup2`
-  - `pipe`
+    - `dup`
+    - `dup2`
+    - `pipe`
 
 #### `libposix`
+
 - 高层 POSIX 风格接口
 - 当前已落地：
-  - `posix_spawn`
-  - `posix_spawnp`
-  - `waitpid`
-  - `wait`
+    - `posix_spawn`
+    - `posix_spawnp`
+    - `waitpid`
+    - `wait`
 
 ## 微内核语义说明
 

@@ -142,22 +142,6 @@ static void fb_apply_color(struct fb_display_state *st, uint8_t fg, uint8_t bg) 
     st->bg_color = fb_make_color(st, palette[st->cur_bg][0], palette[st->cur_bg][1], palette[st->cur_bg][2]);
 }
 
-static int fb_detect_last_row(struct fb_display_state *st) {
-    for (int row = st->rows - 1; row >= 0; row--) {
-        int py_start = row * CHAR_HEIGHT;
-        int py_end = py_start + CHAR_HEIGHT;
-        if ((uint32_t)py_end > st->fb_height) py_end = (int)st->fb_height;
-        for (int y = py_start; y < py_end; y++) {
-            uint8_t *line = st->fb_addr + (uint32_t)y * st->fb_pitch;
-            uint32_t check = st->fb_width * st->bytes_per_pixel;
-            for (uint32_t i = 0; i < check; i++) {
-                if (line[i] != 0) return row;
-            }
-        }
-    }
-    return -1;
-}
-
 static void fb_newline(struct fb_display_state *st) {
     st->cursor_x = 0;
     st->cursor_y++;

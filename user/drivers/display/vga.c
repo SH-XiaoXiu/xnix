@@ -122,10 +122,18 @@ void vga_clear(struct vga_state *st) {
 }
 
 void vga_set_cursor_pos(struct vga_state *st, int x, int y) {
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    if (x >= VGA_WIDTH) x = VGA_WIDTH - 1;
-    if (y >= VGA_HEIGHT) y = VGA_HEIGHT - 1;
+    if (x < 0) {
+        x = 0;
+    }
+    if (y < 0) {
+        y = 0;
+    }
+    if (x >= VGA_WIDTH) {
+        x = VGA_WIDTH - 1;
+    }
+    if (y >= VGA_HEIGHT) {
+        y = VGA_HEIGHT - 1;
+    }
     st->cursor_x = x;
     st->cursor_y = y;
     vga_update_cursor(st);

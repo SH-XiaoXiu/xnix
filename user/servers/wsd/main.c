@@ -430,7 +430,7 @@ static int init_framebuffer(struct ws_server *srv) {
     if (fb_handle == HANDLE_INVALID)
         return -1;
 
-    struct physmem_info pinfo;
+    struct physmem_info pinfo = {0};
     if (sys_physmem_info(fb_handle, &pinfo) < 0) {
         ulog_errf("[ws] Failed to get physmem info\n");
         return -1;

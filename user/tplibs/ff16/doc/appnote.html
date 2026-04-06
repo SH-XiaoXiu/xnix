@@ -1,9 +1,9 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html lang="en">
 <head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta http-equiv="Content-Style-Type" content="text/css">
-    <link rel="stylesheet" href="../css_e.css" type="text/css" media="screen" title="ELM Default">
+    <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+    <meta content="text/css" http-equiv="Content-Style-Type">
+    <link href="../css_e.css" media="screen" rel="stylesheet" title="ELM Default" type="text/css">
     <title>FatFs Module Application Note</title>
 </head>
 
@@ -80,11 +80,11 @@
     <h4>System Organizations</h4>
     <p>The dependency diagram shown below is a typical, but not specific, configuration of the embedded system with
         FatFs module.</p>
-    <p><img src="../res/modules.png" width="580" height="280" alt="dependency diagram"></p>
+    <p><img alt="dependency diagram" height="280" src="../res/modules.png" width="580"></p>
     <p>(a) If a working disk module for FatFs is provided, nothing else will be needed. (b) To attach existing disk
         drivers with different interface, some glue functions are needed to translate the interfaces between FatFs and
         the driver.</p>
-    <p><img src="../res/funcs.png" width="750" height="420" alt="functional diagram"></p>
+    <p><img alt="functional diagram" height="420" src="../res/funcs.png" width="750"></p>
 
     <h4>Required Functions</h4>
     <p>You need to provide only MAI functions required by FatFs module and nothing else. If a working device control
@@ -1472,13 +1472,13 @@ Any other option is left unchanged from original settings.
         should consider what process is done in the FatFs module. The file data on the volume is transferred in
         following sequence by <tt>f_read</tt> function.</p>
     <p>Figure 1. Sector unaligned read (short)<br>
-        <img src="../res/f1.png" width="490" height="110" alt="">
+        <img alt="" height="110" src="../res/f1.png" width="490">
     </p>
     <p>Figure 2. Sector unaligned read (long)<br>
-        <img src="../res/f2.png" width="490" height="140" alt="">
+        <img alt="" height="140" src="../res/f2.png" width="490">
     </p>
     <p>Figure 3. Fully sector aligned read<br>
-        <img src="../res/f3.png" width="490" height="119" alt="">
+        <img alt="" height="119" src="../res/f3.png" width="490">
     </p>
     <p>The file I/O buffer is a sector buffer to read/write a part of data on the sector. The sector buffer is either
         file private sector buffer on each file object or shared sector buffer in the filesystem object. The buffer
@@ -1508,7 +1508,7 @@ Any other option is left unchanged from original settings.
     <h4>Using Mutiple-Sector Write</h4>
     <div class="rset">
         Figure 6. Comparison between Multiple/Single Sector Write<br>
-        <img src="../res/f6.png" width="630" height="148" alt="fig.6">
+        <img alt="fig.6" height="148" src="../res/f6.png" width="630">
     </div>
     <p>The write throughput of the flash memory media becomes the worst at single sector write transaction. The write
         throughput increases as the number of sectors per a write transaction as shown in Figure 6. This effect more
@@ -1543,11 +1543,11 @@ Any other option is left unchanged from original settings.
         images shows the critical section of the FatFs module.</p>
     <div class="lset">
         Figure 4. Long critical section<br>
-        <img src="../res/f4.png" width="320" height="436" alt="fig.4">
+        <img alt="fig.4" height="436" src="../res/f4.png" width="320">
     </div>
     <div class="lset">
         Figure 5. Minimized critical section<br>
-        <img src="../res/f5.png" width="320" height="436" alt="fig.5">
+        <img alt="fig.5" height="436" src="../res/f5.png" width="320">
     </div>
     <br class="clr">
     <p>An interruption in the red section can cause a cross link; as a result, the object being changed can be lost. If

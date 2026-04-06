@@ -1,6 +1,7 @@
 #ifndef XNIX_POSIX_SPAWN_H
 #define XNIX_POSIX_SPAWN_H
 
+#include <stddef.h>
 #include <xnix/abi/process.h>
 
 /*
@@ -40,5 +41,7 @@ int posix_spawnp(const char *file, int argc, const char **argv);
  */
 int posix_spawn_make_exec_args(struct abi_exec_args *out, const char *path,
                                int argc, const char **argv);
+int posix_spawnp_make_exec_args(struct abi_exec_args *out, const char *file,
+                                int argc, const char **argv);
 
 #endif /* XNIX_POSIX_SPAWN_H */

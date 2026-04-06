@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    struct abi_handle_info handles[64];
+    struct abi_handle_info handles[64] = {0};
     int count = sys_handle_list(handles, 64);
     if (count < 0) {
         printf("sys_handle_list failed\n");

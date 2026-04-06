@@ -8,51 +8,18 @@
  */
 
 #include <xnix/protocol/sudo.h>
-#include <errno.h>
+#include <stdint.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <vfs_client.h>
 #include <spawn.h>
+#include <xnix/abi/process.h>
 #include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
-
-/* 简单的 PATH 搜索 */
-static int find_in_path(const char *name, char *out, size_t out_size) {
-    static const char *paths[] = {"/bin", "/sbin", "/mnt/bin", NULL};
-
-    /* 如果已经是绝对路径 */
-    if (name[0] == '/') {
-        struct vfs_stat st;
-        if (vfs_stat(name, &st) == 0) {
-            size_t len = strlen(name);
-            if (len >= out_size) {
-                len = out_size - 1;
-            }
-            memcpy(out, name, len);
-            out[len] = '\0';
-            return 0;
-        }
-        return -1;
-    }
-
-    for (int i = 0; paths[i]; i++) {
-        snprintf(out, out_size, "%s/%s", paths[i], name);
-        struct vfs_stat st;
-        if (vfs_stat(out, &st) == 0) {
-            return 0;
-        }
-        /* 尝试加 .elf 后缀 */
-        snprintf(out, out_size, "%s/%s.elf", paths[i], name);
-        if (vfs_stat(out, &st) == 0) {
-            return 0;
-        }
-    }
-
-    return -1;
-}
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -71,18 +38,15 @@ int main(int argc, char **argv) {
         vfs_client_init(vfs_ep);
     }
 
-    /* 路径解析 */
-    char path[ABI_EXEC_PATH_MAX];
-    if (find_in_path(argv[1], path, sizeof(path)) < 0) {
-        printf("sudo: %s: command not found\n", argv[1]);
-        return 1;
-    }
-
     struct abi_exec_args exec_args;
-    int build_ret = posix_spawn_make_exec_args(&exec_args, path, argc - 1,
-                                               (const char **)&argv[1]);
+    int build_ret = posix_spawnp_make_exec_args(&exec_args, argv[1], argc - 1,
+                                                (const char **)&argv[1]);
     if (build_ret < 0) {
-        printf("sudo: failed to build exec request: %s\n", strerror(-build_ret));
+        if (build_ret == -ENOENT) {
+            printf("sudo: %s: command not found\n", argv[1]);
+        } else {
+            printf("sudo: failed to build exec request: %s\n", strerror(-build_ret));
+        }
         return 1;
     }
 

@@ -312,6 +312,7 @@ static void run_external(const char *path, int argc, char **argv, int background
     if (redir->stdout_file) {
         int flags = O_WRONLY | O_CREAT;
         flags |= redir->stdout_append ? O_APPEND : O_TRUNC;
+        /* 当前 libc 的 open 还是简化两参接口，mode 语义尚未下沉。 */
         int out_fd = open(redir->stdout_file, flags);
         if (out_fd < 0) {
             printf("%s: %s\n", redir->stdout_file, strerror(-out_fd));
@@ -335,10 +336,8 @@ static void run_external(const char *path, int argc, char **argv, int background
 
     if (redir->stdin_file) {
         /* TODO: stdin 文件重定向 */
-        proc_add_handle(&b, fd_get_handle(STDIN_FILENO), HANDLE_STDIO_STDIN);
-    } else {
-        proc_add_handle(&b, fd_get_handle(STDIN_FILENO), HANDLE_STDIO_STDIN);
     }
+    proc_add_handle(&b, fd_get_handle(STDIN_FILENO), HANDLE_STDIO_STDIN);
 
     for (int i = 0; i < argc; i++) {
         proc_add_arg(&b, argv[i]);
@@ -795,12 +794,9 @@ int main(int argc, char **argv) {
 
     /* 解析命令行参数 */
     const char *svc_name = "shell";
-    const char *tty_name = NULL;
     for (int i = 0; i < argc; i++) {
         if (strncmp(argv[i], "--svc=", 6) == 0) {
             svc_name = argv[i] + 6;
-        } else if (strncmp(argv[i], "--tty=", 6) == 0) {
-            tty_name = argv[i] + 6;
         }
     }
 

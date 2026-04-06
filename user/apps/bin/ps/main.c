@@ -22,9 +22,9 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    struct proc_info     procs[PROCLIST_MAX];
-    struct sys_info      sys;
-    struct proclist_args args;
+    struct proc_info     procs[PROCLIST_MAX] = {0};
+    struct sys_info      sys                = {0};
+    struct proclist_args args               = {0};
 
     args.buf         = procs;
     args.buf_count   = PROCLIST_MAX;

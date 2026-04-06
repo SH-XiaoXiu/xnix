@@ -131,9 +131,7 @@ int _file_putc(FILE *f, char c) {
 
     f->buf[f->buf_pos++] = c;
 
-    if (f->buf_mode == _IOLBF && c == '\n') {
-        _file_flush(f);
-    } else if (f->buf_pos >= STREAM_BUF_SIZE - 1) {
+    if ((f->buf_mode == _IOLBF && c == '\n') || f->buf_pos >= STREAM_BUF_SIZE - 1) {
         _file_flush(f);
     }
 
@@ -149,7 +147,7 @@ int _file_getc(FILE *f) {
 
     if (f->channel == STDIO_CH_DEBUG) {
         /* DEBUG 通道: 通过 SYS_DEBUG_READ 阻塞读 COM1 */
-        char c;
+        char c = 0;
         int  n = _debug_read(&c, 1);
         if (n <= 0) {
             f->eof = 1;
@@ -163,7 +161,7 @@ int _file_getc(FILE *f) {
         return EOF;
     }
 
-    char    c;
+    char    c = 0;
     ssize_t n = read(f->fd, &c, 1);
     if (n < 0) {
         f->error = 1;

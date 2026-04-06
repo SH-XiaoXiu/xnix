@@ -24,7 +24,7 @@ int handle_list_fds(void (*cb)(uint32_t h, int type, uint32_t rights,
         return -1;
     }
 
-    struct abi_handle_info buf[64];
+    struct abi_handle_info buf[64] = {0};
     int count = sys_handle_list(buf, 64);
     if (count < 0) {
         return -1;

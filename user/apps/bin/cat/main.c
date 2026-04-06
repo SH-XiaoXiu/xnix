@@ -3,10 +3,10 @@
  * @brief 显示文件内容
  */
 
-#include <xnix/protocol/vfs.h>
 #include <errno.h>
 #include <stdio.h>
 #include <vfs_client.h>
+#include <xnix/protocol/vfs.h>
 #include <xnix/syscall.h>
 
 #define READ_BUF_SIZE 256
