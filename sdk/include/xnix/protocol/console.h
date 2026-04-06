@@ -16,6 +16,7 @@ enum console_op {
     CONSOLE_OP_GET_ACTIVE_TTY = 0x701, /* reply data[0] = tty_id */
     CONSOLE_OP_GET_ACTIVE_SESSION = 0x702, /* reply data[0] = type, data[1] = session id */
     CONSOLE_OP_HANDOFF_BOOT = 0x703, /* data[1] = tty_id, BOOT -> TTY */
+    CONSOLE_OP_SET_ACTIVE_GUI = 0x704, /* 切换到 GUI session */
 };
 
 enum console_session_type {

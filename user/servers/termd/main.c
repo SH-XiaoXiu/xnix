@@ -784,6 +784,14 @@ static void *display_input_thread(void *arg) {
     struct terminal *source = (struct terminal *)arg;
 
     while (1) {
+        pthread_mutex_lock(&g_display_lock);
+        int active_id = g_active_display_term;
+        pthread_mutex_unlock(&g_display_lock);
+        if (active_id < 0) {
+            msleep(20);
+            continue;
+        }
+
         struct input_event ev;
         if (inputdev_read_event(source->input_ep, &ev) < 0) {
             msleep(100);
@@ -906,6 +914,13 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg,
             msg->regs.data[0] = (uint32_t)g_term_count;
             break;
         case TTY_IOCTL_SET_ACTIVE_TTY: {
+            if (msg->regs.data[3] == UINT32_MAX) {
+                pthread_mutex_lock(&g_display_lock);
+                g_active_display_term = -1;
+                pthread_mutex_unlock(&g_display_lock);
+                msg->regs.data[0] = 0;
+                break;
+            }
             struct terminal *target = find_term_by_id((int)msg->regs.data[3]);
             if (!target || !target->is_display_vt) {
                 msg->regs.data[0] = (uint32_t)-1;

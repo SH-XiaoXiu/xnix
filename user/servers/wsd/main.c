@@ -204,6 +204,18 @@ static int handle_get_screen_info(struct ws_server *srv,
     return 0;
 }
 
+static int handle_set_active(struct ws_server *srv,
+                             struct ipc_message *msg) {
+    srv->active = msg->regs.data[1] ? 1 : 0;
+    if (srv->active) {
+        srv->first_composite = 1;
+        srv->needs_composite = 1;
+        compositor_composite(srv);
+    }
+    msg->regs.data[0] = 0;
+    return 0;
+}
+
 /**
  * 处理 WS_OP_WAIT_EVENT (延迟回复)
  */
@@ -275,6 +287,9 @@ static int ws_handler(struct ipc_message *msg) {
         break;
     case WS_OP_GET_SCREEN_INFO:
         ret = handle_get_screen_info(&g_srv, msg);
+        break;
+    case WS_OP_SET_ACTIVE:
+        ret = handle_set_active(&g_srv, msg);
         break;
     case WS_OP_WAIT_EVENT:
         ret = handle_wait_event(&g_srv, msg);
@@ -379,10 +394,9 @@ int main(void) {
     /* 初始化窗口管理 */
     window_init_all(&g_srv);
 
-    /* 初始化光标并做初始合成 (首次全屏) */
+    /* 初始化光标，首次合成延后到 GUI session 被激活 */
     cursor_init(&g_srv);
     g_srv.first_composite = 1;
-    compositor_composite(&g_srv);
 
     /* 启动输入线程 */
     input_start_threads(&g_srv);

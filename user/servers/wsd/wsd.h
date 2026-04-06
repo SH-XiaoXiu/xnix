@@ -49,6 +49,9 @@ struct ws_server {
     handle_t kbd_ep;
     handle_t mouse_ep;
 
+    /* session state */
+    uint8_t active;
+
     /* 合成标记 */
     uint8_t needs_composite;
     uint8_t first_composite;

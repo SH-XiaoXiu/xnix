@@ -6,18 +6,11 @@
 #include <string.h>
 
 static void usage(void) {
-    printf("Usage: chvt <tty-id>\n");
+    printf("Usage: chvt <tty-id|gui>\n");
 }
 
 int main(int argc, char **argv) {
     if (argc != 2) {
-        usage();
-        return 1;
-    }
-
-    char *end = NULL;
-    long tty_id = strtol(argv[1], &end, 10);
-    if (!end || *end != '\0' || tty_id < 0) {
         usage();
         return 1;
     }
@@ -30,6 +23,24 @@ int main(int argc, char **argv) {
 
     struct ipc_message msg = {0};
     struct ipc_message reply = {0};
+
+    if (strcmp(argv[1], "gui") == 0 || strcmp(argv[1], "7") == 0) {
+        msg.regs.data[0] = CONSOLE_OP_SET_ACTIVE_GUI;
+        if (sys_ipc_call(console_ep, &msg, &reply, 1000) < 0 ||
+            (int32_t)reply.regs.data[0] < 0) {
+            printf("chvt: switch to gui failed\n");
+            return 1;
+        }
+        return 0;
+    }
+
+    char *end = NULL;
+    long tty_id = strtol(argv[1], &end, 10);
+    if (!end || *end != '\0' || tty_id < 0) {
+        usage();
+        return 1;
+    }
+
     msg.regs.data[0] = CONSOLE_OP_SET_ACTIVE_TTY;
     msg.regs.data[1] = (uint32_t)tty_id;
 

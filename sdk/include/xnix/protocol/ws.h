@@ -33,6 +33,9 @@ enum ws_op {
 
     /* 阻塞事件等待 (延迟回复) */
     WS_OP_WAIT_EVENT      = 0x210,
+
+    /* Console/session manager -> wsd */
+    WS_OP_SET_ACTIVE      = 0x220, /* data[1]=0/1 */
 };
 
 /**

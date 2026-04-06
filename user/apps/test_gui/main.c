@@ -114,17 +114,19 @@ int main(void) {
         return 1;
     }
 
-    /* 创建窗口 1 */
-    ws_window_t *win1 = ws_create_window(280, 190, "Graphics Demo");
-    if (!win1) {
-        ulog_errf("[test_gui] Failed to create window 1\n");
+    /* 先创建日志窗口，再创建图形窗口。
+     * wsd 会默认把最后创建的窗口设为焦点，
+     * 这样图形窗口 win1 在启动后就是默认焦点窗口。 */
+    ws_window_t *win2 = ws_create_window(250, 160, "Event Log");
+    if (!win2) {
+        ulog_errf("[test_gui] Failed to create log window\n");
         return 1;
     }
 
-    /* 创建窗口 2 */
-    ws_window_t *win2 = ws_create_window(250, 160, "Event Log");
-    if (!win2) {
-        ulog_errf("[test_gui] Failed to create window 2\n");
+    /* 创建窗口 1 */
+    ws_window_t *win1 = ws_create_window(280, 190, "Graphics Demo");
+    if (!win1) {
+        ulog_errf("[test_gui] Failed to create graphics window\n");
         return 1;
     }
 

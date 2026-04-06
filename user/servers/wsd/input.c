@@ -176,6 +176,11 @@ static void *kbd_thread(void *arg) {
     struct ws_server *srv = (struct ws_server *)arg;
 
     while (1) {
+        if (!srv->active) {
+            sys_sleep(20);
+            continue;
+        }
+
         struct input_event ev;
         if (inputdev_read_event(srv->kbd_ep, &ev) < 0) {
             sys_sleep(100);
@@ -197,18 +202,7 @@ static void *kbd_thread(void *arg) {
  * @return 0 成功, -1 失败
  */
 static int mouse_read_event(struct ws_server *srv, struct input_event *ev) {
-    struct ipc_message req, reply;
-    memset(&req, 0, sizeof(req));
-    memset(&reply, 0, sizeof(reply));
-    req.regs.data[0] = INPUT_OP_READ_EVENT;
-
-    if (sys_ipc_call(srv->mouse_ep, &req, &reply, 0) < 0)
-        return -1;
-    if (reply.regs.data[0] != 0)
-        return -1;
-
-    decode_input_event(&reply, ev);
-    return 0;
+    return inputdev_read_event(srv->mouse_ep, ev);
 }
 
 /**
@@ -218,11 +212,13 @@ static int mouse_has_events(struct ws_server *srv) {
     struct ipc_message req, reply;
     memset(&req, 0, sizeof(req));
     memset(&reply, 0, sizeof(reply));
-    req.regs.data[0] = INPUT_OP_POLL;
+    req.regs.data[0] = INPUTDEV_POLL;
 
     if (sys_ipc_call(srv->mouse_ep, &req, &reply, 0) < 0)
         return 0;
-    return reply.regs.data[0] != 0;
+    if ((int32_t)reply.regs.data[0] < 0)
+        return 0;
+    return reply.regs.data[1] != 0;
 }
 
 /**
@@ -232,6 +228,11 @@ static void *mouse_thread(void *arg) {
     struct ws_server *srv = (struct ws_server *)arg;
 
     while (1) {
+        if (!srv->active) {
+            sys_sleep(20);
+            continue;
+        }
+
         struct input_event ev;
 
         /* 阻塞等待第一个事件 */
