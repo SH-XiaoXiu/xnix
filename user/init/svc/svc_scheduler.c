@@ -54,8 +54,10 @@ static void svc_check_ready_timeouts(struct svc_manager *mgr) {
         if (rt->ready_retry < SVC_READY_MAX_RETRIES) {
             rt->ready_retry++;
             rt->start_ticks = g_ticks; /* 重置超时起点 */
-            printf("[INIT] %s: ready timeout, retry %d/%d (pid=%d)\n",
-                   cfg->name, rt->ready_retry, SVC_READY_MAX_RETRIES, rt->pid);
+            if (!mgr->quiet_routine_logs) {
+                printf("[INIT] %s: ready timeout, retry %d/%d (pid=%d)\n",
+                       cfg->name, rt->ready_retry, SVC_READY_MAX_RETRIES, rt->pid);
+            }
             continue;
         }
 
@@ -101,7 +103,7 @@ static void svc_dump_waiting(struct svc_manager *mgr) {
         }
     }
 
-    if (!has_waiting) {
+    if (!has_waiting || mgr->quiet_routine_logs) {
         return;
     }
 
@@ -194,7 +196,8 @@ void svc_tick(struct svc_manager *mgr) {
 
     svc_check_ready_timeouts(mgr);
     svc_propagate_failed_requires(mgr);
-    if (g_ticks - g_last_diag_ticks >= SVC_DIAG_INTERVAL_MS) {
+    if (!mgr->quiet_routine_logs &&
+        g_ticks - g_last_diag_ticks >= SVC_DIAG_INTERVAL_MS) {
         svc_dump_waiting(mgr);
         g_last_diag_ticks = g_ticks;
     }
@@ -251,7 +254,8 @@ void svc_tick_parallel(struct svc_manager *mgr) {
 
     svc_check_ready_timeouts(mgr);
     svc_propagate_failed_requires(mgr);
-    if (g_ticks - g_last_diag_ticks >= SVC_DIAG_INTERVAL_MS) {
+    if (!mgr->quiet_routine_logs &&
+        g_ticks - g_last_diag_ticks >= SVC_DIAG_INTERVAL_MS) {
         svc_dump_waiting(mgr);
         g_last_diag_ticks = g_ticks;
     }

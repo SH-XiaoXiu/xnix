@@ -214,7 +214,9 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
         return pid;
     }
 
-    printf("[INIT] started %s (pid %d)\n", cfg->name, pid);
+    if (!mgr->quiet_routine_logs) {
+        printf("[INIT] started %s (pid %d)\n", cfg->name, pid);
+    }
 
     rt->state          = SVC_STATE_RUNNING;
     rt->pid            = pid;

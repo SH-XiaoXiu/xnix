@@ -344,8 +344,6 @@ static int init_fb_mode(void) {
     g_display.u.fb.cols            = (int)(g_display.u.fb.fb_width / CHAR_WIDTH);
     g_display.u.fb.rows            = (int)(g_display.u.fb.fb_height / CHAR_HEIGHT);
     fb_apply_color(&g_display.u.fb, 7, 0);
-    fb_fill_rect(&g_display.u.fb, 0, 0, (int)g_display.u.fb.fb_width,
-                 (int)g_display.u.fb.fb_height, g_display.u.fb.bg_color);
     g_display.u.fb.cursor_x = 0;
     g_display.u.fb.cursor_y = 0;
     return 0;

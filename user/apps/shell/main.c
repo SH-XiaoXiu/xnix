@@ -758,12 +758,6 @@ int main(int argc, char **argv) {
 
     svc_notify_ready(svc_name);
 
-    if (tty_name &&
-        (strcmp(tty_name, "tty0") == 0 || strcmp(tty_name, "tty5") == 0 ||
-         strcmp(tty_name, "tty6") == 0)) {
-        cmd_clear(0, NULL);
-    }
-
     /* 输出欢迎信息 */
     printf("\nXnix Shell\n");
     printf("Type 'help' for available commands.\n\n");

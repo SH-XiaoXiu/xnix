@@ -36,6 +36,8 @@ void svc_handle_ready_notification(struct svc_manager *mgr, struct ipc_message *
         if (mgr->configs[idx].mount[0] == '\0') {
             mgr->runtime[idx].ready = true;
         }
-        printf("[INIT] Service '%s' reported ready\n", name);
+        if (!mgr->quiet_routine_logs) {
+            printf("[INIT] Service '%s' reported ready\n", name);
+        }
     }
 }

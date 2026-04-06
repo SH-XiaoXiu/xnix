@@ -34,6 +34,7 @@
 #include <xnix/abi/handle.h>
 #include <xnix/abi/cap.h>
 #include <xnix/ipc.h>
+#include <xnix/protocol/console.h>
 #include <xnix/syscall.h>
 
 #include "bootstrap/bootstrap.h"
@@ -232,6 +233,7 @@ int main(int argc, char **argv) {
     static bool vfsserver_migrated = false;
     bool        system_ready       = false;
     bool        stdio_redirected   = false;
+    bool        boot_handed_off    = false;
     int         loop_count         = 0;
 
     while (1) {
@@ -248,6 +250,25 @@ int main(int argc, char **argv) {
                     _stdio_set_fd(stderr, tty_fd);
                     stdio_redirected = true;
                     printf("[INIT] stdio redirected to /dev/tty1\n");
+                }
+            }
+        }
+
+        if (!boot_handed_off) {
+            int consoled_idx = svc_find_by_name(&g_mgr, "consoled");
+            if (consoled_idx >= 0 && g_mgr.runtime[consoled_idx].ready) {
+                handle_t console_ep = sys_handle_find("console_ep");
+                if (console_ep != HANDLE_INVALID) {
+                    struct ipc_message msg = {0};
+                    struct ipc_message reply = {0};
+                    msg.regs.data[0] = CONSOLE_OP_HANDOFF_BOOT;
+                    msg.regs.data[1] = 0; /* tty0 */
+                    if (sys_ipc_call(console_ep, &msg, &reply, 1000) == 0 &&
+                        (int32_t)reply.regs.data[0] == 0) {
+                        printf("[INIT] boot handoff to tty0 complete\n");
+                        g_mgr.quiet_routine_logs = true;
+                        boot_handed_off = true;
+                    }
                 }
             }
         }
@@ -304,7 +325,7 @@ int main(int argc, char **argv) {
         }
 
         /* 诊断输出(前 5 个 tick) */
-        if (loop_count < 5) {
+        if (!g_mgr.quiet_routine_logs && loop_count < 5) {
             char buf[256];
             int  pos = snprintf(buf, sizeof(buf), "[INIT] tick %d:", loop_count);
             for (int i = 0; i < g_mgr.count && pos < (int)sizeof(buf) - 20; i++) {

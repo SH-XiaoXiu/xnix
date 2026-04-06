@@ -169,6 +169,9 @@ struct svc_manager {
 
     /* init_notify endpoint (动态注入到每个服务) */
     handle_t init_notify_ep;
+
+    /* 进入交互阶段后静音 routine 状态日志，避免和 shell 前台输出互相污染 */
+    bool quiet_routine_logs;
 };
 
 /**

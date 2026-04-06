@@ -60,6 +60,7 @@ set(CORE_SERVICES
         displayd
         fbd
         termd
+        consoled
         klogd
         devfsd
         syslogd

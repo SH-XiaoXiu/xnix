@@ -707,19 +707,34 @@ static void term_process_input(struct terminal *t, char c) {
 
 /* ============== 输入线程 ============== */
 
-/** inputdev 事件 → 字符序列 (方向键生成 ESC [ A/B/C/D) */
 static int event_to_chars(const struct input_event *ev, char *out, int max) {
     if (ev->type != INPUT_EVENT_KEY_PRESS)
         return 0;
 
     uint16_t code = ev->code;
 
-    /* 方向键 → ANSI 转义序列 */
-    if (code >= INPUT_KEY_UP && code <= INPUT_KEY_RIGHT && max >= 3) {
-        static const char arrow[] = {'A', 'B', 'C', 'D'};
-        out[0] = '\033';
+    if (code == INPUT_KEY_UP && max >= 3) {
+        out[0] = 0x1b;
         out[1] = '[';
-        out[2] = arrow[code - INPUT_KEY_UP];
+        out[2] = 'A';
+        return 3;
+    }
+    if (code == INPUT_KEY_DOWN && max >= 3) {
+        out[0] = 0x1b;
+        out[1] = '[';
+        out[2] = 'B';
+        return 3;
+    }
+    if (code == INPUT_KEY_RIGHT && max >= 3) {
+        out[0] = 0x1b;
+        out[1] = '[';
+        out[2] = 'C';
+        return 3;
+    }
+    if (code == INPUT_KEY_LEFT && max >= 3) {
+        out[0] = 0x1b;
+        out[1] = '[';
+        out[2] = 'D';
         return 3;
     }
 
@@ -1067,8 +1082,6 @@ int main(int argc, char **argv) {
             ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
                       " created tty%d input=%u output=%u\n",
                       display_ttys[i].id, kbd_ep, fbcon_ep);
-            if (g_active_display_term < 0)
-                g_active_display_term = display_ttys[i].id;
             g_term_count++;
         }
     } else {
@@ -1104,12 +1117,6 @@ int main(int argc, char **argv) {
         for (int i = 0; i < g_term_count; i++) {
             register_tty_device(devfs_ep, g_terms[i].id, g_terms[i].term_ep);
         }
-    }
-
-    if (g_active_display_term >= 0) {
-        struct terminal *active = find_term_by_id(g_active_display_term);
-        if (active)
-            term_activate_display_vt(active);
     }
 
     ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
