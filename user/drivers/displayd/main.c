@@ -1,4 +1,4 @@
-#include "../vgad/vga.h"
+#include "../display/vga.h"
 
 #include <xnix/displaydev.h>
 #include <xnix/drvframework.h>
@@ -313,7 +313,7 @@ static int init_fb_mode(void) {
     uint8_t *fb_addr;
 
     if (fb_handle == HANDLE_INVALID) {
-        ulog_errf("[displayd] fb_mem missing\n");
+        ulog_errf("[display] fb_mem missing\n");
         return -1;
     }
     if (sys_physmem_info(fb_handle, &pinfo) < 0 || pinfo.type != 1) {
@@ -352,7 +352,7 @@ static int init_fb_mode(void) {
 static int init_vga_mode(void) {
     void *addr = env_mmap_resource("vga_mem", NULL);
     if (!addr) {
-        ulog_errf("[displayd] vga_mem missing\n");
+        ulog_errf("[display] vga_mem missing\n");
         return -1;
     }
     vga_state_init(&g_display.u.vga);
@@ -366,7 +366,7 @@ int main(int argc, char **argv) {
     struct display_device dev;
     handle_t ep;
 
-    env_set_name("displayd");
+    env_set_name("display");
     memset(&g_display, 0, sizeof(g_display));
     pthread_mutex_init(&g_display.lock, NULL);
     g_display.mode = parse_mode(argc, argv);
@@ -376,7 +376,7 @@ int main(int argc, char **argv) {
             return 1;
         }
         ep = env_get_handle("fbcon_ep");
-        dev.name = "displayd-fb";
+        dev.name = "display-fb";
         dev.instance = 0;
         dev.caps = DISPDEV_CAP_COLOR | DISPDEV_CAP_CURSOR | DISPDEV_CAP_SCROLL;
         dev.rows = g_display.u.fb.rows;
@@ -386,7 +386,7 @@ int main(int argc, char **argv) {
             return 1;
         }
         ep = env_get_handle("vga_ep");
-        dev.name = "displayd-vga";
+        dev.name = "display-vga";
         dev.instance = 0;
         dev.caps = DISPDEV_CAP_COLOR | DISPDEV_CAP_CURSOR | DISPDEV_CAP_SCROLL;
         dev.rows = VGA_HEIGHT;
@@ -394,7 +394,7 @@ int main(int argc, char **argv) {
     }
 
     if (ep == HANDLE_INVALID) {
-        ulog_errf("[displayd] endpoint missing\n");
+        ulog_errf("[display] endpoint missing\n");
         return 1;
     }
 
@@ -402,12 +402,12 @@ int main(int argc, char **argv) {
     dev.endpoint = ep;
 
     if (displaydev_register(&dev) < 0) {
-        ulog_errf("[displayd] register failed\n");
+        ulog_errf("[display] register failed\n");
         return 1;
     }
 
-    svc_notify_ready("displayd");
-    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[displayd]",
+    svc_notify_ready("display");
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[display]",
               " ready (%s)\n", g_display.mode == DISPLAY_MODE_FB ? "fb" : "vga");
     driver_run();
     return 0;

@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief wsd (Window Server Daemon) - 窗口服务器
+ * @brief ws (Window Server) - 窗口服务器
  *
  * 提供图形窗口管理服务, 通过 IPC 接受客户端请求.
  * 独占 fb_mem, 管理窗口 z-order, 合成 SHM 到 framebuffer.
@@ -432,12 +432,12 @@ static int init_framebuffer(struct ws_server *srv) {
 
     struct physmem_info pinfo;
     if (sys_physmem_info(fb_handle, &pinfo) < 0) {
-        ulog_errf("[wsd] Failed to get physmem info\n");
+        ulog_errf("[ws] Failed to get physmem info\n");
         return -1;
     }
 
     if (pinfo.type != 1) { /* PHYSMEM_TYPE_FB */
-        ulog_errf("[wsd] fb_mem is not framebuffer type\n");
+        ulog_errf("[ws] fb_mem is not framebuffer type\n");
         return -1;
     }
 
@@ -454,7 +454,7 @@ static int init_framebuffer(struct ws_server *srv) {
 
     srv->fb_addr = (uint8_t *)sys_mmap_phys(fb_handle, 0, 0, 0x03, NULL);
     if ((int)(uintptr_t)srv->fb_addr < 0 || srv->fb_addr == NULL) {
-        ulog_errf("[wsd] Failed to map framebuffer\n");
+        ulog_errf("[ws] Failed to map framebuffer\n");
         return -1;
     }
 
@@ -462,13 +462,13 @@ static int init_framebuffer(struct ws_server *srv) {
     srv->fb_size = srv->fb_info.pitch * srv->fb_info.height;
     handle_t bb_shm = sys_shm_create(srv->fb_size);
     if (bb_shm == (handle_t)-1) {
-        ulog_errf("[wsd] Failed to create backbuffer SHM (%u bytes)\n",
+        ulog_errf("[ws] Failed to create backbuffer SHM (%u bytes)\n",
                   srv->fb_size);
         return -1;
     }
     srv->backbuf = (uint8_t *)sys_mmap_phys(bb_shm, 0, 0, 0x03, NULL);
     if (srv->backbuf == (void *)-1) {
-        ulog_errf("[wsd] Failed to map backbuffer SHM\n");
+        ulog_errf("[ws] Failed to map backbuffer SHM\n");
         return -1;
     }
 
@@ -476,8 +476,8 @@ static int init_framebuffer(struct ws_server *srv) {
 }
 
 int main(void) {
-    env_set_name("wsd");
-    ulog_tagf(stdout, TERM_COLOR_WHITE, "[wsd]",
+    env_set_name("ws");
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[ws]",
               " Starting window server\n");
 
     memset(&g_srv, 0, sizeof(g_srv));
@@ -489,7 +489,7 @@ int main(void) {
 
     compositor_init(&g_srv);
 
-    ulog_tagf(stdout, TERM_COLOR_WHITE, "[wsd]",
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[ws]",
               " Framebuffer: %ux%u, %u bpp\n",
               g_srv.fb_info.width, g_srv.fb_info.height,
               g_srv.fb_info.bpp);
@@ -500,7 +500,7 @@ int main(void) {
 
     if (g_srv.kbd_ep == HANDLE_INVALID ||
         g_srv.mouse_ep == HANDLE_INVALID) {
-        ulog_errf("[wsd] Missing input endpoints\n");
+        ulog_errf("[ws] Missing input endpoints\n");
         return 1;
     }
 
@@ -523,12 +523,12 @@ int main(void) {
     struct udm_server srv = {
         .endpoint = g_srv.ws_ep,
         .handler  = ws_handler,
-        .name     = "wsd",
+        .name     = "ws",
     };
 
     udm_server_init(&srv);
-    svc_notify_ready("wsd");
-    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[wsd]",
+    svc_notify_ready("ws");
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[ws]",
               " Ready, serving on endpoint %u\n", g_srv.ws_ep);
 
     udm_server_run(&srv);

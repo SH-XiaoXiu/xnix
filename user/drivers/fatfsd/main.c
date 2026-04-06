@@ -303,19 +303,19 @@ int main(int argc, char **argv) {
     if (force_ata) {
         if (ata_drive == 0) {
             ep_name  = "fatfs_ata_ep";
-            svc_name = "fatfsd_ata";
+            svc_name = "fatfs_ata";
         } else {
             snprintf(ep_name_buf, sizeof(ep_name_buf), "fatfs_ata%d_ep", ata_drive);
-            snprintf(svc_name_buf, sizeof(svc_name_buf), "fatfsd_ata%d", ata_drive);
+            snprintf(svc_name_buf, sizeof(svc_name_buf), "fatfs_ata%d", ata_drive);
             ep_name  = ep_name_buf;
             svc_name = svc_name_buf;
         }
     } else {
         ep_name  = "fatfs_ep";
-        svc_name = "fatfsd";
+        svc_name = "fatfs";
     }
 
-    env_set_name("fatfsd");
+    env_set_name("fatfs");
     handle_t ep = env_require(ep_name);
     if (ep == HANDLE_INVALID) {
         return 1;
@@ -330,13 +330,13 @@ int main(int argc, char **argv) {
             uint32_t system_size = 0;
             void    *system_addr = sys_mmap_phys(system_h, 0, 0, 0x03, &system_size);
             if (system_addr == NULL || (intptr_t)system_addr < 0) {
-                ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]",
+                ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfs]",
                           " failed to mmap boot.system\n");
                 return 1;
             }
 
             disk_init_memory(system_addr, system_size);
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " memory mode (size=%u)\n",
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfs]", " memory mode (size=%u)\n",
                       system_size);
         } else {
             use_ata = true;
@@ -345,12 +345,12 @@ int main(int argc, char **argv) {
 
     if (use_ata) {
         if (ata_init() < 0) {
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " ata init failed\n");
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfs]", " ata init failed\n");
             return 1;
         }
 
         if (ata_read(ata_drive, 0, 1, g_saved_mbr) < 0) {
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " failed to read MBR (drive=%d)\n",
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfs]", " failed to read MBR (drive=%d)\n",
                       ata_drive);
             return 1;
         }
@@ -363,7 +363,7 @@ int main(int argc, char **argv) {
         }
 
         disk_init_ata(ata_drive, base_lba);
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]",
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfs]",
                   " ATA mode (drive=%d, base_lba=%u)\n", ata_drive, base_lba);
 
         /* 记录 ATA 信息供 BLK 协议使用 */
@@ -378,7 +378,7 @@ int main(int argc, char **argv) {
 
     /* 初始化 FatFs */
     if (fatfs_init(&g_fatfs) < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfsd]", " fatfs init failed\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fatfs]", " fatfs init failed\n");
         return 1;
     }
 
@@ -390,7 +390,7 @@ int main(int argc, char **argv) {
 
     udm_server_init(&srv);
     svc_notify_ready(svc_name);
-    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfsd]", " %s started\n", svc_name);
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfs]", " %s started\n", svc_name);
 
     /* ATA 模式: 先启动服务线程, 再注册到 devfsd */
     if (use_ata) {

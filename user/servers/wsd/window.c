@@ -53,14 +53,14 @@ struct ws_window *window_create(struct ws_server *srv, uint32_t w, uint32_t h, u
     uint32_t shm_size = w * h * 4;
     handle_t shm      = sys_shm_create(shm_size);
     if (shm == (handle_t)-1) {
-        ulog_errf("[wsd] shm_create failed for %ux%u\n", w, h);
+        ulog_errf("[ws] shm_create failed for %ux%u\n", w, h);
         return NULL;
     }
 
     /* 服务器侧映射 */
     uint32_t *shm_addr = (uint32_t *)sys_mmap_phys(shm, 0, 0, 0x03, NULL);
     if (shm_addr == (void *)-1) {
-        ulog_errf("[wsd] shm mmap failed\n");
+        ulog_errf("[ws] shm mmap failed\n");
         return NULL;
     }
 

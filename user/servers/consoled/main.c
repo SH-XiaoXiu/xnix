@@ -118,7 +118,7 @@ static int console_activate_tty(int tty_id) {
 }
 
 int main(void) {
-    env_set_name("consoled");
+    env_set_name("console");
 
     g_console_ep = env_get_handle("console_ep");
     g_tty0_ep = env_get_handle("tty0");
@@ -127,11 +127,11 @@ int main(void) {
     g_ws_ep = env_get_handle("ws_ep");
 
     if (g_console_ep == HANDLE_INVALID || g_tty0_ep == HANDLE_INVALID) {
-        ulog_errf("[consoled] missing console_ep or tty0\n");
+        ulog_errf("[console] missing console_ep or tty0\n");
         return 1;
     }
 
-    svc_notify_ready("consoled");
+    svc_notify_ready("console");
 
     while (1) {
         struct ipc_message msg = {0};

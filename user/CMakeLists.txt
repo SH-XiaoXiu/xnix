@@ -22,6 +22,9 @@ set(USER_C_FLAGS
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/include)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/generated)
 
+# 每次重新配置时重建 system.img 文件清单，避免重命名后残留旧产物路径
+set(SYSTEM_IMG_FILES "" CACHE INTERNAL "Files to package into system.img" FORCE)
+
 # ============================================
 # 第三方库
 # ============================================
@@ -51,21 +54,37 @@ add_subdirectory(apps)
 # 核心服务列表直接硬编码 核心服务是固定的
 # ============================================
 set(CORE_SERVICES
-        seriald
-        ps2d
+        serial
+        ps2
         # ramfsd - 已内置到 init，不再作为独立服务
         # rootfsd - 已被 system.img 替代，不再需要
-        vfsserver
-        fatfsd
-        displayd
-        fbd
-        termd
-        consoled
-        klogd
-        devfsd
-        syslogd
-        wsd
+        vfs
+        fatfs
+        display
+        fb
+        term
+        console
+        klog
+        devfs
+        syslog
+        ws
         # shell - 移到 /bin/，不是系统服务
+)
+set(CORE_DRIVERS
+        serial
+        ps2
+        fatfs
+        display
+        fb
+)
+set(CORE_SYSTEM_SERVERS
+        vfs
+        term
+        console
+        klog
+        devfs
+        syslog
+        ws
 )
 
 set(USER_SERVICES "")
@@ -136,5 +155,7 @@ add_custom_command(TARGET init.elf POST_BUILD
 # 导出给 iso 模块
 # ============================================
 set(CORE_SERVICES "${CORE_SERVICES}" CACHE INTERNAL "Core services list")
+set(CORE_DRIVERS "${CORE_DRIVERS}" CACHE INTERNAL "Core driver list")
+set(CORE_SYSTEM_SERVERS "${CORE_SYSTEM_SERVERS}" CACHE INTERNAL "Core server list")
 set(USER_SERVICES "${USER_SERVICES}" CACHE INTERNAL "User services list")
 set(INIT_ELF "${CMAKE_BINARY_DIR}/init.elf" CACHE INTERNAL "Init ELF path")

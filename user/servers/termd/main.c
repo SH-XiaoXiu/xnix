@@ -1,10 +1,10 @@
 /**
- * @file termd/main.c
+ * @file term/main.c
  * @brief 终端服务
  *
  * 组合 chardev 输入/输出设备为双向终端流.
- * shell 通过 IO_READ/IO_WRITE 与 termd 通信,
- * termd 通过 CHARDEV_READ/WRITE 与底层设备通信.
+ * shell 通过 IO_READ/IO_WRITE 与 term 通信,
+ * term 通过 CHARDEV_READ/WRITE 与底层设备通信.
  *
  * 架构 (每个终端实例):
  *   input_thread: CHARDEV_READ(input_ep) → 行规程 → input_queue
@@ -137,13 +137,13 @@ static int register_tty_device(handle_t devfs_ep, int tty_id, handle_t tty_ep) {
 
     int ret = sys_ipc_call(devfs_ep, &reg, &reply, 1000);
     if (ret < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[termd]",
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[term]",
                   " register /dev/tty%d failed: ipc=%d\n", tty_id, ret);
         return -1;
     }
     ret = (int32_t)reply.regs.data[1];
     if (ret < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[termd]",
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[term]",
                   " register /dev/tty%d failed: devfs=%d\n", tty_id, ret);
     }
     return ret;
@@ -1008,18 +1008,18 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    /* termd 自身的 stdio 走 debug fallback, 避免循环 */
+    /* term 自身的 stdio 走 debug fallback, 避免循环 */
     _stdio_set_fd(stdout, -1);
     _stdio_set_fd(stderr, -1);
 
-    env_set_name("termd");
+    env_set_name("term");
     pthread_mutex_init(&g_display_lock, NULL);
     handle_t serial_ep    = env_get_handle("serial");     /* 写 endpoint */
     handle_t serial_in_ep = env_get_handle("serial_in");  /* 读 endpoint */
     handle_t kbd_ep       = env_get_handle("kbd_ep");
     handle_t devfs_ep     = env_get_handle("devfs_ep");
 
-    ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[term]",
               " startup serial=%u serial_in=%u kbd=%u devfs=%u\n",
               serial_ep, serial_in_ep, kbd_ep, devfs_ep);
 
@@ -1032,7 +1032,7 @@ int main(int argc, char **argv) {
                       serial_in_ep, DEV_CHARDEV,
                       serial_ep, DEV_CHARDEV);
             g_term_count++;
-            ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+            ulog_tagf(stdout, TERM_COLOR_WHITE, "[term]",
                       " created tty1 input=%u output=%u\n", serial_in_ep, serial_ep);
         }
     }
@@ -1053,7 +1053,7 @@ int main(int argc, char **argv) {
 
         read_ep = sys_handle_find(read_name);
         write_ep = sys_handle_find(write_name);
-        ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+        ulog_tagf(stdout, TERM_COLOR_WHITE, "[term]",
                   " probe tty%d read=%s:%u write=%s:%u\n",
                   tty_id, read_name, read_ep, write_name, write_ep);
         if (read_ep == HANDLE_INVALID || write_ep == HANDLE_INVALID) {
@@ -1069,11 +1069,11 @@ int main(int argc, char **argv) {
                   read_ep, DEV_CHARDEV,
                   write_ep, DEV_CHARDEV);
         g_term_count++;
-        ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+        ulog_tagf(stdout, TERM_COLOR_WHITE, "[term]",
                   " created tty%d input=%u output=%u\n", tty_id, read_ep, write_ep);
     }
 
-    /* tty0/tty5/tty6 (VGA 终端): 共享显示设备和键盘, 前台切换由 termd 管理 */
+    /* tty0/tty5/tty6 (VGA 终端): 共享显示设备和键盘, 前台切换由 term 管理 */
     handle_t fbcon_ep = env_get_handle("fbcon_ep");
     if (kbd_ep != HANDLE_INVALID && fbcon_ep != HANDLE_INVALID) {
         static const struct {
@@ -1094,7 +1094,7 @@ int main(int argc, char **argv) {
                                      tty_ep, kbd_ep, fbcon_ep) < 0) {
                 continue;
             }
-            ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+            ulog_tagf(stdout, TERM_COLOR_WHITE, "[term]",
                       " created tty%d input=%u output=%u\n",
                       display_ttys[i].id, kbd_ep, fbcon_ep);
             g_term_count++;
@@ -1134,12 +1134,12 @@ int main(int argc, char **argv) {
         }
     }
 
-    ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[term]",
               " about to notify ready (%d terminals)\n", g_term_count);
 
-    svc_notify_ready("termd");
+    svc_notify_ready("term");
 
-    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[termd]",
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[term]",
               " ready (%d terminals)\n", g_term_count);
 
     /* 主线程保持进程存活 */

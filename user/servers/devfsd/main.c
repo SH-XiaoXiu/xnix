@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief devfsd: 设备文件系统服务
+ * @brief devfs: 设备文件系统服务
  *
  * 提供设备文件系统，挂载到 /dev。
  *
@@ -151,7 +151,7 @@ static void devfs_register_special(const char *name, dev_type_t type) {
     ent->blk_ep = HANDLE_INVALID;
     ent->valid = true;
     g_devfs.count++;
-    printf("[devfsd] registered: /dev/%s\n", name);
+    printf("[devfs] registered: /dev/%s\n", name);
 }
 
 /**
@@ -176,7 +176,7 @@ static int devfs_handle_register_block(struct ipc_message *msg) {
 
     /* 提取 buffer: [name\0][mbr 512B] */
     if (!msg->buffer.data || msg->buffer.size < name_len + 1 + 512) {
-        printf("[devfsd] register: invalid buffer\n");
+        printf("[devfs] register: invalid buffer\n");
         return -22;
     }
 
@@ -204,7 +204,7 @@ static int devfs_handle_register_block(struct ipc_message *msg) {
     disk->valid = true;
     g_devfs.count++;
 
-    printf("[devfsd] registered: /dev/%s (%llu sectors)\n",
+    printf("[devfs] registered: /dev/%s (%llu sectors)\n",
            dev_name, (unsigned long long)sector_count);
 
     /* 从 buffer 中解析 MBR */
@@ -234,7 +234,7 @@ static int devfs_handle_register_block(struct ipc_message *msg) {
         ent->valid = true;
         g_devfs.count++;
 
-        printf("[devfsd] registered: /dev/%s (partition, start=%u, %u sectors)\n",
+        printf("[devfs] registered: /dev/%s (partition, start=%u, %u sectors)\n",
                ent->name, parts[p].lba_start, parts[p].sector_count);
     }
 
@@ -279,7 +279,7 @@ static int devfs_handle_register_tty(struct ipc_message *msg) {
     ent->valid = true;
     g_devfs.count++;
 
-    printf("[devfsd] registered: /dev/%s (tty)\n", dev_name);
+    printf("[devfs] registered: /dev/%s (tty)\n", dev_name);
     return 0;
 }
 
@@ -593,22 +593,22 @@ static int devfsd_handler(struct ipc_message *msg) {
     return vfs_dispatch(&devfs_ops, &g_devfs, msg);
 }
 
-/* devfsd 服务线程入口 */
+/* devfs 服务线程入口 */
 static void *devfsd_thread(void *arg) {
     (void)arg;
 
-    printf("[devfsd] service thread started\n");
+    printf("[devfs] service thread started\n");
 
     struct udm_server srv = {
         .endpoint = g_devfs.endpoint,
         .handler  = devfsd_handler,
-        .name     = "devfsd",
+        .name     = "devfs",
     };
 
     udm_server_init(&srv);
     udm_server_run(&srv);
 
-    printf("[devfsd] service thread exiting\n");
+    printf("[devfs] service thread exiting\n");
     return NULL;
 }
 
@@ -616,7 +616,7 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    env_set_name("devfsd");
+    env_set_name("devfs");
 
     /* 初始化 devfs */
     memset(&g_devfs, 0, sizeof(g_devfs));
@@ -628,19 +628,19 @@ int main(int argc, char **argv) {
     /* 获取 endpoint (由 init 创建) */
     g_devfs.endpoint = env_require("devfs_ep");
     if (g_devfs.endpoint == HANDLE_INVALID) {
-        printf("[devfsd] FATAL: devfs_ep not found\n");
+        printf("[devfs] FATAL: devfs_ep not found\n");
         return 1;
     }
 
-    printf("[devfsd] endpoint: %u\n", g_devfs.endpoint);
+    printf("[devfs] endpoint: %u\n", g_devfs.endpoint);
 
     /* 通知就绪 */
-    svc_notify_ready("devfsd");
+    svc_notify_ready("devfs");
 
     /* 运行服务线程 */
     pthread_t thread;
     if (pthread_create(&thread, NULL, devfsd_thread, NULL) != 0) {
-        printf("[devfsd] FATAL: failed to create thread\n");
+        printf("[devfs] FATAL: failed to create thread\n");
         return 1;
     }
 

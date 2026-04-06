@@ -1,5 +1,5 @@
-# termd - 终端服务
-set(APP_NAME "termd")
+# term - 终端服务
+set(APP_NAME "term")
 set(APP_SOURCES main.c)
 set(APP_LIBS c pthread)
 

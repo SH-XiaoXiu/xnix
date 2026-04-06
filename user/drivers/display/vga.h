@@ -1,12 +1,11 @@
-#ifndef VGAD_VGA_H
-#define VGAD_VGA_H
+#ifndef DISPLAY_VGA_H
+#define DISPLAY_VGA_H
 
 #include <stdint.h>
 
 #define VGA_WIDTH  80
 #define VGA_HEIGHT 25
 
-/* VGA 16色调色板 */
 #define VGA_COLOR_BLACK         0
 #define VGA_COLOR_BLUE          1
 #define VGA_COLOR_GREEN         2
@@ -25,10 +24,10 @@
 #define VGA_COLOR_WHITE         15
 
 struct vga_state {
-    uint16_t *buffer; /* VGA 文本缓冲区位于 0xB8000 */
+    uint16_t *buffer;
     int       cursor_x;
     int       cursor_y;
-    uint8_t   attr; /* 当前属性 (前景色 | 背景色 << 4) */
+    uint8_t   attr;
 };
 
 void vga_state_init(struct vga_state *st);

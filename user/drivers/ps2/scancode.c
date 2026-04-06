@@ -15,32 +15,31 @@ static bool e0_prefix  = false;
 
 /* Scancode Set 1 映射表(无修饰) */
 static const char scancode_normal[128] = {
-    0,    0x1B, '1', '2',  '3',  '4', '5',  '6',  /* 0x00-0x07 */
-    '7',  '8',  '9', '0',  '-',  '=', '\b', '\t', /* 0x08-0x0F */
-    'q',  'w',  'e', 'r',  't',  'y', 'u',  'i',  /* 0x10-0x17 */
-    'o',  'p',  '[', ']',  '\n', 0,   'a',  's',  /* 0x18-0x1F */
-    'd',  'f',  'g', 'h',  'j',  'k', 'l',  ';',  /* 0x20-0x27 */
-    '\'', '`',  0,   '\\', 'z',  'x', 'c',  'v',  /* 0x28-0x2F */
-    'b',  'n',  'm', ',',  '.',  '/', 0,    '*',  /* 0x30-0x37 */
-    0,    ' ',  0,   0,    0,    0,   0,    0,    /* 0x38-0x3F */
-    0,    0,    0,   0,    0,    0,   0,    '7',  /* 0x40-0x47 */
-    '8',  '9',  '-', '4',  '5',  '6', '+',  '1',  /* 0x48-0x4F */
-    '2',  '3',  '0', '.',  0,    0,   0,    0,    /* 0x50-0x57 */
+    0,    0x1B, '1', '2',  '3',  '4', '5',  '6',
+    '7',  '8',  '9', '0',  '-',  '=', '\b', '\t',
+    'q',  'w',  'e', 'r',  't',  'y', 'u',  'i',
+    'o',  'p',  '[', ']',  '\n', 0,   'a',  's',
+    'd',  'f',  'g', 'h',  'j',  'k', 'l',  ';',
+    '\'', '`',  0,   '\\', 'z',  'x', 'c',  'v',
+    'b',  'n',  'm', ',',  '.',  '/', 0,    '*',
+    0,    ' ',  0,   0,    0,    0,   0,    0,
+    0,    0,    0,   0,    0,    0,   0,    '7',
+    '8',  '9',  '-', '4',  '5',  '6', '+',  '1',
+    '2',  '3',  '0', '.',  0,    0,   0,    0,
 };
 
 /* Scancode Set 1 映射表(Shift) */
 static const char scancode_shift[128] = {
-    0,   0x1B, '!', '@', '#',  '$', '%',  '^',  /* 0x00-0x07 */
-    '&', '*',  '(', ')', '_',  '+', '\b', '\t', /* 0x08-0x0F */
-    'Q', 'W',  'E', 'R', 'T',  'Y', 'U',  'I',  /* 0x10-0x17 */
-    'O', 'P',  '{', '}', '\n', 0,   'A',  'S',  /* 0x18-0x1F */
-    'D', 'F',  'G', 'H', 'J',  'K', 'L',  ':',  /* 0x20-0x27 */
-    '"', '~',  0,   '|', 'Z',  'X', 'C',  'V',  /* 0x28-0x2F */
-    'B', 'N',  'M', '<', '>',  '?', 0,    '*',  /* 0x30-0x37 */
-    0,   ' ',  0,   0,   0,    0,   0,    0,    /* 0x38-0x3F */
+    0,   0x1B, '!', '@', '#',  '$', '%',  '^',
+    '&', '*',  '(', ')', '_',  '+', '\b', '\t',
+    'Q', 'W',  'E', 'R', 'T',  'Y', 'U',  'I',
+    'O', 'P',  '{', '}', '\n', 0,   'A',  'S',
+    'D', 'F',  'G', 'H', 'J',  'K', 'L',  ':',
+    '"', '~',  0,   '|', 'Z',  'X', 'C',  'V',
+    'B', 'N',  'M', '<', '>',  '?', 0,    '*',
+    0,   ' ',  0,   0,   0,    0,   0,    0,
 };
 
-/* 特殊扫描码 */
 #define SC_LSHIFT_PRESS   0x2A
 #define SC_RSHIFT_PRESS   0x36
 #define SC_LSHIFT_RELEASE 0xAA
@@ -50,34 +49,38 @@ static const char scancode_shift[128] = {
 #define SC_CAPS_PRESS     0x3A
 #define SC_E0_PREFIX      0xE0
 
-/* E0 扩展扫描码 */
 #define SC_E0_UP    0x48
 #define SC_E0_DOWN  0x50
 #define SC_E0_LEFT  0x4B
 #define SC_E0_RIGHT 0x4D
 
-/* 返回值编码:
- * >= 0: 普通字符
- * -1: 无输出
- * -2 ~ -5: 方向键 (上/下/左/右)
- */
-#define KEY_UP    (-2)
-#define KEY_DOWN  (-3)
-#define KEY_LEFT  (-4)
-#define KEY_RIGHT (-5)
+static bool e0_prefix_ev = false;
+
+static int translate_printable_code(uint8_t code) {
+    char c = shift_held ? scancode_shift[code] : scancode_normal[code];
+
+    if (caps_lock && c >= 'a' && c <= 'z') {
+        c = (char)(c - 'a' + 'A');
+    } else if (caps_lock && c >= 'A' && c <= 'Z') {
+        c = (char)(c - 'A' + 'a');
+    }
+
+    if (ctrl_held && c >= 'a' && c <= 'z') {
+        c = (char)(c - 'a' + 1);
+    }
+
+    return c ? (unsigned char)c : -1;
+}
 
 int scancode_to_char(uint8_t scancode) {
-    /* E0 前缀 */
     if (scancode == SC_E0_PREFIX) {
         e0_prefix = true;
         return -1;
     }
 
-    /* 检查是否为释放码(最高位为 1) */
     bool    release = (scancode & 0x80) != 0;
     uint8_t code    = scancode & 0x7F;
 
-    /* 处理 E0 扩展码 */
     if (e0_prefix) {
         e0_prefix = false;
         if (release) {
@@ -96,7 +99,6 @@ int scancode_to_char(uint8_t scancode) {
         return -1;
     }
 
-    /* 处理修饰键 */
     switch (scancode) {
     case SC_LSHIFT_PRESS:
     case SC_RSHIFT_PRESS:
@@ -115,43 +117,16 @@ int scancode_to_char(uint8_t scancode) {
     case SC_CAPS_PRESS:
         caps_lock = !caps_lock;
         return -1;
+    default:
+        break;
     }
 
-    /* 释放码不产生字符 */
     if (release) {
         return -1;
     }
 
-    /* 查表 */
-    char c;
-    if (shift_held) {
-        c = scancode_shift[code];
-    } else {
-        c = scancode_normal[code];
-    }
-
-    /* Caps Lock 只影响字母 */
-    if (caps_lock && c >= 'a' && c <= 'z') {
-        c = (char)(c - 'a' + 'A');
-    } else if (caps_lock && c >= 'A' && c <= 'Z') {
-        c = (char)(c - 'A' + 'a');
-    }
-
-    /* Ctrl 组合键 */
-    if (ctrl_held && c >= 'a' && c <= 'z') {
-        c = (char)(c - 'a' + 1); /* Ctrl+A = 1, Ctrl+C = 3, etc. */
-    }
-
-    return c ? c : -1;
+    return translate_printable_code(code);
 }
-
-/*
- * 输入事件路径 (GUI)
- *
- * 独立的 E0 前缀状态,避免与 TTY 路径干扰.
- */
-
-static bool e0_prefix_ev = false;
 
 uint8_t scancode_get_modifiers(void) {
     uint8_t mods = 0;
@@ -162,7 +137,6 @@ uint8_t scancode_get_modifiers(void) {
 }
 
 int scancode_to_event(uint8_t scancode, struct input_event *ev) {
-    /* E0 前缀 */
     if (scancode == SC_E0_PREFIX) {
         e0_prefix_ev = true;
         return -1;
@@ -171,7 +145,6 @@ int scancode_to_event(uint8_t scancode, struct input_event *ev) {
     bool    release = (scancode & 0x80) != 0;
     uint8_t code    = scancode & 0x7F;
 
-    /* E0 扩展码 */
     if (e0_prefix_ev) {
         e0_prefix_ev = false;
         ev->type      = release ? INPUT_EVENT_KEY_RELEASE : INPUT_EVENT_KEY_PRESS;
@@ -219,21 +192,9 @@ int scancode_to_event(uint8_t scancode, struct input_event *ev) {
     ev->timestamp = 0;
     ev->_reserved = 0;
 
-    if (release) {
-        ev->code = code;
-        return 0;
+    {
+        int printable = translate_printable_code(code);
+        ev->code = (printable >= 0) ? (uint16_t)printable : code;
     }
-
-    char c = shift_held ? scancode_shift[code] : scancode_normal[code];
-    if (caps_lock && c >= 'a' && c <= 'z') {
-        c = (char)(c - 'a' + 'A');
-    } else if (caps_lock && c >= 'A' && c <= 'Z') {
-        c = (char)(c - 'A' + 'a');
-    }
-    if (ctrl_held && c >= 'a' && c <= 'z') {
-        c = (char)(c - 'a' + 1);
-    }
-
-    ev->code = c ? (uint16_t)(unsigned char)c : code;
     return 0;
 }

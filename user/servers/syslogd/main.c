@@ -164,25 +164,25 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    env_set_name("syslogd");
+    env_set_name("syslog");
 
     /* 获取 endpoint (由 init 注入) */
     handle_t ep = env_require("syslog_ep");
     if (ep == HANDLE_INVALID) {
-        printf("[syslogd] FATAL: syslog_ep not found\n");
+        printf("[syslog] FATAL: syslog_ep not found\n");
         return 1;
     }
 
-    printf("[syslogd] started, endpoint=%u\n", ep);
+    printf("[syslog] started, endpoint=%u\n", ep);
 
     /* 通知 init 就绪 */
-    svc_notify_ready("syslogd");
+    svc_notify_ready("syslog");
 
     /* 运行服务主循环 */
     struct udm_server srv = {
         .endpoint = ep,
         .handler  = syslogd_handler,
-        .name     = "syslogd",
+        .name     = "syslog",
     };
 
     udm_server_init(&srv);

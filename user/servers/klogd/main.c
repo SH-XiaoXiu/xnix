@@ -82,7 +82,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    svc_notify_ready("klogd");
+    svc_notify_ready("klog");
 
     /* 主循环:轮询新日志 */
     while (1) {

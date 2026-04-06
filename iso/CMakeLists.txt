@@ -16,6 +16,8 @@
 #
 
 message(STATUS "[iso] Core services: ${CORE_SERVICES}")
+message(STATUS "[iso] Core drivers: ${CORE_DRIVERS}")
+message(STATUS "[iso] Core servers: ${CORE_SYSTEM_SERVERS}")
 message(STATUS "[iso] User services: ${USER_SERVICES}")
 
 # ============================================
@@ -29,8 +31,13 @@ set(OPTIONAL_DIR ${CMAKE_BINARY_DIR}/optional)
 # ============================================
 set(INITRAMFS_FILES "")
 
+# 核心驱动 -> initramfs /sbin/driver/
+foreach (DRV ${CORE_DRIVERS})
+    list(APPEND INITRAMFS_FILES "${CMAKE_BINARY_DIR}/${DRV}.elf:sbin/driver/${DRV}.elf")
+endforeach ()
+
 # 核心服务 -> initramfs /sbin/
-foreach (SVC ${CORE_SERVICES})
+foreach (SVC ${CORE_SYSTEM_SERVERS})
     list(APPEND INITRAMFS_FILES "${CMAKE_BINARY_DIR}/${SVC}.elf:sbin/${SVC}.elf")
 endforeach ()
 
@@ -74,8 +81,13 @@ add_custom_target(initramfs DEPENDS ${INITRAMFS_IMG})
 # SYSTEM_IMG_FILES 由 app.cmake 自动注册
 set(SYSTEM_FILES ${SYSTEM_IMG_FILES})
 
+# 核心驱动 -> /sbin/driver/
+foreach (DRV ${CORE_DRIVERS})
+    list(APPEND SYSTEM_FILES "${CMAKE_BINARY_DIR}/${DRV}.elf:/sbin/driver/${DRV}.elf")
+endforeach ()
+
 # 核心服务 -> /sbin/
-foreach (SVC ${CORE_SERVICES})
+foreach (SVC ${CORE_SYSTEM_SERVERS})
     list(APPEND SYSTEM_FILES "${CMAKE_BINARY_DIR}/${SVC}.elf:/sbin/${SVC}.elf")
 endforeach ()
 
@@ -129,7 +141,7 @@ add_custom_command(
         # 格式化为 FAT32
         COMMAND mkfs.fat -F 16 ${SYSTEM_IMG}
         # 创建目录结构
-        COMMAND mmd -i ${SYSTEM_IMG} ::/sbin ::/bin ::/etc ::/sys ::/boot ::/boot/grub ::/drivers ::/mnt || true
+        COMMAND mmd -i ${SYSTEM_IMG} ::/sbin ::/sbin/driver ::/bin ::/etc ::/sys ::/boot ::/boot/grub ::/mnt || true
         # 复制文件列表
         COMMAND ${CMAKE_COMMAND}
         -DIMG_FILE=${SYSTEM_IMG}
@@ -155,9 +167,12 @@ list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/shell.elf:/bin/shell.elf")
 list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/installer.elf:/bin/installer.elf")
 list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/sudo.elf:/bin/sudo.elf")
 list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/sudod.elf:/bin/sudod.elf")
-list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/devfsd.elf:/sbin/devfsd.elf")
-# 核心服务也放到 /sbin/ (与 initramfs 内容相同, 用于 respawn)
-foreach (SVC ${CORE_SERVICES})
+list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/devfs.elf:/sbin/devfs.elf")
+# 核心驱动放到 /sbin/driver/, 核心服务放到 /sbin/
+foreach (DRV ${CORE_DRIVERS})
+    list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/${DRV}.elf:/sbin/driver/${DRV}.elf")
+endforeach ()
+foreach (SVC ${CORE_SYSTEM_SERVERS})
     list(APPEND INSTALLER_FILES "${CMAKE_BINARY_DIR}/${SVC}.elf:/sbin/${SVC}.elf")
 endforeach ()
 list(APPEND INSTALLER_FILES "${CMAKE_SOURCE_DIR}/user/sys.conf:/etc/sys.conf")
@@ -168,12 +183,12 @@ add_custom_command(
         OUTPUT ${SYSTEM_INSTALLER_IMG}
         COMMAND ${CMAKE_COMMAND} -E env dd if=/dev/zero of=${SYSTEM_INSTALLER_IMG} bs=1M count=16 status=none
         COMMAND mkfs.fat -F 16 ${SYSTEM_INSTALLER_IMG}
-        COMMAND mmd -i ${SYSTEM_INSTALLER_IMG} ::/sbin ::/bin ::/etc || true
+        COMMAND mmd -i ${SYSTEM_INSTALLER_IMG} ::/sbin ::/sbin/driver ::/bin ::/etc || true
         COMMAND ${CMAKE_COMMAND}
         -DIMG_FILE=${SYSTEM_INSTALLER_IMG}
         -DFILELIST=${INSTALLER_FILELIST}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/copy_system_files.cmake
-        DEPENDS shell.elf installer.elf sudo.elf sudod.elf devfsd.elf ${INITRAMFS_DEPENDS}
+        DEPENDS shell.elf installer.elf sudo.elf sudod.elf devfs.elf ${INITRAMFS_DEPENDS}
         COMMENT "生成 system_installer.img (FAT16, 16MB)..."
 )
 

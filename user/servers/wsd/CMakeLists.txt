@@ -1,6 +1,6 @@
-# wsd - Window Server Daemon
+# ws - Window Server
 
-set(APP_NAME "wsd")
+set(APP_NAME "ws")
 set(APP_SOURCES main.c window.c compositor.c cursor.c input.c)
 set(APP_LIBS c d pthread font)
 

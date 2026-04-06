@@ -1,6 +1,6 @@
-# syslogd - 系统日志服务
+# syslog - 系统日志服务
 
-set(APP_NAME "syslogd")
+set(APP_NAME "syslog")
 set(APP_SOURCES main.c)
 set(APP_LIBS c d)
 

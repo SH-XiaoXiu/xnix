@@ -1,6 +1,6 @@
-# seriald - 串口驱动
+# serial - 串口驱动
 
-set(APP_NAME "seriald")
+set(APP_NAME "serial")
 set(APP_SOURCES main.c serial.c)
 set(APP_LIBS c driver pthread)
 

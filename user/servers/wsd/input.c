@@ -302,10 +302,10 @@ void input_start_threads(struct ws_server *srv) {
     pthread_t tid;
 
     if (pthread_create(&tid, NULL, kbd_thread, srv) != 0) {
-        ulog_errf("[wsd] Failed to create kbd thread\n");
+        ulog_errf("[ws] Failed to create kbd thread\n");
     }
 
     if (pthread_create(&tid, NULL, mouse_thread, srv) != 0) {
-        ulog_errf("[wsd] Failed to create mouse thread\n");
+        ulog_errf("[ws] Failed to create mouse thread\n");
     }
 }

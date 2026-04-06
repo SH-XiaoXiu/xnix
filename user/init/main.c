@@ -230,7 +230,7 @@ int main(int argc, char **argv) {
     printf("[INIT] entering main loop\n");
 
     /* 主循环 */
-    static bool vfsserver_migrated = false;
+    static bool vfs_migrated = false;
     bool        system_ready       = false;
     bool        stdio_redirected   = false;
     bool        boot_handed_off    = false;
@@ -242,8 +242,8 @@ int main(int argc, char **argv) {
         drain_ready_notifications(init_notify_ep);
 
         if (!stdio_redirected) {
-            int termd_idx = svc_find_by_name(&g_mgr, "termd");
-            if (termd_idx >= 0 && g_mgr.runtime[termd_idx].ready) {
+            int term_idx = svc_find_by_name(&g_mgr, "term");
+            if (term_idx >= 0 && g_mgr.runtime[term_idx].ready) {
                 int tty_fd = open("/dev/tty1", O_RDWR);
                 if (tty_fd >= 0) {
                     _stdio_set_fd(stdout, tty_fd);
@@ -255,8 +255,8 @@ int main(int argc, char **argv) {
         }
 
         if (!boot_handed_off) {
-            int consoled_idx = svc_find_by_name(&g_mgr, "consoled");
-            if (consoled_idx >= 0 && g_mgr.runtime[consoled_idx].ready) {
+            int console_idx = svc_find_by_name(&g_mgr, "console");
+            if (console_idx >= 0 && g_mgr.runtime[console_idx].ready) {
                 handle_t console_ep = sys_handle_find("console_ep");
                 if (console_ep != HANDLE_INVALID) {
                     struct ipc_message msg = {0};
@@ -282,12 +282,12 @@ int main(int argc, char **argv) {
         drain_ready_notifications(init_notify_ep);
 
         /* vfsserver 就绪后,迁移到 vfsserver 并挂载 ramfsd 到 "/" */
-        if (!vfsserver_migrated) {
-            int vfsserver_idx = svc_find_by_name(&g_mgr, "vfsserver");
-            if (vfsserver_idx >= 0 && g_mgr.runtime[vfsserver_idx].ready) {
+        if (!vfs_migrated) {
+            int vfs_idx = svc_find_by_name(&g_mgr, "vfs");
+            if (vfs_idx >= 0 && g_mgr.runtime[vfs_idx].ready) {
                 handle_t vfs_ep = sys_handle_find("vfs_ep");
                 if (vfs_ep != HANDLE_INVALID) {
-                    printf("[INIT] migrating to vfsserver...\n");
+                    printf("[INIT] migrating to vfs...\n");
 
                     vfs_client_init((uint32_t)vfs_ep);
 
@@ -295,12 +295,12 @@ int main(int argc, char **argv) {
                     if (ramfs_ep != HANDLE_INVALID) {
                         ret = vfs_mount("/", ramfs_ep);
                         if (ret < 0) {
-                            printf("[INIT] WARNING: failed to mount ramfsd via vfsserver\n");
+                            printf("[INIT] WARNING: failed to mount ramfsd via vfs\n");
                         } else {
-                            printf("[INIT] ramfsd mounted at / via vfsserver\n");
+                            printf("[INIT] ramfsd mounted at / via vfs\n");
                         }
                     }
-                    vfsserver_migrated = true;
+                    vfs_migrated = true;
                 }
             }
         }

@@ -1,6 +1,6 @@
-# vfsserver - VFS 服务
+# vfs - VFS 服务
 
-set(APP_NAME "vfsserver")
+set(APP_NAME "vfs")
 set(APP_SOURCES main.c)
 set(APP_LIBS c d vfs pthread)
 

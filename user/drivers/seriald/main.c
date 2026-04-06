@@ -183,7 +183,7 @@ static void *irq_thread(void *arg) {
 
     int ret = sys_irq_bind(irq_ctx->irq, irq_ctx->notif, 1 << 0);
     if (ret < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]",
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[serial]",
                   " IRQ %d bind failed\n", irq_ctx->irq);
         return NULL;
     }
@@ -210,7 +210,7 @@ int main(void) {
 
     serial_hw_init(COM1_BASE);
 
-    env_set_name("seriald");
+    env_set_name("serial");
 
     /* 探测 COM 端口 */
     for (int i = 0; i < MAX_COM_PORTS; i++) {
@@ -235,7 +235,7 @@ int main(void) {
         }
     }
 
-    ulog_tagf(stdout, TERM_COLOR_WHITE, "[seriald]",
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[serial]",
               " detected %d COM port(s)\n", g_port_count);
 
     /* 注册 chardev 设备 */
@@ -259,7 +259,7 @@ int main(void) {
         g_ports[i].write_dev.priv     = &g_ports[i];
 
         if (chardev_register(&g_ports[i].write_dev) < 0) {
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]",
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[serial]",
                       " COM%d: write register failed\n", i + 1);
             continue;
         }
@@ -277,12 +277,12 @@ int main(void) {
         g_ports[i].read_dev.priv     = &g_ports[i];
 
         if (chardev_register(&g_ports[i].read_dev) < 0) {
-            ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]",
+            ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[serial]",
                       " COM%d: read register failed\n", i + 1);
             continue;
         }
 
-        ulog_tagf(stdout, TERM_COLOR_WHITE, "[seriald]",
+        ulog_tagf(stdout, TERM_COLOR_WHITE, "[serial]",
                   " COM%d (0x%x, IRQ %d) read+write registered\n",
                   i + 1, g_ports[i].base, g_ports[i].irq);
     }
@@ -317,7 +317,7 @@ int main(void) {
         pthread_create(&tid, NULL, irq_thread, &irq_ctxs[i]);
     }
 
-    svc_notify_ready("seriald");
+    svc_notify_ready("serial");
 
     driver_run();
 

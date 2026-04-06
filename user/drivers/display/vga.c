@@ -1,9 +1,7 @@
 #include "vga.h"
 
-#include <string.h>
 #include <xnix/syscall.h>
 
-/* 硬件光标控制端口 */
 #define VGA_CTRL_PORT 0x3D4
 #define VGA_DATA_PORT 0x3D5
 
@@ -16,14 +14,12 @@ static void vga_update_cursor(struct vga_state *st) {
 }
 
 static void vga_scroll(struct vga_state *st) {
-    /* 将所有行向上移动一行 */
     for (int y = 0; y < VGA_HEIGHT - 1; y++) {
         for (int x = 0; x < VGA_WIDTH; x++) {
             st->buffer[y * VGA_WIDTH + x] = st->buffer[(y + 1) * VGA_WIDTH + x];
         }
     }
 
-    /* 清除最后一行 */
     for (int x = 0; x < VGA_WIDTH; x++) {
         st->buffer[(VGA_HEIGHT - 1) * VGA_WIDTH + x] = (uint16_t)' ' | ((uint16_t)st->attr << 8);
     }
@@ -46,7 +42,6 @@ void vga_state_init(struct vga_state *st) {
 }
 
 void vga_hw_init(void) {
-    /* 启用光标 */
     sys_ioport_outb(VGA_CTRL_PORT, 0x0A);
     sys_ioport_outb(VGA_DATA_PORT, 0x00);
 }

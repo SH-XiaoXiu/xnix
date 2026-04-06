@@ -197,8 +197,8 @@ static int fb_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
-    env_set_name("fbd");
-    ulog_tagf(stdout, TERM_COLOR_WHITE, "[fbd]", " Starting framebuffer driver\n");
+    env_set_name("fb");
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[fb]", " Starting framebuffer driver\n");
 
     handle_t fb_handle = env_require("fb_mem");
     if (fb_handle == HANDLE_INVALID) {
@@ -208,12 +208,12 @@ int main(void) {
     /* 获取 framebuffer 信息 */
     struct physmem_info pinfo;
     if (sys_physmem_info(fb_handle, &pinfo) < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " Failed to get physmem info\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fb]", " Failed to get physmem info\n");
         return 1;
     }
 
     if (pinfo.type != 1) { /* PHYSMEM_TYPE_FB */
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " fb_mem is not a framebuffer type\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fb]", " fb_mem is not a framebuffer type\n");
         return 1;
     }
 
@@ -229,13 +229,13 @@ int main(void) {
     fb_info.blue_pos   = pinfo.blue_pos;
     fb_info.blue_size  = pinfo.blue_size;
 
-    ulog_tagf(stdout, TERM_COLOR_WHITE, "[fbd]", " Framebuffer: %ux%u, %u bpp, pitch=%u\n",
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[fb]", " Framebuffer: %ux%u, %u bpp, pitch=%u\n",
               fb_info.width, fb_info.height, fb_info.bpp, fb_info.pitch);
 
     /* 映射 framebuffer 到用户空间 */
     fb_addr = (uint8_t *)sys_mmap_phys(fb_handle, 0, 0, 0x03, NULL); /* PROT_READ | PROT_WRITE */
     if ((int)(uintptr_t)fb_addr < 0 || fb_addr == NULL) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fbd]", " Failed to map framebuffer\n");
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[fb]", " Failed to map framebuffer\n");
         return 1;
     }
 
@@ -250,12 +250,12 @@ int main(void) {
     struct udm_server srv = {
         .endpoint = fb_ep,
         .handler  = fb_handler,
-        .name     = "fbd",
+        .name     = "fb",
     };
 
     udm_server_init(&srv);
-    svc_notify_ready("fbd");
-    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fbd]", " Ready, serving on endpoint %u\n", fb_ep);
+    svc_notify_ready("fb");
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fb]", " Ready, serving on endpoint %u\n", fb_ep);
 
     udm_server_run(&srv);
 

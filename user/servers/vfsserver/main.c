@@ -817,7 +817,7 @@ static int vfsd_dir_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
-    env_set_name("vfsserver");
+    env_set_name("vfs");
     g_vfs_ep = env_require("vfs_ep");
     if (g_vfs_ep == HANDLE_INVALID) {
         return 1;
@@ -838,7 +838,7 @@ int main(void) {
         cwd_table[i].active = 0;
     }
 
-    svc_notify_ready("vfsserver");
+    svc_notify_ready("vfs");
 
     while (1) {
         struct abi_ipc_wait_set wait_set = {0};

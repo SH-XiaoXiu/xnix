@@ -1,6 +1,6 @@
-# fbd - Framebuffer 驱动
+# fb - Framebuffer 驱动
 
-set(APP_NAME "fbd")
+set(APP_NAME "fb")
 set(APP_SOURCES main.c)
 set(APP_LIBS c d vfs pthread)
 

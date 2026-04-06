@@ -1,10 +1,10 @@
 /**
  * @file main.c
- * @brief ps2d - unified PS/2 keyboard + mouse driver
+ * @brief ps2 - unified PS/2 keyboard + mouse driver
  */
 
-#include "../kbd/scancode.h"
-#include "../moused/ps2.h"
+#include "../ps2/scancode.h"
+#include "../ps2/ps2_mouse.h"
 
 #include <xnix/drvframework.h>
 #include <xnix/inputdev.h>
@@ -163,7 +163,7 @@ static void *keyboard_thread(void *arg) {
 
     int ret = sys_irq_bind(IRQ_KEYBOARD, -1, 0);
     if (ret < 0) {
-        ulog_errf("[ps2d] keyboard IRQ bind failed: %d\n", ret);
+        ulog_errf("[ps2] keyboard IRQ bind failed: %d\n", ret);
         return NULL;
     }
 
@@ -204,14 +204,14 @@ static void *mouse_thread(void *arg) {
     (void)arg;
 
     if (ps2_mouse_init() < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[ps2d]",
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[ps2]",
                   " PS/2 mouse init failed\n");
         return NULL;
     }
 
     int ret = sys_irq_bind(IRQ_MOUSE, -1, 0);
     if (ret < 0) {
-        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[ps2d]",
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[ps2]",
                   " failed to bind IRQ %d\n", IRQ_MOUSE);
         return NULL;
     }
@@ -261,7 +261,7 @@ static void *mouse_thread(void *arg) {
 }
 
 int main(void) {
-    env_set_name("ps2d");
+    env_set_name("ps2");
 
     input_queue_init(&g_kbd_queue);
     input_queue_init(&g_mouse_queue);
@@ -287,30 +287,30 @@ int main(void) {
     };
 
     if (kbd.endpoint == HANDLE_INVALID || mouse.endpoint == HANDLE_INVALID) {
-        ulog_errf("[ps2d] missing kbd_ep or mouse_ep\n");
+        ulog_errf("[ps2] missing kbd_ep or mouse_ep\n");
         return 1;
     }
 
     if (inputdev_register(&kbd) < 0 || inputdev_register(&mouse) < 0) {
-        ulog_errf("[ps2d] register failed\n");
+        ulog_errf("[ps2] register failed\n");
         return 1;
     }
 
     pthread_t kbd_tid;
     pthread_t mouse_tid;
     if (pthread_create(&kbd_tid, NULL, keyboard_thread, NULL) != 0) {
-        ulog_errf("[ps2d] failed to create keyboard thread\n");
+        ulog_errf("[ps2] failed to create keyboard thread\n");
         return 1;
     }
     if (pthread_create(&mouse_tid, NULL, mouse_thread, NULL) != 0) {
-        ulog_errf("[ps2d] failed to create mouse thread\n");
+        ulog_errf("[ps2] failed to create mouse thread\n");
         return 1;
     }
 
-    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[ps2d]",
+    ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[ps2]",
               " keyboard+mouse started\n");
 
-    svc_notify_ready("ps2d");
+    svc_notify_ready("ps2");
     driver_run();
     return 0;
 }
