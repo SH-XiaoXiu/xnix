@@ -80,8 +80,8 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
             g_path_buf[msg->buffer.size] = '\0';
             result = ops->info(ctx, g_path_buf, &g_info_buf);
             if (result == 0) {
-                msg->regs.data[2] = g_info_buf.size;
-                msg->regs.data[3] = g_info_buf.type;
+                reply.regs.data[2] = g_info_buf.size;
+                reply.regs.data[3] = g_info_buf.type;
             }
         } else {
             result = -22;
@@ -92,8 +92,8 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         if (!ops->finfo) break;
         result = ops->finfo(ctx, UDM_MSG_ARG(msg, 0), &g_info_buf);
         if (result == 0) {
-            msg->regs.data[2] = g_info_buf.size;
-            msg->regs.data[3] = g_info_buf.type;
+            reply.regs.data[2] = g_info_buf.size;
+            reply.regs.data[3] = g_info_buf.type;
         }
         break;
     }
@@ -193,6 +193,28 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
     case IO_CLOSE: {
         if (!ops->close) break;
         result = ops->close(ctx, msg->regs.data[1]);
+        break;
+    }
+    case IO_IOCTL: {
+        uint32_t handle = msg->regs.data[1];
+        uint32_t cmd    = msg->regs.data[2];
+
+        if (cmd == VFS_IOCTL_READDIR) {
+            if (!ops->readdir) {
+                result = -38;
+                break;
+            }
+
+            result = ops->readdir(ctx, handle, msg->regs.data[3], &g_dirent_buf);
+            if (result == 0) {
+                reply.buffer.data = (uint64_t)(uintptr_t)&g_dirent_buf;
+                reply.buffer.size = sizeof(g_dirent_buf);
+                result = 1; /* 成功返回一项 */
+            }
+            break;
+        }
+
+        result = -38;
         break;
     }
     default:
