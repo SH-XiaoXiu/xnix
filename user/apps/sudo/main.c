@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <vfs_client.h>
 #include <xnix/abi/handle.h>
 #include <xnix/env.h>
@@ -106,6 +107,6 @@ int main(int argc, char **argv) {
 
     /* 等待子进程退出 */
     int status;
-    sys_waitpid(pid, &status, 0);
+    waitpid(pid, &status, 0);
     return status;
 }

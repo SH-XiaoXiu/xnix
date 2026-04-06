@@ -13,8 +13,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <vfs_client.h>
+#include <spawn.h>
 #include <xnix/env.h>
 #include <xnix/fd.h>
 #include <xnix/ipc.h>
@@ -80,7 +82,7 @@ static void jobs_reap(void) {
     for (int i = 0; i < MAX_JOBS; i++) {
         if (g_jobs[i].state == JOB_RUNNING) {
             int status;
-            int ret = sys_waitpid(g_jobs[i].pid, &status, WNOHANG);
+            int ret = waitpid(g_jobs[i].pid, &status, WNOHANG);
             if (ret > 0) {
                 printf("[%d] Done    %s\n", i + 1, g_jobs[i].cmd);
                 g_jobs[i].state = JOB_DONE;
@@ -256,6 +258,52 @@ static const struct builtin_cmd *find_builtin(const char *name) {
  */
 static void run_external(const char *path, int argc, char **argv, int background,
                          struct redirect_info *redir) {
+    if (!redir->stdout_file && !redir->stdin_file) {
+        int pid = posix_spawn(path, argc, (const char **)argv);
+        if (pid < 0) {
+            printf("%s: %s\n", argv[0], strerror(-pid));
+            return;
+        }
+
+        int job_id = job_add(pid, argv[0]);
+
+        if (background) {
+            if (job_id > 0) {
+                printf("[%d] %d\n", job_id, pid);
+            }
+            return;
+        }
+
+        shell_set_foreground(pid);
+
+        int status;
+        waitpid(pid, &status, 0);
+
+        shell_set_foreground(0);
+
+        if (status == -SIGTSTP || status == -SIGSTOP) {
+            if (job_id > 0) {
+                struct job *j = job_find(job_id);
+                if (j) {
+                    j->state = JOB_STOPPED;
+                }
+                printf("\n[%d] Stopped    %s\n", job_id, argv[0]);
+            }
+            return;
+        }
+
+        if (job_id > 0) {
+            struct job *j = job_find(job_id);
+            if (j) {
+                j->state = JOB_DONE;
+            }
+        }
+        if (status != 0) {
+            printf("Process %d exited with status %d\n", pid, status);
+        }
+        return;
+    }
+
     struct proc_builder b;
     proc_init(&b, path);
     proc_inherit_named(&b);
@@ -297,9 +345,6 @@ static void run_external(const char *path, int argc, char **argv, int background
     }
 
     int pid = proc_spawn(&b);
-    if (pid > 0) {
-        vfs_copy_cwd_to_child(pid);
-    }
     if (pid < 0) {
         printf("%s: %s\n", argv[0], strerror(-pid));
         return;
@@ -317,7 +362,7 @@ static void run_external(const char *path, int argc, char **argv, int background
     shell_set_foreground(pid);
 
     int status;
-    sys_waitpid(pid, &status, 0);
+    waitpid(pid, &status, 0);
 
     shell_set_foreground(0);
 
@@ -430,12 +475,12 @@ static void run_pipeline(char *left_line, char *right_line) {
     if (left_pid > 0) {
         shell_set_foreground(left_pid);
         int status;
-        sys_waitpid(left_pid, &status, 0);
+        waitpid(left_pid, &status, 0);
     }
     if (right_pid > 0) {
         shell_set_foreground(right_pid);
         int status;
-        sys_waitpid(right_pid, &status, 0);
+        waitpid(right_pid, &status, 0);
     }
 
     shell_set_foreground(0);
@@ -535,11 +580,27 @@ static void cmd_clear(int argc, char **argv) {
 }
 
 static void cmd_run(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
+    if (argc < 2) {
+        printf("Usage: run <program> [args...]\n");
+        return;
+    }
 
-    printf("Error: 'run' command is deprecated (sys_spawn removed)\n");
-    printf("Use regular commands to execute programs from /sys or /mnt\n");
+    int pid = posix_spawnp(argv[1], argc - 1, (const char **)&argv[1]);
+    if (pid < 0) {
+        printf("run: %s: %s\n", argv[1], strerror(-pid));
+        return;
+    }
+
+    shell_set_foreground(pid);
+
+    int status;
+    waitpid(pid, &status, 0);
+
+    shell_set_foreground(0);
+
+    if (status != 0) {
+        printf("Process %d exited with status %d\n", pid, status);
+    }
 }
 
 static void cmd_kill(int argc, char **argv) {
@@ -684,7 +745,7 @@ static void cmd_fg(int argc, char **argv) {
     shell_set_foreground(j->pid);
 
     int status;
-    sys_waitpid(j->pid, &status, 0);
+    waitpid(j->pid, &status, 0);
 
     shell_set_foreground(0);
 

@@ -37,7 +37,14 @@ static inline int msleep(unsigned int ms) {
     return 0;
 }
 
-/* POSIX I/O */
+/*
+ * POSIX I/O
+ *
+ * 说明：
+ * - `dup/dup2/pipe` 在语义上属于 POSIX 接口
+ * - 当前直接由 libc 基于 fd/handle/endpoint 实现
+ * - 暂不为分层形式额外套一层 libposix 转发
+ */
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 int     close(int fd);

@@ -2,7 +2,12 @@
  * @file proc.h
  * @brief 进程创建 Builder API
  *
- * 提供简洁的进程创建接口,封装 abi_exec_args / abi_exec_image_args 的构造.
+ * 提供进程创建 builder,封装 abi_exec_args / abi_exec_image_args 的构造.
+ *
+ * 注意:
+ * - 这是系统管理/引导辅助层，不是最终的普通应用进程 API。
+ * - 面向普通用户程序的高层 spawn/exec/fork 语义应逐步迁到 libposix。
+ * - 仍需要显式构造 handle/stdio/image 参数的程序才应直接依赖本头。
  */
 
 #ifndef XNIX_PROC_H
