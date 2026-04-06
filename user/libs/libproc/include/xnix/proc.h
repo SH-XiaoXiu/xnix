@@ -8,6 +8,13 @@
  * - 这是系统管理/引导辅助层，不是最终的普通应用进程 API。
  * - 面向普通用户程序的高层 spawn/exec/fork 语义应逐步迁到 libposix。
  * - 仍需要显式构造 handle/stdio/image 参数的程序才应直接依赖本头。
+ *
+ * TODO(userland layering):
+ *   继续把普通应用可见的高层进程接口迁到 libposix，
+ *   让 libproc 最终只保留：
+ *   - init/bootstrap
+ *   - image builder
+ *   - 显式 handle/stdio 图构造
  */
 
 #ifndef XNIX_PROC_H

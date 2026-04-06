@@ -15,5 +15,5 @@
  * x86 实现在 arch/x86/smp_init.c 中提供强符号覆盖
  */
 __attribute__((weak)) void arch_smp_init(void) {
-    /* 默认空实现 */
+  /* 默认空实现 */
 }
