@@ -45,6 +45,7 @@ ws_window_t *ws_create_window(uint32_t w, uint32_t h, const char *title) {
     req.regs.data[1] = w;
     req.regs.data[2] = h;
     req.regs.data[3] = 0; /* flags */
+    req.regs.data[4] = (uint32_t)sys_getpid();
 
     /* 传递标题通过 buffer */
     char title_buf[WS_TITLE_MAX];

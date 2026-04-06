@@ -70,6 +70,7 @@ struct ws_window *window_create(struct ws_server *srv, uint32_t w, uint32_t h, u
     /* 初始化窗口 */
     memset(win, 0, sizeof(*win));
     win->id         = srv->next_window_id++;
+    win->watch_slot = UINT32_MAX;
     win->client_w   = (int32_t)w;
     win->client_h   = (int32_t)h;
     win->flags      = flags;
@@ -126,6 +127,9 @@ void window_destroy(struct ws_server *srv, struct ws_window *win) {
         }
     }
 
+    win->client_pid = 0;
+    win->watch_slot = UINT32_MAX;
+    win->pending_event_tid = 0;
     win->id         = 0;
     win->shm_addr   = NULL;
     win->shm_handle = 0;

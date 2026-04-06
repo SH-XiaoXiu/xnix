@@ -28,6 +28,7 @@ struct ws_queued_event {
 struct ws_window {
     uint32_t id;                /* 1-based, 0=空闲 */
     uint32_t client_pid;
+    uint32_t watch_slot;
 
     /* 几何 (屏幕坐标, 外框左上角) */
     int32_t x, y;

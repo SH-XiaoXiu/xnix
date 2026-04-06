@@ -278,6 +278,15 @@ static inline int sys_notification_signal(uint32_t handle, uint32_t bits) {
     return ret;
 }
 
+static inline int sys_proc_watch(int pid, uint32_t notif_handle, uint32_t bits) {
+    int ret = syscall3(SYS_PROC_WATCH, (uint32_t)pid, notif_handle, bits);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
 /*
  * IPC 相关系统调用
  */

@@ -27,14 +27,129 @@
 
 static struct ws_server g_srv;
 
+struct watch_thread_arg {
+    struct ws_server *srv;
+    uint32_t          slot;
+};
+
+static int alloc_client_watch_slot(struct ws_server *srv) {
+    for (uint32_t i = 0; i < WS_MAX_WINDOWS; i++) {
+        if (!srv->client_watches[i].used) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static void *client_watch_thread(void *arg) {
+    struct watch_thread_arg *ctx  = arg;
+    struct ws_server        *srv  = ctx->srv;
+    uint32_t                 slot = ctx->slot;
+    handle_t                 notif_handle;
+    handle_t                 watch_handle;
+    struct ws_window        *victim = NULL;
+
+    free(ctx);
+
+    pthread_mutex_lock(&srv->lock);
+    if (!srv->client_watches[slot].used) {
+        pthread_mutex_unlock(&srv->lock);
+        return NULL;
+    }
+    notif_handle = srv->client_watches[slot].notif_handle;
+    watch_handle = srv->client_watches[slot].watch_handle;
+    pthread_mutex_unlock(&srv->lock);
+
+    sys_notification_wait(notif_handle);
+
+    pthread_mutex_lock(&srv->lock);
+    for (uint32_t i = 0; i < WS_MAX_WINDOWS; i++) {
+        if (srv->windows[i].id != 0 && srv->windows[i].watch_slot == slot) {
+            victim = &srv->windows[i];
+            break;
+        }
+    }
+    if (victim) {
+        window_destroy(srv, victim);
+        srv->needs_composite = 1;
+        compositor_composite(srv);
+    }
+    srv->client_watches[slot].used         = 0;
+    srv->client_watches[slot].pid          = 0;
+    srv->client_watches[slot].notif_handle = HANDLE_INVALID;
+    srv->client_watches[slot].watch_handle = HANDLE_INVALID;
+    pthread_mutex_unlock(&srv->lock);
+
+    sys_handle_close(watch_handle);
+    sys_handle_close(notif_handle);
+    return NULL;
+}
+
+static int attach_client_watch(struct ws_server *srv, uint32_t pid) {
+    int                     slot;
+    handle_t                notif_handle;
+    handle_t                watch_handle;
+    struct watch_thread_arg *ctx;
+    pthread_t               tid;
+
+    if (pid == 0) {
+        return -1;
+    }
+
+    slot = alloc_client_watch_slot(srv);
+    if (slot < 0) {
+        return -1;
+    }
+
+    notif_handle = (handle_t)sys_notification_create();
+    if (notif_handle == HANDLE_INVALID) {
+        return -1;
+    }
+
+    watch_handle = (handle_t)sys_proc_watch((int)pid, notif_handle, 1);
+    if (watch_handle == HANDLE_INVALID) {
+        sys_handle_close(notif_handle);
+        return -1;
+    }
+
+    ctx = malloc(sizeof(*ctx));
+    if (!ctx) {
+        sys_handle_close(watch_handle);
+        sys_handle_close(notif_handle);
+        return -1;
+    }
+
+    srv->client_watches[slot].used         = 1;
+    srv->client_watches[slot].pid          = pid;
+    srv->client_watches[slot].notif_handle = notif_handle;
+    srv->client_watches[slot].watch_handle = watch_handle;
+
+    ctx->srv  = srv;
+    ctx->slot = (uint32_t)slot;
+
+    if (pthread_create(&tid, NULL, client_watch_thread, ctx) != 0) {
+        srv->client_watches[slot].used         = 0;
+        srv->client_watches[slot].pid          = 0;
+        srv->client_watches[slot].notif_handle = HANDLE_INVALID;
+        srv->client_watches[slot].watch_handle = HANDLE_INVALID;
+        sys_handle_close(watch_handle);
+        sys_handle_close(notif_handle);
+        free(ctx);
+        return -1;
+    }
+    pthread_detach(tid);
+    return slot;
+}
+
 /**
  * 处理 WS_OP_CREATE_WINDOW
  */
 static int handle_create_window(struct ws_server *srv,
                                 struct ipc_message *msg) {
-    uint32_t w = msg->regs.data[1];
-    uint32_t h = msg->regs.data[2];
+    uint32_t w     = msg->regs.data[1];
+    uint32_t h     = msg->regs.data[2];
     uint32_t flags = msg->regs.data[3];
+    uint32_t pid   = msg->regs.data[4];
 
     /* 读取标题 */
     char title[WS_TITLE_MAX] = "Window";
@@ -55,6 +170,9 @@ static int handle_create_window(struct ws_server *srv,
         msg->regs.data[0] = (uint32_t)-1;
         return 0;
     }
+
+    win->client_pid = pid;
+    win->watch_slot = (uint32_t)attach_client_watch(srv, pid);
 
     /* 回复: 返回窗口信息和 SHM handle */
     msg->regs.data[0] = 0;

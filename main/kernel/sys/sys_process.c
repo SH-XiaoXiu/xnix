@@ -80,6 +80,26 @@ static int32_t sys_kill(const uint32_t *args) {
     return process_kill(pid, sig);
 }
 
+/* SYS_PROC_WATCH: ebx=pid, ecx=notif_handle, edx=bits */
+static int32_t sys_proc_watch(const uint32_t *args) {
+    pid_t           pid         = (pid_t)args[0];
+    handle_t        notif       = (handle_t)args[1];
+    uint32_t        bits        = args[2];
+    struct process *owner       = process_get_current();
+    handle_t        watch_handle;
+
+    if (!owner || pid <= 0 || bits == 0) {
+        return -EINVAL;
+    }
+
+    watch_handle = process_watch_create(owner, pid, notif, bits);
+    if (watch_handle == HANDLE_INVALID) {
+        return -ESRCH;
+    }
+
+    return (int32_t)watch_handle;
+}
+
 /* SYS_EXEC: ebx=abi_exec_image_args* */
 static int32_t sys_exec(const uint32_t *args) {
     struct abi_exec_image_args *user_args = (struct abi_exec_image_args *)(uintptr_t)args[0];
@@ -346,4 +366,5 @@ void sys_process_init(void) {
     syscall_register(SYS_PROCLIST, sys_proclist, 1, "proclist");
     syscall_register(SYS_SETPGID, sys_setpgid, 2, "setpgid");
     syscall_register(SYS_GETPGID, sys_getpgid, 1, "getpgid");
+    syscall_register(SYS_PROC_WATCH, sys_proc_watch, 3, "proc_watch");
 }

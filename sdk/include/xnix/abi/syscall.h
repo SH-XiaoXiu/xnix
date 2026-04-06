@@ -77,6 +77,7 @@
 #define SYS_PROCLIST       606 /* 获取进程列表: ebx=proclist_args* */
 #define SYS_SETPGID        607 /* 设置进程组: ebx=pid(0=self), ecx=pgid(0=pid) */
 #define SYS_GETPGID        608 /* 获取进程组: ebx=pid(0=self) */
+#define SYS_PROC_WATCH     609 /* 观察进程退出: ebx=pid, ecx=notif_handle, edx=bits */
 
 /* 同步原语 (700-719) */
 #define SYS_MUTEX_CREATE  700 /* 创建互斥锁 */

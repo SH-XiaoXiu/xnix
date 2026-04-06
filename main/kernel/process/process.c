@@ -68,6 +68,7 @@ void process_subsystem_init(void) {
     }
 
     process_list = &kernel_process;
+    process_watch_subsystem_init();
 
     /* 能力系统不需要额外初始化: cap_mask 为位图, O(1) 检查 */
 

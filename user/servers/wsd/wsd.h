@@ -52,6 +52,13 @@ struct ws_server {
     /* session state */
     uint8_t active;
 
+    struct {
+        uint8_t  used;
+        uint32_t pid;
+        handle_t notif_handle;
+        handle_t watch_handle;
+    } client_watches[WS_MAX_WINDOWS];
+
     /* 合成标记 */
     uint8_t needs_composite;
     uint8_t first_composite;

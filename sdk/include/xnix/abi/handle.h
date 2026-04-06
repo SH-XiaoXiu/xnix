@@ -48,6 +48,7 @@ typedef enum {
     HANDLE_VMAR         = 4, /* 虚拟内存区域(预留) */
     HANDLE_THREAD       = 5, /* 线程 */
     HANDLE_PROCESS      = 6, /* 进程 */
+    HANDLE_PROC_WATCH   = 7, /* 进程生命周期观察器 */
 } handle_type_t;
 
 /**

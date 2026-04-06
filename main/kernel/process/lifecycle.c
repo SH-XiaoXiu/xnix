@@ -93,6 +93,7 @@ void process_terminate_current(int signal) {
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = -signal;
+    process_watch_signal_exit(proc);
 
     /* 将子进程托管给 init */
     process_reparent_children(proc);
@@ -121,6 +122,7 @@ void process_exit(struct process *proc, int exit_code) {
 
     proc->state     = PROCESS_ZOMBIE;
     proc->exit_code = exit_code;
+    process_watch_signal_exit(proc);
 
     /* 将子进程托管给 init */
     process_reparent_children(proc);

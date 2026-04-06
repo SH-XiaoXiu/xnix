@@ -3,6 +3,9 @@
 #include <xnix/handle.h>
 #include <xnix/physmem.h>
 
+void process_watch_ref(void *ptr);
+void process_watch_unref(void *ptr);
+
 void handle_object_get(handle_type_t type, void *object) {
     if (!object) {
         return;
@@ -17,6 +20,9 @@ void handle_object_get(handle_type_t type, void *object) {
         break;
     case HANDLE_NOTIFICATION:
         notification_ref(object);
+        break;
+    case HANDLE_PROC_WATCH:
+        process_watch_ref(object);
         break;
     default:
         break;
@@ -37,6 +43,9 @@ void handle_object_put(handle_type_t type, void *object) {
         break;
     case HANDLE_NOTIFICATION:
         notification_unref(object);
+        break;
+    case HANDLE_PROC_WATCH:
+        process_watch_unref(object);
         break;
     default:
         break;

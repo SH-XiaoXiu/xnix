@@ -18,5 +18,8 @@ extern struct process  kernel_process;
 
 /* 内部函数 */
 void free_pid(pid_t pid);
+void process_watch_subsystem_init(void);
+handle_t process_watch_create(struct process *owner, pid_t pid, handle_t notif_handle, uint32_t bits);
+void process_watch_signal_exit(struct process *proc);
 
 #endif

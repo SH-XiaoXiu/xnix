@@ -63,7 +63,8 @@ enum ws_event_type {
  * 消息寄存器布局
  *
  * WS_OP_CREATE_WINDOW:
- *   请求: data[0]=opcode, data[1]=width, data[2]=height, data[3]=flags
+ *   请求: data[0]=opcode, data[1]=width, data[2]=height, data[3]=flags,
+ *         data[4]=client_pid
  *         buffer=title (UTF-8, max WS_TITLE_MAX-1 bytes + NUL)
  *   回复: data[0]=0/err, data[1]=window_id, data[2]=actual_w, data[3]=actual_h
  *         data[4]=shm_size
