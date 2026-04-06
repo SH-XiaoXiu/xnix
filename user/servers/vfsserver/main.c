@@ -6,7 +6,7 @@
 #include <xnix/protocol/vfs.h>
 #include <xnix/abi/io.h>
 #include <xnix/abi/ipc.h>
-#include <d/server.h>
+#include <xnix/ipc.h>
 #include <stdio.h>
 #include <string.h>
 #include <xnix/abi/handle.h>
@@ -817,7 +817,6 @@ static int vfsd_dir_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
-    env_set_name("vfs");
     g_vfs_ep = env_require("vfs_ep");
     if (g_vfs_ep == HANDLE_INVALID) {
         return 1;

@@ -22,7 +22,6 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    env_set_name("sudod");
     handle_t ep = env_require("sudo_ep");
     if (ep == HANDLE_INVALID) {
         return 1;

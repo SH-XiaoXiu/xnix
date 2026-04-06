@@ -5,10 +5,10 @@
 
 #include "ramfsd_service.h"
 
-#include <d/server.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <vfs/vfs.h>
+#include <xnix/sys/server.h>
 #include <xnix/syscall.h>
 
 /* 全局 service 指针(用于 handler 访问) */
@@ -28,15 +28,14 @@ static void *ramfsd_thread(void *arg) {
 
     printf("[ramfsd] service thread started\n");
 
-    /* 使用 udm_server 框架处理请求 */
-    struct udm_server srv = {
+    struct sys_server srv = {
         .endpoint = service->endpoint,
         .handler  = vfs_handler,
         .name     = "ramfsd",
     };
 
-    udm_server_init(&srv);
-    udm_server_run(&srv);
+    sys_server_init(&srv);
+    sys_server_run(&srv);
 
     printf("[ramfsd] service thread exiting\n");
     return NULL;

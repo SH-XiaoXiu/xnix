@@ -6,7 +6,7 @@
 #
 # set(APP_NAME "myapp")
 # set(APP_SOURCES main.c foo.c)
-# set(APP_LIBS c d vfs pthread)  # 可选，默认 c d vfs pthread
+# set(APP_LIBS c sys pthread)  # 可选，默认 c sys pthread
 # set(APP_INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/include)  # 可选
 # set(APP_INSTALL_TO_SYSTEM ON)  # 可选，默认 ON（打包到 system.img）
 # include(${CMAKE_SOURCE_DIR}/user/app.cmake)
@@ -24,7 +24,7 @@ endif ()
 
 # 默认值
 if (NOT DEFINED APP_LIBS)
-    set(APP_LIBS c d vfs pthread)
+    set(APP_LIBS c sys pthread)
 endif ()
 
 if (NOT DEFINED APP_INSTALL_TO_SYSTEM)
@@ -43,10 +43,8 @@ target_compile_options(${APP_NAME}.elf PRIVATE ${USER_C_FLAGS})
 # 包含目录
 set(APP_INCLUDE_DIRS
         ${CMAKE_SOURCE_DIR}/user/libs/libc/include
-        ${CMAKE_SOURCE_DIR}/user/libs/libd/include
-        ${CMAKE_SOURCE_DIR}/user/libs/libvfs/include
+        ${CMAKE_SOURCE_DIR}/user/libs/libsys/include
         ${CMAKE_SOURCE_DIR}/user/libs/libpthread/include
-        ${CMAKE_SOURCE_DIR}/main/include
         ${CMAKE_BINARY_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}
 )

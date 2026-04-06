@@ -59,7 +59,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    env_set_name("sudo");
     handle_t sudo_ep = env_require("sudo_ep");
     if (sudo_ep == HANDLE_INVALID) {
         return 1;

@@ -366,7 +366,6 @@ int main(int argc, char **argv) {
     struct display_device dev;
     handle_t ep;
 
-    env_set_name("display");
     memset(&g_display, 0, sizeof(g_display));
     pthread_mutex_init(&g_display.lock, NULL);
     g_display.mode = parse_mode(argc, argv);

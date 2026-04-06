@@ -4,4 +4,3 @@
 
 set(LIB_NAME "block")
 set(LIB_DEPS "c")
-set(LIB_KERNEL ON)

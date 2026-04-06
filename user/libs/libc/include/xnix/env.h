@@ -17,6 +17,8 @@
  */
 void __env_init_handles(const char **handle_names, uint32_t *handle_values, int count);
 
+void __env_init_process_name(const char *argv0);
+
 /**
  * 根据名称查找 handle
  *

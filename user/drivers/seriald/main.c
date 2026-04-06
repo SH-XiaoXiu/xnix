@@ -210,8 +210,6 @@ int main(void) {
 
     serial_hw_init(COM1_BASE);
 
-    env_set_name("serial");
-
     /* 探测 COM 端口 */
     for (int i = 0; i < MAX_COM_PORTS; i++) {
         g_ports[i].base    = com_bases[i];

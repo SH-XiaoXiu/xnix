@@ -261,8 +261,6 @@ static void *mouse_thread(void *arg) {
 }
 
 int main(void) {
-    env_set_name("ps2");
-
     input_queue_init(&g_kbd_queue);
     input_queue_init(&g_mouse_queue);
 

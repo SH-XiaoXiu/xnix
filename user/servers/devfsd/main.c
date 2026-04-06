@@ -15,7 +15,6 @@
  */
 
 #include <stdbool.h>
-#include <d/server.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +26,7 @@
 #include <xnix/protocol/devfs.h>
 #include <xnix/protocol/vfs.h>
 #include <xnix/svc.h>
+#include <xnix/sys/server.h>
 #include <xnix/syscall.h>
 
 #define DEVFS_MAX_FILES 32
@@ -599,14 +599,14 @@ static void *devfsd_thread(void *arg) {
 
     printf("[devfs] service thread started\n");
 
-    struct udm_server srv = {
+    struct sys_server srv = {
         .endpoint = g_devfs.endpoint,
         .handler  = devfsd_handler,
         .name     = "devfs",
     };
 
-    udm_server_init(&srv);
-    udm_server_run(&srv);
+    sys_server_init(&srv);
+    sys_server_run(&srv);
 
     printf("[devfs] service thread exiting\n");
     return NULL;
@@ -615,8 +615,6 @@ static void *devfsd_thread(void *arg) {
 int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
-
-    env_set_name("devfs");
 
     /* 初始化 devfs */
     memset(&g_devfs, 0, sizeof(g_devfs));

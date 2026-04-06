@@ -107,8 +107,6 @@ static const char *event_type_str(uint8_t type) {
 }
 
 int main(void) {
-    env_set_name("test_gui");
-
     if (ws_connect() < 0) {
         ulog_errf("[test_gui] Failed to connect to wsd\n");
         return 1;

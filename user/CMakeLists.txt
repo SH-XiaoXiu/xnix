@@ -134,15 +134,13 @@ add_executable(init.elf
 target_compile_options(init.elf PRIVATE ${USER_C_FLAGS})
 target_include_directories(init.elf PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/libc/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/libs/libd/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/libs/libvfs/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/libsys/include
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/libpthread/include
         ${CMAKE_CURRENT_SOURCE_DIR}/libs/libproc/include
-        ${CMAKE_SOURCE_DIR}/main/include
         ${CMAKE_BINARY_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/init
 )
-target_link_libraries(init.elf PRIVATE c d vfs pthread serial proc)
+target_link_libraries(init.elf PRIVATE c sys pthread proc)
 target_link_options(init.elf PRIVATE
         -m32 -Wl,-T,${CMAKE_CURRENT_SOURCE_DIR}/libs/user.ld -nostdlib
 )

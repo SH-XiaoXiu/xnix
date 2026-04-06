@@ -2,6 +2,6 @@
 
 set(APP_NAME "syslog")
 set(APP_SOURCES main.c)
-set(APP_LIBS c d)
+set(APP_LIBS c sys)
 
 include(${CMAKE_SOURCE_DIR}/user/app.cmake)

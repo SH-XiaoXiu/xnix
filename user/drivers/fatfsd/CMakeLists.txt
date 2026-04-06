@@ -2,6 +2,6 @@
 
 set(APP_NAME "fatfs")
 set(APP_SOURCES ata.c diskio.c fatfs_vfs.c main.c)
-set(APP_LIBS c d vfs pthread fatfs block)
+set(APP_LIBS c sys pthread fatfs block)
 
 include(${CMAKE_SOURCE_DIR}/user/app.cmake)

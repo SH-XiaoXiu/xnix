@@ -3,7 +3,7 @@
 
 set(APP_NAME "installer")
 set(APP_SOURCES main.c)
-set(APP_LIBS c vfs -Wl,--whole-archive serial -Wl,--no-whole-archive)
+set(APP_LIBS c)
 set(APP_INSTALL_TO_SYSTEM ON)
 
 include(${CMAKE_SOURCE_DIR}/user/app.cmake)

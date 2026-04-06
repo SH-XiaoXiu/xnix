@@ -118,8 +118,6 @@ static int console_activate_tty(int tty_id) {
 }
 
 int main(void) {
-    env_set_name("console");
-
     g_console_ep = env_get_handle("console_ep");
     g_tty0_ep = env_get_handle("tty0");
     g_tty5_ep = env_get_handle("tty5");

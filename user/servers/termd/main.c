@@ -1012,7 +1012,6 @@ int main(int argc, char **argv) {
     _stdio_set_fd(stdout, -1);
     _stdio_set_fd(stderr, -1);
 
-    env_set_name("term");
     pthread_mutex_init(&g_display_lock, NULL);
     handle_t serial_ep    = env_get_handle("serial");     /* 写 endpoint */
     handle_t serial_in_ep = env_get_handle("serial_in");  /* 读 endpoint */

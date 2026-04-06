@@ -11,6 +11,65 @@
 
 /*VFS 路径 builder*/
 
+static void copy_bounded_arg(char dst[ABI_EXEC_MAX_ARG_LEN], const char *arg) {
+    size_t len = strlen(arg);
+    if (len >= ABI_EXEC_MAX_ARG_LEN) {
+        len = ABI_EXEC_MAX_ARG_LEN - 1;
+    }
+    memcpy(dst, arg, len);
+    dst[len] = '\0';
+}
+
+static const char *basename_no_dir(const char *path) {
+    const char *base = path;
+    for (const char *p = path; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+    return base;
+}
+
+static void ensure_exec_argv0(struct abi_exec_args *args) {
+    if (args->argc > 0 && args->argv[0][0] != '\0' && args->argv[0][0] != '-') {
+        return;
+    }
+    if (args->argc >= ABI_EXEC_MAX_ARGS) {
+        return;
+    }
+
+    if (args->argc > 0 && args->argv[0][0] == '-') {
+        for (int i = args->argc; i > 0; i--) {
+            memcpy(args->argv[i], args->argv[i - 1], ABI_EXEC_MAX_ARG_LEN);
+        }
+        args->argc++;
+    } else if (args->argc == 0) {
+        args->argc = 1;
+    }
+
+    copy_bounded_arg(args->argv[0], basename_no_dir(args->path));
+}
+
+static void ensure_exec_image_argv0(struct abi_exec_image_args *args) {
+    if (args->argc > 0 && args->argv[0][0] != '\0' && args->argv[0][0] != '-') {
+        return;
+    }
+    if (args->argc >= ABI_EXEC_MAX_ARGS) {
+        return;
+    }
+
+    if (args->argc > 0 && args->argv[0][0] == '-') {
+        for (int i = args->argc; i > 0; i--) {
+            memcpy(args->argv[i], args->argv[i - 1], ABI_EXEC_MAX_ARG_LEN);
+        }
+        args->argc++;
+    } else if (args->argc == 0) {
+        args->argc = 1;
+    }
+
+    copy_bounded_arg(args->argv[0], args->name[0] ? args->name : "?");
+}
+
 void proc_init(struct proc_builder *b, const char *path) {
     memset(&b->args, 0, sizeof(b->args));
     size_t len = strlen(path);
@@ -86,13 +145,8 @@ void proc_add_arg(struct proc_builder *b, const char *arg) {
     if (b->args.argc >= ABI_EXEC_MAX_ARGS) {
         return;
     }
-    int    idx = b->args.argc;
-    size_t len = strlen(arg);
-    if (len >= ABI_EXEC_MAX_ARG_LEN) {
-        len = ABI_EXEC_MAX_ARG_LEN - 1;
-    }
-    memcpy(b->args.argv[idx], arg, len);
-    b->args.argv[idx][len] = '\0';
+    int idx = b->args.argc;
+    copy_bounded_arg(b->args.argv[idx], arg);
     b->args.argc++;
 }
 
@@ -136,6 +190,7 @@ void proc_add_args_string(struct proc_builder *b, const char *args_str) {
 }
 
 int proc_spawn(struct proc_builder *b) {
+    ensure_exec_argv0(&b->args);
     return sys_exec(&b->args);
 }
 
@@ -199,16 +254,12 @@ void proc_image_add_arg(struct proc_image_builder *b, const char *arg) {
     if (b->args.argc >= ABI_EXEC_MAX_ARGS) {
         return;
     }
-    int    idx = b->args.argc;
-    size_t len = strlen(arg);
-    if (len >= ABI_EXEC_MAX_ARG_LEN) {
-        len = ABI_EXEC_MAX_ARG_LEN - 1;
-    }
-    memcpy(b->args.argv[idx], arg, len);
-    b->args.argv[idx][len] = '\0';
+    int idx = b->args.argc;
+    copy_bounded_arg(b->args.argv[idx], arg);
     b->args.argc++;
 }
 
 int proc_image_spawn(struct proc_image_builder *b) {
+    ensure_exec_image_argv0(&b->args);
     return syscall1(SYS_EXEC, (uint32_t)(uintptr_t)&b->args);
 }

@@ -12,7 +12,6 @@
 #include "window.h"
 #include "wsd.h"
 
-#include <d/server.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +21,7 @@
 #include <xnix/ipc.h>
 #include <xnix/protocol/ws.h>
 #include <xnix/svc.h>
+#include <xnix/sys/server.h>
 #include <xnix/syscall.h>
 #include <xnix/ulog.h>
 
@@ -476,7 +476,6 @@ static int init_framebuffer(struct ws_server *srv) {
 }
 
 int main(void) {
-    env_set_name("ws");
     ulog_tagf(stdout, TERM_COLOR_WHITE, "[ws]",
               " Starting window server\n");
 
@@ -520,18 +519,18 @@ int main(void) {
     input_start_threads(&g_srv);
 
     /* 启动 IPC 服务 */
-    struct udm_server srv = {
+    struct sys_server srv = {
         .endpoint = g_srv.ws_ep,
         .handler  = ws_handler,
         .name     = "ws",
     };
 
-    udm_server_init(&srv);
+    sys_server_init(&srv);
     svc_notify_ready("ws");
     ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[ws]",
               " Ready, serving on endpoint %u\n", g_srv.ws_ep);
 
-    udm_server_run(&srv);
+    sys_server_run(&srv);
 
     return 0;
 }

@@ -10,13 +10,13 @@
  *   IO_READ:  从指定偏移读取日志数据
  */
 
-#include <d/server.h>
 #include <stdio.h>
 #include <string.h>
 #include <xnix/abi/io.h>
 #include <xnix/env.h>
 #include <xnix/ipc.h>
 #include <xnix/svc.h>
+#include <xnix/sys/server.h>
 #include <xnix/syscall.h>
 
 /* 日志环形缓冲区大小 (16 KB) */
@@ -164,8 +164,6 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    env_set_name("syslog");
-
     /* 获取 endpoint (由 init 注入) */
     handle_t ep = env_require("syslog_ep");
     if (ep == HANDLE_INVALID) {
@@ -179,14 +177,14 @@ int main(int argc, char **argv) {
     svc_notify_ready("syslog");
 
     /* 运行服务主循环 */
-    struct udm_server srv = {
+    struct sys_server srv = {
         .endpoint = ep,
         .handler  = syslogd_handler,
         .name     = "syslog",
     };
 
-    udm_server_init(&srv);
-    udm_server_run(&srv);
+    sys_server_init(&srv);
+    sys_server_run(&srv);
 
     return 0;
 }

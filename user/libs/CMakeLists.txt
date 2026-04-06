@@ -9,7 +9,7 @@
 # lib.cmake 格式:
 #   set(LIB_NAME "foo")       # 库名（不带 lib 前缀）
 #   set(LIB_DEPS "c")         # 依赖的库列表（空格分隔）
-#   set(LIB_KERNEL ON)        # 可选：需要内核头文件（<xnix/*.h>）
+#   set(LIB_KERNEL ON)        # 已废弃：用户态不再默认依赖 main/include
 #
 # CMake 选项:
 #   -DXNIX_BUILD_LIBS=OFF        禁用所有用户态库
@@ -160,12 +160,8 @@ foreach (LIB_NAME ${_SORTED_LIBS})
         endif ()
     endforeach ()
 
-    # 如果需要内核头文件，添加到最后
-    if (LIB_KERNEL)
-        target_include_directories(${LIB_NAME} PUBLIC
-                ${CMAKE_SOURCE_DIR}/main/include
-        )
-    endif ()
+    # 不再向用户态库暴露内核私有头(main/include)。
+    # 若缺少 ABI/协议定义，应上移到 sdk/include 或相应用户态库头。
 
     # 链接依赖
     if (LIB_DEPS)

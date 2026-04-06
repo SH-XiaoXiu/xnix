@@ -26,6 +26,32 @@ static int                 g_cache_size = 0;
 /* 进程显示名(用于 env_require 错误消息) */
 static char g_env_name[16] = "?";
 
+static void set_env_name_from_argv0(const char *argv0) {
+    const char *base;
+    size_t      len;
+
+    if (!argv0 || !argv0[0]) {
+        return;
+    }
+
+    base = argv0;
+    for (const char *p = argv0; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+
+    len = strlen(base);
+    if (len > 4 && strcmp(base + len - 4, ".elf") == 0) {
+        len -= 4;
+    }
+    if (len >= sizeof(g_env_name)) {
+        len = sizeof(g_env_name) - 1;
+    }
+    memcpy(g_env_name, base, len);
+    g_env_name[len] = '\0';
+}
+
 /**
  * 初始化环境 handle 映射(预留接口,暂未使用)
  */
@@ -34,6 +60,10 @@ void __env_init_handles(const char **handle_names, uint32_t *handle_values, int 
     (void)handle_values;
     (void)count;
     /* 暂不需要预初始化,使用按需查找+缓存策略 */
+}
+
+void __env_init_process_name(const char *argv0) {
+    set_env_name_from_argv0(argv0);
 }
 
 /**

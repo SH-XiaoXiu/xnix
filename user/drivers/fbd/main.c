@@ -7,13 +7,13 @@
  */
 
 #include <xnix/protocol/fb.h>
-#include <d/server.h>
 #include <stdio.h>
 #include <string.h>
 #include <xnix/abi/framebuffer.h>
 #include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/svc.h>
+#include <xnix/sys/server.h>
 #include <xnix/syscall.h>
 #include <xnix/ulog.h>
 
@@ -197,7 +197,6 @@ static int fb_handler(struct ipc_message *msg) {
 }
 
 int main(void) {
-    env_set_name("fb");
     ulog_tagf(stdout, TERM_COLOR_WHITE, "[fb]", " Starting framebuffer driver\n");
 
     handle_t fb_handle = env_require("fb_mem");
@@ -246,18 +245,17 @@ int main(void) {
         return 1;
     }
 
-    /* 启动 UDM 服务 */
-    struct udm_server srv = {
+    struct sys_server srv = {
         .endpoint = fb_ep,
         .handler  = fb_handler,
         .name     = "fb",
     };
 
-    udm_server_init(&srv);
+    sys_server_init(&srv);
     svc_notify_ready("fb");
     ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fb]", " Ready, serving on endpoint %u\n", fb_ep);
 
-    udm_server_run(&srv);
+    sys_server_run(&srv);
 
     return 0;
 }

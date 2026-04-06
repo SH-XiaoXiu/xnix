@@ -13,9 +13,6 @@
 
 #include <block.h>
 #include <pthread.h>
-#include <xnix/protocol/blk.h>
-#include <xnix/protocol/vfs.h>
-#include <d/server.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +20,10 @@
 #include <vfs_client.h>
 #include <xnix/abi/handle.h>
 #include <xnix/env.h>
+#include <xnix/protocol/blk.h>
+#include <xnix/protocol/vfs.h>
 #include <xnix/svc.h>
+#include <xnix/sys/server.h>
 #include <xnix/syscall.h>
 #include <xnix/ulog.h>
 
@@ -278,7 +278,7 @@ static void register_blkdev_to_devfsd(handle_t self_ep) {
 }
 
 static void *srv_thread_entry(void *arg) {
-    udm_server_run((struct udm_server *)arg);
+    sys_server_run((struct sys_server *)arg);
     return NULL;
 }
 
@@ -315,7 +315,6 @@ int main(int argc, char **argv) {
         svc_name = "fatfs";
     }
 
-    env_set_name("fatfs");
     handle_t ep = env_require(ep_name);
     if (ep == HANDLE_INVALID) {
         return 1;
@@ -382,13 +381,13 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    struct udm_server srv = {
+    struct sys_server srv = {
         .endpoint = ep,
         .handler  = combined_handler,
         .name     = svc_name,
     };
 
-    udm_server_init(&srv);
+    sys_server_init(&srv);
     svc_notify_ready(svc_name);
     ulog_tagf(stdout, TERM_COLOR_LIGHT_GREEN, "[fatfs]", " %s started\n", svc_name);
 
@@ -400,7 +399,7 @@ int main(int argc, char **argv) {
         register_blkdev_to_devfsd(ep);
         pthread_join(srv_thread, NULL);
     } else {
-        udm_server_run(&srv);
+        sys_server_run(&srv);
     }
 
     return 0;

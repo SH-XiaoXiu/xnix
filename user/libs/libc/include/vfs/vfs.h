@@ -1,23 +1,15 @@
 /**
  * @file vfs.h
- * @brief VFS 协议解析库
- *
- * 提供 VFS 操作接口定义和消息分发函数
- * 驱动使用 libudm 启动服务,在 handler 中调用 vfs_dispatch()
+ * @brief VFS 服务端分发辅助
  */
 
-#ifndef VFS_VFS_H
-#define VFS_VFS_H
+#ifndef XNIX_VFS_DISPATCH_H
+#define XNIX_VFS_DISPATCH_H
 
-#include <xnix/protocol/vfs.h>
 #include <stdint.h>
 #include <xnix/ipc.h>
+#include <xnix/protocol/vfs.h>
 
-/**
- * 文件系统操作接口
- *
- * 返回值:成功 >= 0,失败返回负数错误码
- */
 struct vfs_operations {
     int (*open)(void *ctx, const char *path, uint32_t flags);
     int (*close)(void *ctx, uint32_t handle);
@@ -34,14 +26,6 @@ struct vfs_operations {
     int (*rename)(void *ctx, const char *old_path, const char *new_path);
 };
 
-/**
- * 分发 VFS 消息到对应的操作回调
- *
- * @param ops 文件系统操作接口
- * @param ctx 传递给回调的上下文(如 ramfs 的文件树指针)
- * @param msg IPC 消息
- * @return 0 成功,负数失败
- */
 int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg);
 
-#endif /* VFS_VFS_H */
+#endif /* XNIX_VFS_DISPATCH_H */
