@@ -52,10 +52,7 @@ static ssize_t write_io(struct fd_entry *ent, const void *buf, size_t n) {
     msg.buffer.data  = (uint64_t)(uintptr_t)buf;
     msg.buffer.size  = (uint32_t)n;
 
-    uint32_t timeout = (ent->session == 0) ? 1000 : 5000;
-
-    /* 普通 IO: call with reply */
-    int ret = sys_ipc_call(ent->handle, &msg, &reply, timeout);
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) { errno = EIO; return -1; }
 
     int32_t written = (int32_t)reply.regs.data[0];
@@ -156,7 +153,7 @@ int close(int fd) {
         return -1;
     }
 
-    if (!(ent->flags & FD_FLAG_PIPE) && ent->session != 0) {
+    if (!(ent->flags & FD_FLAG_PIPE)) {
         struct ipc_message msg   = {0};
         struct ipc_message reply = {0};
         msg.regs.data[0] = IO_CLOSE;
@@ -342,7 +339,7 @@ int open(const char *path, int flags) {
         io_ep = reply.handles.handles[0];
     }
 
-    /* 设备类型: TTY 设备返回 endpoint, session=0 (stream) */
+    /* TTY 设备直接返回可用 IO endpoint; session=0 仅表示该对象无需额外会话号 */
     uint32_t dev_type = reply.regs.data[2];
     if (dev_type == DEVFS_TYPE_TTY && io_ep != HANDLE_INVALID) {
         fd_install(fd, io_ep, 0, 0, fd_flags);

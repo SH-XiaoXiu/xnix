@@ -5,8 +5,8 @@
  * fd = { handle, session, offset, flags }
  *
  * handle  = IPC endpoint (对端是谁)
- * session = 服务端 session ID (VFS open 返回的 fs_handle, stream 为 0)
- * offset  = 文件偏移 (stream 始终为 0)
+ * session = 服务端 session ID (VFS/TTY/其他对象都可使用, 0 只是合法值)
+ * offset  = 对象读写偏移
  * flags   = FD_FLAG_READ | WRITE | CLOEXEC | PIPE
  *
  * 没有 type/proto 字段. write() 统一发 IO_WRITE, read() 统一发 IO_READ.
@@ -26,11 +26,12 @@
 #define FD_FLAG_WRITE   0x02
 #define FD_FLAG_CLOEXEC 0x04
 #define FD_FLAG_PIPE    0x08 /* pipe: 用 raw send/recv 而非 IO 协议 */
+#define FD_FLAG_DIR     0x10 /* 目录对象: after-open 控制面 */
 
 struct fd_entry {
     handle_t handle;     /* IPC endpoint */
-    uint32_t session;    /* 服务端 session ID (0 = stream) */
-    uint32_t offset;     /* 文件偏移 (0 = stream) */
+    uint32_t session;    /* 服务端 session ID */
+    uint32_t offset;     /* 对象读写偏移 */
     uint8_t  flags;      /* FD_FLAG_* */
 };
 

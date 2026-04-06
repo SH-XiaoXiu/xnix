@@ -114,7 +114,9 @@ static void *chardev_thread(void *arg) {
         }
 
         chardev_handle_msg(dev, &msg, recv_buf);
-        sys_ipc_reply(&msg);
+        if ((msg.flags & ABI_IPC_FLAG_NOREPLY) == 0) {
+            sys_ipc_reply(&msg);
+        }
     }
     return NULL;
 }

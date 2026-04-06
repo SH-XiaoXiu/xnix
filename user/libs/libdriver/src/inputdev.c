@@ -77,7 +77,7 @@ static void *inputdev_thread(void *arg) {
         }
 
         int ret = inputdev_handle_msg(dev, &msg);
-        if (ret == 0) {
+        if (ret == 0 && (msg.flags & ABI_IPC_FLAG_NOREPLY) == 0) {
             sys_ipc_reply(&msg);
         }
     }

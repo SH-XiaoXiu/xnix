@@ -57,7 +57,7 @@ struct abi_ipc_message {
  */
 #define ABI_IPC_FLAG_NONBLOCK (1 << 0) /* 非阻塞 */
 #define ABI_IPC_FLAG_TIMEOUT  (1 << 1) /* 使用超时 */
-#define ABI_IPC_FLAG_NOREPLY  (1 << 2) /* 不等待回复 (fire-and-forget) */
+#define ABI_IPC_FLAG_NOREPLY  (1 << 2) /* 单向消息: 接收端无需 reply */
 
 /*
  * IPC 错误码

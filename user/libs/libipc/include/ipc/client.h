@@ -61,7 +61,9 @@ int ipc_call_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t *result
 int ipc_send_simple(handle_t ep, uint32_t opcode, uint32_t arg, uint32_t timeout);
 
 /**
- * 简单的单参数单向消息 (NOEPLY, fire-and-forget)
+ * 简单的单参数单向消息
+ *
+ * 兼容旧命名; 当前等价于 ipc_send_simple().
  *
  * @param ep      Endpoint handle
  * @param opcode  操作码

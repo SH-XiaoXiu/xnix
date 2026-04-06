@@ -8,7 +8,7 @@
  * 架构:
  *   kbd → input_listener → TTY_OP_INPUT → ttyd(tty0) → fbcon/vga (输出)
  *   seriald → TTY_OP_INPUT → ttyd(tty1) → seriald (输出)
- *   shell → TTY_OP_WRITE/READ → ttyd(ttyN) → 设备驱动
+ *   shell/libc → IO_READ / IO_WRITE / IO_IOCTL → ttyd(ttyN) → 设备驱动
  *
  * 每个 tty 的所有状态修改(输入队列/行规程/pending_read)均在
  * 该 tty 的服务线程中执行,input_listener 通过 IPC 投递字符.
@@ -186,6 +186,95 @@ static int tty_output_send(struct tty_instance *tty, struct ipc_message *msg) {
 /* 前置声明 */
 static void tty_output_set_color(struct tty_instance *tty, uint8_t fg, uint8_t bg);
 static void tty_output_reset_color(struct tty_instance *tty);
+static void tty_output_write(struct tty_instance *tty, const char *data, int len);
+
+static int tty_reply_write(struct tty_instance *tty, struct ipc_message *msg, uint32_t len,
+                           const char *data) {
+    if (data && len > 0) {
+        tty_output_write(tty, data, (int)len);
+    }
+    msg->regs.data[0] = len;
+    msg->buffer.data  = 0;
+    msg->buffer.size  = 0;
+    return 0;
+}
+
+static int tty_reply_read(struct tty_instance *tty, struct ipc_message *msg, uint32_t max_len) {
+    if (max_len == 0) {
+        max_len = 1;
+    }
+
+    pthread_mutex_lock(&tty->input_lock);
+    int avail = tty_input_available(tty);
+    if (avail > 0) {
+        int to_read = avail;
+        if ((uint32_t)to_read > max_len) {
+            to_read = (int)max_len;
+        }
+        char buf[TTY_INPUT_BUF_SIZE];
+        for (int i = 0; i < to_read; i++) {
+            int c = tty_input_get(tty);
+            if (c < 0) {
+                to_read = i;
+                break;
+            }
+            buf[i] = (char)c;
+        }
+        pthread_mutex_unlock(&tty->input_lock);
+        msg->regs.data[0] = (uint32_t)to_read;
+        msg->buffer.data  = (uint64_t)(uintptr_t)buf;
+        msg->buffer.size  = (uint32_t)to_read;
+        return 0;
+    }
+
+    tty->pending_read    = 1;
+    tty->pending_tid     = msg->sender_tid;
+    tty->pending_max_len = max_len;
+    pthread_mutex_unlock(&tty->input_lock);
+    return 1;
+}
+
+static int tty_reply_ioctl(struct tty_instance *tty, struct ipc_message *msg, uint32_t cmd,
+                           uint32_t arg0, uint32_t arg1) {
+    switch (cmd) {
+    case TTY_IOCTL_SET_FOREGROUND:
+        tty->foreground_pid = (int)arg0;
+        msg->regs.data[0]   = 0;
+        break;
+    case TTY_IOCTL_GET_FOREGROUND:
+        msg->regs.data[0] = (uint32_t)tty->foreground_pid;
+        break;
+    case TTY_IOCTL_SET_RAW:
+        tty->ldisc.mode   = LDISC_RAW;
+        msg->regs.data[0] = 0;
+        break;
+    case TTY_IOCTL_SET_COOKED:
+        tty->ldisc.mode   = LDISC_COOKED;
+        msg->regs.data[0] = 0;
+        break;
+    case TTY_IOCTL_SET_ECHO:
+        tty->ldisc.echo   = (int)arg0;
+        msg->regs.data[0] = 0;
+        break;
+    case TTY_IOCTL_GET_TTY_COUNT:
+        msg->regs.data[0] = (uint32_t)g_tty_count;
+        break;
+    case TTY_IOCTL_SET_COLOR:
+        tty_output_set_color(tty, (uint8_t)arg0, (uint8_t)arg1);
+        msg->regs.data[0] = 0;
+        break;
+    case TTY_IOCTL_RESET_COLOR:
+        tty_output_reset_color(tty);
+        msg->regs.data[0] = 0;
+        break;
+    default:
+        msg->regs.data[0] = (uint32_t)-1;
+        break;
+    }
+    msg->buffer.data = 0;
+    msg->buffer.size = 0;
+    return 0;
+}
 
 /* 向输出设备写一个字符 */
 static void tty_output_char(struct tty_instance *tty, char c) {
@@ -495,107 +584,11 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
     uint32_t op = msg->regs.data[0];
 
     switch (op) {
-    case TTY_OP_WRITE: {
-        /* 写输出到设备 */
-        int   len  = (int)msg->regs.data[1];
-        char *data = (char *)(uintptr_t)msg->buffer.data;
-        if (data && len > 0) {
-            tty_output_write(tty, data, len);
-        }
-        msg->regs.data[0] = (uint32_t)len;
-        return 0;
-    }
-
-    case TTY_OP_PUTC: {
-        char c = (char)msg->regs.data[1];
-        tty_output_char(tty, c);
-        msg->regs.data[0] = 1;
-        return 0;
-    }
-
-    case TTY_OP_READ: {
-        uint32_t max_len = msg->regs.data[1];
-        if (max_len == 0) {
-            max_len = 1;
-        }
-
-        pthread_mutex_lock(&tty->input_lock);
-        int avail = tty_input_available(tty);
-        if (avail > 0) {
-            /* 立即返回 */
-            int to_read = avail;
-            if ((uint32_t)to_read > max_len) {
-                to_read = (int)max_len;
-            }
-            char buf[TTY_INPUT_BUF_SIZE];
-            for (int i = 0; i < to_read; i++) {
-                int c = tty_input_get(tty);
-                if (c < 0) {
-                    to_read = i;
-                    break;
-                }
-                buf[i] = (char)c;
-            }
-            pthread_mutex_unlock(&tty->input_lock);
-            msg->regs.data[0] = (uint32_t)to_read;
-            msg->buffer.data  = (uint64_t)(uintptr_t)buf;
-            msg->buffer.size  = (uint32_t)to_read;
-            return 0;
-        }
-
-        /* 延迟回复:等待输入 */
-        tty->pending_read    = 1;
-        tty->pending_tid     = msg->sender_tid;
-        tty->pending_max_len = max_len;
-        pthread_mutex_unlock(&tty->input_lock);
-        return 1; /* 延迟回复 */
-    }
-
     case TTY_OP_INPUT: {
         /* 从输入设备推送的字符 */
         char c = (char)msg->regs.data[1];
         tty_process_input(tty, c);
         msg->regs.data[0] = 0;
-        return 0;
-    }
-
-    case TTY_OP_IOCTL: {
-        uint32_t cmd = msg->regs.data[1];
-        switch (cmd) {
-        case TTY_IOCTL_SET_FOREGROUND:
-            tty->foreground_pid = (int)msg->regs.data[2];
-            msg->regs.data[0]   = 0;
-            break;
-        case TTY_IOCTL_GET_FOREGROUND:
-            msg->regs.data[0] = (uint32_t)tty->foreground_pid;
-            break;
-        case TTY_IOCTL_SET_RAW:
-            tty->ldisc.mode   = LDISC_RAW;
-            msg->regs.data[0] = 0;
-            break;
-        case TTY_IOCTL_SET_COOKED:
-            tty->ldisc.mode   = LDISC_COOKED;
-            msg->regs.data[0] = 0;
-            break;
-        case TTY_IOCTL_SET_ECHO:
-            tty->ldisc.echo   = (int)msg->regs.data[2];
-            msg->regs.data[0] = 0;
-            break;
-        case TTY_IOCTL_GET_TTY_COUNT:
-            msg->regs.data[0] = (uint32_t)g_tty_count;
-            break;
-        case TTY_IOCTL_SET_COLOR:
-            tty_output_set_color(tty, (uint8_t)msg->regs.data[2], (uint8_t)msg->regs.data[3]);
-            msg->regs.data[0] = 0;
-            break;
-        case TTY_IOCTL_RESET_COLOR:
-            tty_output_reset_color(tty);
-            msg->regs.data[0] = 0;
-            break;
-        default:
-            msg->regs.data[0] = (uint32_t)-1;
-            break;
-        }
         return 0;
     }
 
@@ -662,61 +655,15 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
         return 0;
     }
 
-    case TTY_OP_OPEN:
-    case TTY_OP_CLOSE:
-        msg->regs.data[0] = 0;
-        return 0;
-
-    /* ---- IO protocol (统一 fd 操作) ---- */
+    /* ---- Primary object protocol: unified fd I/O ---- */
 
     case IO_WRITE: {
-        int   len  = (int)msg->regs.data[3];
-        char *data = (char *)(uintptr_t)msg->buffer.data;
-        if (data && len > 0) {
-            tty_output_write(tty, data, len);
-        }
-        msg->regs.data[0] = (uint32_t)len;
-        msg->buffer.data   = 0;
-        msg->buffer.size   = 0;
-        return 0;
+        return tty_reply_write(tty, msg, msg->regs.data[3],
+                               (const char *)(uintptr_t)msg->buffer.data);
     }
 
     case IO_READ: {
-        /* data[3]=max_size */
-        uint32_t max_len = msg->regs.data[3];
-        if (max_len == 0) {
-            max_len = 1;
-        }
-
-        pthread_mutex_lock(&tty->input_lock);
-        int avail = tty_input_available(tty);
-        if (avail > 0) {
-            int to_read = avail;
-            if ((uint32_t)to_read > max_len) {
-                to_read = (int)max_len;
-            }
-            char buf[TTY_INPUT_BUF_SIZE];
-            for (int i = 0; i < to_read; i++) {
-                int c = tty_input_get(tty);
-                if (c < 0) {
-                    to_read = i;
-                    break;
-                }
-                buf[i] = (char)c;
-            }
-            pthread_mutex_unlock(&tty->input_lock);
-            msg->regs.data[0] = (uint32_t)to_read;
-            msg->buffer.data  = (uint64_t)(uintptr_t)buf;
-            msg->buffer.size  = (uint32_t)to_read;
-            return 0;
-        }
-
-        /* 延迟回复:等待输入 */
-        tty->pending_read    = 1;
-        tty->pending_tid     = msg->sender_tid;
-        tty->pending_max_len = max_len;
-        pthread_mutex_unlock(&tty->input_lock);
-        return 1; /* 延迟回复 */
+        return tty_reply_read(tty, msg, msg->regs.data[3]);
     }
 
     case IO_CLOSE: {
@@ -727,45 +674,8 @@ static int tty_handle_msg(struct tty_instance *tty, struct ipc_message *msg) {
     }
 
     case IO_IOCTL: {
-        /* data[2]=cmd, data[3..]=args -- 映射到 TTY ioctl 逻辑 */
-        uint32_t cmd = msg->regs.data[2];
-        switch (cmd) {
-        case TTY_IOCTL_SET_FOREGROUND:
-            tty->foreground_pid = (int)msg->regs.data[3];
-            msg->regs.data[0]  = 0;
-            break;
-        case TTY_IOCTL_GET_FOREGROUND:
-            msg->regs.data[0] = (uint32_t)tty->foreground_pid;
-            break;
-        case TTY_IOCTL_SET_RAW:
-            tty->ldisc.mode   = LDISC_RAW;
-            msg->regs.data[0] = 0;
-            break;
-        case TTY_IOCTL_SET_COOKED:
-            tty->ldisc.mode   = LDISC_COOKED;
-            msg->regs.data[0] = 0;
-            break;
-        case TTY_IOCTL_SET_ECHO:
-            tty->ldisc.echo   = (int)msg->regs.data[3];
-            msg->regs.data[0] = 0;
-            break;
-        case TTY_IOCTL_GET_TTY_COUNT:
-            msg->regs.data[0] = (uint32_t)g_tty_count;
-            break;
-        case TTY_IOCTL_SET_COLOR:
-            tty_output_set_color(tty, (uint8_t)msg->regs.data[3],
-                                 (uint8_t)msg->regs.data[4]);
-            msg->regs.data[0] = 0;
-            break;
-        case TTY_IOCTL_RESET_COLOR:
-            tty_output_reset_color(tty);
-            msg->regs.data[0] = 0;
-            break;
-        default:
-            msg->regs.data[0] = (uint32_t)-1;
-            break;
-        }
-        return 0;
+        return tty_reply_ioctl(tty, msg, msg->regs.data[2], msg->regs.data[3],
+                               msg->regs.data[4]);
     }
 
     default:

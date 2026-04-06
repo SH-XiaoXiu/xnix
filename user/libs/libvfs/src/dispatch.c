@@ -276,6 +276,30 @@ int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg)
         return 0;
     }
 
+    case IO_IOCTL: {
+        uint32_t handle = msg->regs.data[1];
+        uint32_t cmd    = msg->regs.data[2];
+
+        if (cmd == VFS_IOCTL_READDIR && ops->readdir) {
+            uint32_t index = msg->regs.data[3];
+            result         = ops->readdir(ctx, handle, index, &g_dirent_buf);
+            msg->regs.data[0] = (result == 0) ? 1u : (uint32_t)result;
+            if (result == 0) {
+                msg->buffer.data = (uint64_t)(uintptr_t)&g_dirent_buf;
+                msg->buffer.size = sizeof(g_dirent_buf);
+            } else {
+                msg->buffer.data = 0;
+                msg->buffer.size = 0;
+            }
+            return 0;
+        }
+
+        msg->regs.data[0] = (uint32_t)-38; /* ENOSYS */
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return 0;
+    }
+
     default:
         break;
     }

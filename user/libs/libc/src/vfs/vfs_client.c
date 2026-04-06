@@ -150,13 +150,8 @@ int vfs_close(int fd) {
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
-    if (ent->handle == g_vfsd_ep) {
-        msg.regs.data[0] = UDM_VFS_CLOSE;
-        msg.regs.data[1] = ent->session;
-    } else {
-        msg.regs.data[0] = IO_CLOSE;
-        msg.regs.data[1] = ent->session;
-    }
+    msg.regs.data[0] = IO_CLOSE;
+    msg.regs.data[1] = ent->session;
 
     sys_ipc_call(ent->handle, &msg, &reply, 1000);
 
@@ -188,10 +183,7 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
     reply.buffer.data = (uint64_t)(uintptr_t)buf;
     reply.buffer.size = (uint32_t)size;
 
-    /* stream (session==0): infinite wait for input; file: 5s timeout */
-    uint32_t timeout = (ent->session == 0) ? 0 : 5000;
-
-    int ret = sys_ipc_call(ent->handle, &msg, &reply, timeout);
+    int ret = sys_ipc_call(ent->handle, &msg, &reply, 30000);
     if (ret < 0) {
         return ret;
     }
@@ -376,7 +368,7 @@ int vfs_opendir(const char *path) {
     }
 
     struct fd_entry *ent =
-        fd_install(fd, dir_ep, (uint32_t)result, 0, FD_FLAG_READ);
+        fd_install(fd, dir_ep, (uint32_t)result, 0, FD_FLAG_READ | FD_FLAG_DIR);
     if (!ent) {
         return -EMFILE;
     }
@@ -389,7 +381,7 @@ int vfs_opendir(const char *path) {
  */
 int vfs_readdir(int fd, char *name, size_t size) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->session == 0) {
+    if (!ent || !(ent->flags & FD_FLAG_DIR)) {
         return -EBADF;
     }
 
@@ -401,9 +393,10 @@ int vfs_readdir(int fd, char *name, size_t size) {
     struct ipc_message reply = {0};
     char               tmp_name[256];
 
-    msg.regs.data[0] = UDM_VFS_READDIR;
+    msg.regs.data[0] = IO_IOCTL;
     msg.regs.data[1] = ent->session;
-    msg.regs.data[2] = ent->offset;
+    msg.regs.data[2] = VFS_IOCTL_READDIR;
+    msg.regs.data[3] = ent->offset;
 
     reply.buffer.data = (uint64_t)(uintptr_t)tmp_name;
     reply.buffer.size = sizeof(tmp_name);
@@ -413,7 +406,7 @@ int vfs_readdir(int fd, char *name, size_t size) {
         return ret;
     }
 
-    int32_t result = (int32_t)reply.regs.data[1];
+    int32_t result = (int32_t)reply.regs.data[0];
     if (result <= 0) {
         return result;
     }
@@ -525,7 +518,7 @@ int vfs_copy_cwd_to_child(pid_t child_pid) {
  */
 int vfs_readdir_index(int fd, uint32_t index, struct vfs_dirent *dirent) {
     struct fd_entry *ent = fd_get(fd);
-    if (!ent || ent->session == 0) {
+    if (!ent || !(ent->flags & FD_FLAG_DIR)) {
         return -EBADF;
     }
 
@@ -536,9 +529,10 @@ int vfs_readdir_index(int fd, uint32_t index, struct vfs_dirent *dirent) {
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
-    msg.regs.data[0] = UDM_VFS_READDIR;
+    msg.regs.data[0] = IO_IOCTL;
     msg.regs.data[1] = ent->session;
-    msg.regs.data[2] = index;
+    msg.regs.data[2] = VFS_IOCTL_READDIR;
+    msg.regs.data[3] = index;
 
     reply.buffer.data = (uint64_t)(uintptr_t)dirent;
     reply.buffer.size = sizeof(*dirent);
@@ -548,7 +542,7 @@ int vfs_readdir_index(int fd, uint32_t index, struct vfs_dirent *dirent) {
         return ret;
     }
 
-    int32_t result = (int32_t)reply.regs.data[1];
+    int32_t result = (int32_t)reply.regs.data[0];
     if (result < 0) {
         return result;
     }

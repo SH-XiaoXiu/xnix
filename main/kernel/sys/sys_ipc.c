@@ -210,6 +210,9 @@ static int32_t sys_ipc_send(const uint32_t *args) {
         return ret;
     }
 
+    /* send 的协议语义固定为 one-way reliable delivery */
+    kmsg->flags |= IPC_FLAG_NOREPLY;
+
     ret = ipc_send(ep, kmsg, timeout);
     ipc_msg_free(kmsg);
     return ret;
@@ -260,6 +263,9 @@ static int32_t sys_ipc_call(const uint32_t *args) {
     if (ret < 0) {
         return ret;
     }
+
+    /* call 必须等待 reply,不允许伪装成 NOREPLY */
+    kreq->flags &= ~IPC_FLAG_NOREPLY;
 
     void               *user_buf_ptr  = NULL;
     size_t              user_buf_size = 0;

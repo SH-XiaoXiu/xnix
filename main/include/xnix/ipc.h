@@ -40,7 +40,7 @@ struct ipc_message {
 /* 消息标志 */
 #define IPC_FLAG_NO_BLOCK ABI_IPC_FLAG_NONBLOCK
 #define IPC_FLAG_TIMEOUT  ABI_IPC_FLAG_TIMEOUT
-#define IPC_FLAG_NOREPLY  ABI_IPC_FLAG_NOREPLY
+#define IPC_FLAG_NOREPLY  ABI_IPC_FLAG_NOREPLY /* 内核设置: 接收端无需 reply */
 
 /*
  * 错误处理
@@ -70,7 +70,7 @@ handle_t endpoint_create(const char *name);
  * 发送消息
  *
  * @param ep_handle  目标 Endpoint
- * @param msg        消息内容
+ * @param msg        消息内容; send 总是 one-way reliable delivery
  * @param timeout_ms 超时时间(ms)
  * @return 0 成功, 负数失败
  */
@@ -87,7 +87,7 @@ int ipc_send(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms);
 int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms);
 
 /**
- * RPC 调用 (Send + Receive)
+ * RPC 调用 (Request + Reply)
  *
  * @param ep_handle  目标 Endpoint
  * @param request    请求消息

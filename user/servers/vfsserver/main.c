@@ -4,6 +4,8 @@
  */
 
 #include <xnix/protocol/vfs.h>
+#include <xnix/abi/io.h>
+#include <xnix/abi/ipc.h>
 #include <d/server.h>
 #include <stdio.h>
 #include <string.h>
@@ -19,8 +21,7 @@
 struct vfs_dir_state {
     uint32_t backend_ep;
     uint32_t backend_handle;
-    uint32_t mount_count;
-    char     mount_names[VFS_MAX_MOUNTS][VFS_NAME_MAX];
+    char     base_path[VFS_PATH_MAX];
     int      active;
 };
 
@@ -36,6 +37,7 @@ struct vfs_mount {
 static struct vfs_mount  mount_table[VFS_MAX_MOUNTS];
 static struct vfs_dirent g_reply_dirent;
 static handle_t          g_vfs_ep = HANDLE_INVALID;
+static handle_t          g_vfs_dir_ep = HANDLE_INVALID;
 
 /* 进程工作目录映射表 */
 #define VFS_MAX_PROCESSES 64
@@ -189,13 +191,10 @@ static void vfsd_resolve_path(uint32_t pid, const char *in, char *out, size_t ou
     }
 }
 
-static void vfsd_collect_mount_children(const char *base, struct vfs_dir_state *st) {
-    if (!base || !st) {
-        return;
-    }
-
+static uint32_t vfsd_collect_mount_children(const char *base, char names[VFS_MAX_MOUNTS][VFS_NAME_MAX]) {
     size_t base_len = strlen(base);
     int    is_root  = (base_len == 1 && base[0] == '/');
+    uint32_t count  = 0;
 
     for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
         if (!mount_table[i].active) {
@@ -233,12 +232,12 @@ static void vfsd_collect_mount_children(const char *base, struct vfs_dir_state *
             continue;
         }
 
-        if (st->mount_count >= VFS_MAX_MOUNTS) {
+        if (count >= VFS_MAX_MOUNTS) {
             break;
         }
 
-        for (uint32_t i = 0; i < st->mount_count; i++) {
-            if (strcmp(st->mount_names[i], rem) == 0) {
+        for (uint32_t j = 0; j < count; j++) {
+            if (strcmp(names[j], rem) == 0) {
                 rem = NULL;
                 break;
             }
@@ -252,10 +251,43 @@ static void vfsd_collect_mount_children(const char *base, struct vfs_dir_state *
         if (nlen >= VFS_NAME_MAX) {
             nlen = VFS_NAME_MAX - 1;
         }
-        memcpy(st->mount_names[st->mount_count], rem, nlen);
-        st->mount_names[st->mount_count][nlen] = '\0';
-        st->mount_count++;
+        memcpy(names[count], rem, nlen);
+        names[count][nlen] = '\0';
+        count++;
     }
+
+    return count;
+}
+
+static uint32_t vfsd_mount_child_count(const char *base) {
+    char names[VFS_MAX_MOUNTS][VFS_NAME_MAX] = {{0}};
+    return vfsd_collect_mount_children(base, names);
+}
+
+static int vfsd_needs_dir_proxy(const char *base) {
+    return vfsd_mount_child_count(base) > 0;
+}
+
+static int vfsd_mount_child_at(const char *base, uint32_t index, char *name_out) {
+    char names[VFS_MAX_MOUNTS][VFS_NAME_MAX] = {{0}};
+    uint32_t count = vfsd_collect_mount_children(base, names);
+    if (index >= count) {
+        return -2;
+    }
+    strncpy(name_out, names[index], VFS_NAME_MAX - 1);
+    name_out[VFS_NAME_MAX - 1] = '\0';
+    return 0;
+}
+
+static int vfsd_is_mount_shadowed(const char *base, const char *name) {
+    char names[VFS_MAX_MOUNTS][VFS_NAME_MAX] = {{0}};
+    uint32_t count = vfsd_collect_mount_children(base, names);
+    for (uint32_t i = 0; i < count; i++) {
+        if (strcmp(names[i], name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 /**
@@ -443,6 +475,16 @@ static int vfsd_opendir(struct ipc_message *msg, const char *abs_path) {
         return result;
     }
 
+    if (!vfsd_needs_dir_proxy(abs_path)) {
+        msg->regs.data[0]       = UDM_VFS_OPENDIR;
+        msg->regs.data[1]       = (uint32_t)result;
+        msg->handles.handles[0] = (uint32_t)backend_ep;
+        msg->handles.count      = 1;
+        msg->buffer.data        = 0;
+        msg->buffer.size        = 0;
+        return 0;
+    }
+
     int h = vfsd_dir_alloc();
     if (h < 0) {
         return h;
@@ -451,14 +493,14 @@ static int vfsd_opendir(struct ipc_message *msg, const char *abs_path) {
     struct vfs_dir_state *st = vfsd_dir_get((uint32_t)h);
     st->backend_ep           = (uint32_t)backend_ep;
     st->backend_handle       = (uint32_t)result;
-    vfsd_collect_mount_children(abs_path, st);
+    strncpy(st->base_path, abs_path, sizeof(st->base_path) - 1);
+    st->base_path[sizeof(st->base_path) - 1] = '\0';
 
-    msg->regs.data[0]       = UDM_VFS_OPENDIR;
-    msg->regs.data[1]       = (uint32_t)h;
-    msg->handles.handles[0] = g_vfs_ep;
-    msg->handles.count      = 1;
-    msg->buffer.data        = (uint64_t)(uintptr_t)0;
-    msg->buffer.size        = 0;
+    msg->regs.data[0]  = UDM_VFS_OPENDIR;
+    msg->regs.data[1]  = (uint32_t)h;
+    msg->handles.count = 0;
+    msg->buffer.data   = (uint64_t)(uintptr_t)0;
+    msg->buffer.size   = 0;
     return 0;
 }
 
@@ -468,10 +510,13 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
         return -22;
     }
 
-    if (index < st->mount_count) {
+    uint32_t mount_count = vfsd_mount_child_count(st->base_path);
+
+    if (index < mount_count) {
         memset(&g_reply_dirent, 0, sizeof(g_reply_dirent));
-        strncpy(g_reply_dirent.name, st->mount_names[index], VFS_NAME_MAX - 1);
-        g_reply_dirent.name[VFS_NAME_MAX - 1] = '\0';
+        if (vfsd_mount_child_at(st->base_path, index, g_reply_dirent.name) < 0) {
+            return -2;
+        }
         g_reply_dirent.type                   = VFS_TYPE_DIR;
         g_reply_dirent.size                   = 0;
 
@@ -482,7 +527,7 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
         return 0;
     }
 
-    uint32_t target_visible = index - st->mount_count;
+    uint32_t target_visible = index - mount_count;
     uint32_t backend_index  = 0;
     uint32_t visible_index  = 0;
 
@@ -490,9 +535,10 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
         struct ipc_message req   = {0};
         struct ipc_message reply = {0};
 
-        req.regs.data[0] = UDM_VFS_READDIR;
+        req.regs.data[0] = IO_IOCTL;
         req.regs.data[1] = st->backend_handle;
-        req.regs.data[2] = backend_index;
+        req.regs.data[2] = VFS_IOCTL_READDIR;
+        req.regs.data[3] = backend_index;
 
         reply.buffer.data = (uint64_t)(uintptr_t)&g_reply_dirent;
         reply.buffer.size = sizeof(g_reply_dirent);
@@ -502,23 +548,17 @@ static int vfsd_readdir(struct ipc_message *msg, uint32_t h, uint32_t index) {
             return ret;
         }
 
-        int32_t result = (int32_t)reply.regs.data[1];
-        if (result != 0) {
+        int32_t result = (int32_t)reply.regs.data[0];
+        if (result <= 0) {
             msg->regs.data[0] = UDM_VFS_READDIR;
-            msg->regs.data[1] = reply.regs.data[1];
+            msg->regs.data[1] = (result < 0) ? reply.regs.data[0] : (uint32_t)-2;
             msg->buffer.data  = (uint64_t)(uintptr_t)0;
             msg->buffer.size  = 0;
             return 0;
         }
 
         /* 检查是否被挂载点遮盖 */
-        int shadowed = 0;
-        for (uint32_t i = 0; i < st->mount_count; i++) {
-            if (strcmp(g_reply_dirent.name, st->mount_names[i]) == 0) {
-                shadowed = 1;
-                break;
-            }
-        }
+        int shadowed = vfsd_is_mount_shadowed(st->base_path, g_reply_dirent.name);
 
         if (!shadowed) {
             if (visible_index == target_visible) {
@@ -546,7 +586,7 @@ static int vfsd_close_handle(struct ipc_message *msg, uint32_t h) {
     struct ipc_message req   = {0};
     struct ipc_message reply = {0};
 
-    req.regs.data[0] = UDM_VFS_CLOSE;
+    req.regs.data[0] = IO_CLOSE;
     req.regs.data[1] = st->backend_handle;
 
     int ret = sys_ipc_call(st->backend_ep, &req, &reply, 5000);
@@ -554,7 +594,7 @@ static int vfsd_close_handle(struct ipc_message *msg, uint32_t h) {
         return ret;
     }
 
-    int32_t result = (int32_t)reply.regs.data[1];
+    int32_t result = (int32_t)reply.regs.data[0];
     vfsd_dir_free(h);
 
     msg->regs.data[0]  = UDM_VFS_CLOSE;
@@ -565,10 +605,7 @@ static int vfsd_close_handle(struct ipc_message *msg, uint32_t h) {
     return 0;
 }
 
-/**
- * VFS 消息处理
- */
-static int vfsd_handler(struct ipc_message *msg) {
+static int vfsd_path_handler(struct ipc_message *msg) {
     uint32_t op = UDM_MSG_OPCODE(msg);
 
     /* CHDIR: 改变当前工作目录 */
@@ -697,36 +734,16 @@ static int vfsd_handler(struct ipc_message *msg) {
             /* 解析为绝对路径 */
             vfsd_resolve_path(pid, rel_path, abs_path, sizeof(abs_path));
 
-            return vfsd_opendir(msg, abs_path);
+            int ret = vfsd_opendir(msg, abs_path);
+            if (ret == 0 && msg->handles.count == 0) {
+                msg->handles.handles[0] = g_vfs_dir_ep;
+                msg->handles.count      = 1;
+            }
+            return ret;
         }
         msg->regs.data[0] = op;
         msg->regs.data[1] = (uint32_t)-22;
         return 0;
-    }
-
-    if (op == UDM_VFS_READDIR) {
-        uint32_t h     = UDM_MSG_ARG(msg, 0);
-        uint32_t index = UDM_MSG_ARG(msg, 1);
-        int      ret   = vfsd_readdir(msg, h, index);
-        if (ret < 0) {
-            msg->regs.data[0] = op;
-            msg->regs.data[1] = (uint32_t)ret;
-            msg->buffer.data  = (uint64_t)(uintptr_t)0;
-            msg->buffer.size  = 0;
-        }
-        return 0;
-    }
-
-    if (op == UDM_VFS_CLOSE) {
-        uint32_t h = UDM_MSG_ARG(msg, 0);
-        if (vfsd_dir_get(h)) {
-            int ret = vfsd_close_handle(msg, h);
-            if (ret < 0) {
-                msg->regs.data[0] = op;
-                msg->regs.data[1] = (uint32_t)ret;
-            }
-            return 0;
-        }
     }
 
     /* 其他操作:需要路径解析 */
@@ -750,10 +767,63 @@ static int vfsd_handler(struct ipc_message *msg) {
     return 0;
 }
 
+static int vfsd_dir_handler(struct ipc_message *msg) {
+    uint32_t op = UDM_MSG_OPCODE(msg);
+
+    if (op == IO_IOCTL) {
+        uint32_t h   = msg->regs.data[1];
+        uint32_t cmd = msg->regs.data[2];
+
+        if (cmd != VFS_IOCTL_READDIR) {
+            msg->regs.data[0] = (uint32_t)-38; /* ENOSYS */
+            msg->buffer.data  = 0;
+            msg->buffer.size  = 0;
+            msg->handles.count = 0;
+            return 0;
+        }
+
+        uint32_t index = msg->regs.data[3];
+        int      ret   = vfsd_readdir(msg, h, index);
+        if (ret < 0) {
+            msg->regs.data[0] = (uint32_t)ret;
+            msg->buffer.data  = (uint64_t)(uintptr_t)0;
+            msg->buffer.size  = 0;
+        } else {
+            int32_t legacy = (int32_t)msg->regs.data[1];
+            msg->regs.data[0] = legacy < 0 ? (uint32_t)legacy : (legacy == 0 ? 1u : 0u);
+        }
+        return 0;
+    }
+
+    if (op == IO_CLOSE) {
+        uint32_t h = msg->regs.data[1];
+        int      ret = vfsd_close_handle(msg, h);
+        if (ret < 0) {
+            msg->regs.data[0] = (uint32_t)ret;
+            msg->buffer.data  = (uint64_t)(uintptr_t)0;
+            msg->buffer.size  = 0;
+            msg->handles.count = 0;
+        } else {
+            msg->regs.data[0] = 0;
+        }
+        return 0;
+    }
+
+    msg->regs.data[0] = (uint32_t)-38; /* ENOSYS */
+    msg->buffer.data  = 0;
+    msg->buffer.size  = 0;
+    msg->handles.count = 0;
+    return 0;
+}
+
 int main(void) {
     env_set_name("vfsserver");
     g_vfs_ep = env_require("vfs_ep");
     if (g_vfs_ep == HANDLE_INVALID) {
+        return 1;
+    }
+    g_vfs_dir_ep = sys_endpoint_create("vfs_dir");
+    if (g_vfs_dir_ep == HANDLE_INVALID) {
         return 1;
     }
 
@@ -763,21 +833,39 @@ int main(void) {
     }
     for (int i = 0; i < VFS_MAX_MOUNTS; i++) {
         dir_table[i].active      = 0;
-        dir_table[i].mount_count = 0;
     }
     for (int i = 0; i < VFS_MAX_PROCESSES; i++) {
         cwd_table[i].active = 0;
     }
 
-    struct udm_server srv = {
-        .endpoint = g_vfs_ep,
-        .handler  = vfsd_handler,
-        .name     = "vfsd",
-    };
-
-    udm_server_init(&srv);
     svc_notify_ready("vfsserver");
-    udm_server_run(&srv);
+
+    while (1) {
+        struct abi_ipc_wait_set wait_set = {0};
+        struct ipc_message      msg      = {0};
+        char                    recv_buf[4096];
+
+        wait_set.handles[0] = g_vfs_ep;
+        wait_set.handles[1] = g_vfs_dir_ep;
+        wait_set.count      = 2;
+
+        handle_t ready = sys_ipc_wait_any(&wait_set, 0);
+        if (ready == HANDLE_INVALID) {
+            continue;
+        }
+
+        msg.buffer.data = (uint64_t)(uintptr_t)recv_buf;
+        msg.buffer.size = sizeof(recv_buf);
+
+        if (sys_ipc_receive(ready, &msg, 0) < 0) {
+            continue;
+        }
+
+        int ret = (ready == g_vfs_dir_ep) ? vfsd_dir_handler(&msg) : vfsd_path_handler(&msg);
+        if (ret == 0 && (msg.flags & ABI_IPC_FLAG_NOREPLY) == 0) {
+            sys_ipc_reply(&msg);
+        }
+    }
 
     return 0;
 }

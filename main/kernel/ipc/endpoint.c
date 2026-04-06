@@ -151,6 +151,10 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
     }
 }
 
+static bool ipc_msg_is_one_way(const struct ipc_message *msg) {
+    return msg && ((msg->flags & IPC_FLAG_NOREPLY) != 0);
+}
+
 /*
  * IPC 原语实现
  */
@@ -162,6 +166,8 @@ static void ipc_copy_msg(struct thread *src, struct thread *dst, struct ipc_mess
 static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
                           struct ipc_message *reply_buf, uint32_t timeout_ms) {
     struct thread *current = sched_current();
+    bool           one_way = ipc_msg_is_one_way(msg);
+
     if (!current) {
         return -EINVAL;
     }
@@ -184,24 +190,24 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
 
         pr_debug("[IPC] send -> recv: sender=%d receiver=%d\n", current->tid, receiver->tid);
 
-        /* 检查 NOREPLY 标志 */
-        bool no_reply = (msg->flags & IPC_FLAG_NOREPLY) != 0;
-
-        /* NOREPLY: 不保存状态,不阻塞,立即返回 */
-        if (no_reply) {
-            pr_debug("[IPC] send NOREPLY: sender=%d receiver=%d\n", current->tid, receiver->tid);
+        /* 单向 send: 消息已被接收者取走,交付完成 */
+        if (one_way) {
+            pr_debug("[IPC] send complete: sender=%d receiver=%d\n", current->tid, receiver->tid);
             return 0;
         }
 
-        /* 保存发送和回复缓冲区 */
+        /* call: 保存请求/回复状态并阻塞等待 reply */
         current->ipc_req_msg   = msg;
         current->ipc_reply_msg = reply_buf;
 
-        /* 阻塞等待回复 (rendezvous: 即使是 send 也需要等 reply 完成握手) */
         if (!sched_block_timeout(current, timeout_ms)) {
             pr_debug("[IPC] send reply timeout: sender=%d\n", current->tid);
+            current->ipc_req_msg   = NULL;
+            current->ipc_reply_msg = NULL;
             return -ETIMEDOUT;
         }
+        current->ipc_req_msg   = NULL;
+        current->ipc_reply_msg = NULL;
         return 0;
     }
 
@@ -214,22 +220,17 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
 
     pr_debug("[IPC] send enqueue: sender=%d ep=%p\n", current->tid, ep);
 
-    /* 检查 NOREPLY 标志 */
-    bool no_reply = (msg->flags & IPC_FLAG_NOREPLY) != 0;
-
     /* 保存状态 */
     current->ipc_req_msg   = msg;
     current->ipc_reply_msg = reply_buf;
 
-    /* NOREPLY 也必须等待接收者真正取走消息:
-     * 当前实现里 send_queue 只排线程,不持有独立消息副本。
-     * 若此处直接返回,sys_ipc_send 会释放 kmsg,接收者稍后出队时消息体已失效。
-     * 因此 NOREPLY 的语义是“无回复的一次交付”,而不是“无接收确认的 fire-and-forget”。 */
-    if (no_reply) {
-        pr_debug("[IPC] send NOREPLY enqueue-wait: sender=%d ep=%p\n", current->tid, ep);
+    /* 单向 send 也必须等接收者真正取走消息:
+     * send_queue 只排线程,不持有独立消息副本。 */
+    if (one_way) {
+        pr_debug("[IPC] send wait-deliver: sender=%d ep=%p\n", current->tid, ep);
 
         if (!sched_block_timeout(current, timeout_ms)) {
-            pr_debug("[IPC] send NOREPLY wait receiver timeout: sender=%d\n", current->tid);
+            pr_debug("[IPC] send delivery timeout: sender=%d\n", current->tid);
             spin_lock(&ep->lock);
             struct thread **pp = &ep->send_queue;
             while (*pp) {
@@ -242,8 +243,12 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
             current->wait_next = NULL;
             spin_unlock(&ep->lock);
             endpoint_unref(ep);
+            current->ipc_req_msg   = NULL;
+            current->ipc_reply_msg = NULL;
             return -ETIMEDOUT;
         }
+        current->ipc_req_msg   = NULL;
+        current->ipc_reply_msg = NULL;
         return 0;
     }
 
@@ -263,9 +268,13 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
         current->wait_next = NULL;
         spin_unlock(&ep->lock);
         endpoint_unref(ep);
+        current->ipc_req_msg   = NULL;
+        current->ipc_reply_msg = NULL;
         return -ETIMEDOUT;
     }
 
+    current->ipc_req_msg   = NULL;
+    current->ipc_reply_msg = NULL;
     return 0;
 }
 
@@ -367,21 +376,17 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
 
         pr_debug("[IPC] recv <- send: receiver=%d sender=%d\n", current->tid, sender->tid);
 
-        /* 检查发送者是否为 NOREPLY */
-        bool sender_no_reply =
-            (sender->ipc_req_msg && (sender->ipc_req_msg->flags & IPC_FLAG_NOREPLY) != 0);
-
-        /* NOREPLY 发送者: 不等待 reply,但需要在消息被接收后唤醒以完成交付 */
-        if (sender_no_reply) {
-            pr_debug("[IPC] recv from NOREPLY sender: receiver=%d sender=%d\n", current->tid, sender->tid);
+        /* 单向 send: 消息被接收后即可唤醒发送方 */
+        if (ipc_msg_is_one_way(sender->ipc_req_msg)) {
+            pr_debug("[IPC] recv from send: receiver=%d sender=%d\n", current->tid, sender->tid);
             sender->ipc_req_msg = NULL;
+            sender->ipc_reply_msg = NULL;
             sched_wakeup_thread(sender);
             handle_object_put(entry.type, entry.object);
             return 0;
         }
 
-        /* 注意 不要唤醒 Sender!!!!!!!!!!!!!!!!!!!!!! Sender 继续阻塞等待 Reply */
-        /* 只从 send_queue 移除了 Sender, 但它依然在 blocked_list 中 (wait_chan=Sender) */
+        /* call: 发送方继续阻塞等待 reply */
         handle_object_put(entry.type, entry.object);
         return 0;
     }
@@ -651,6 +656,10 @@ int ipc_reply(struct ipc_message *reply) {
         ipc_copy_msg(current, sender, reply, sender->ipc_reply_msg);
     }
 
+    current->ipc_peer = TID_INVALID;
+    sender->ipc_req_msg = NULL;
+    sender->ipc_reply_msg = NULL;
+
     /* 唤醒发送者 */
     sched_wakeup_thread(sender);
 
@@ -686,6 +695,9 @@ int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply) {
     if (reply && sender->ipc_reply_msg) {
         ipc_copy_msg(current, sender, reply, sender->ipc_reply_msg);
     }
+
+    sender->ipc_req_msg = NULL;
+    sender->ipc_reply_msg = NULL;
 
     /* 唤醒发送者 */
     sched_wakeup_thread(sender);

@@ -66,4 +66,7 @@ struct vfs_dirent {
     uint32_t size;
 };
 
+/* Directory object ioctl commands (after-open object control plane) */
+#define VFS_IOCTL_READDIR 1
+
 #endif /* XNIX_PROTOCOL_VFS_H */

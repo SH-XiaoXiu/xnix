@@ -5,7 +5,6 @@
 
 #include "path.h"
 
-#include <xnix/abi/io.h>
 #include <xnix/protocol/tty.h>
 #include <xnix/protocol/vfs.h>
 #include <errno.h>
@@ -13,6 +12,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 #include <vfs_client.h>
 #include <xnix/env.h>
@@ -26,23 +26,10 @@
 #define MAX_LINE 256
 #define MAX_ARGS 16
 
-static handle_t g_tty_ep = HANDLE_INVALID;
 static handle_t g_vfs_ep = HANDLE_INVALID;
 
 static void shell_tty_ioctl(uint32_t cmd, uint32_t arg) {
-    if (g_tty_ep == HANDLE_INVALID) {
-        return;
-    }
-
-    struct ipc_message msg   = {0};
-    struct ipc_message reply = {0};
-
-    msg.regs.data[0] = IO_IOCTL;
-    msg.regs.data[1] = 0;
-    msg.regs.data[2] = cmd;
-    msg.regs.data[3] = arg;
-
-    sys_ipc_call(g_tty_ep, &msg, &reply, 100);
+    ioctl(STDIN_FILENO, cmd, arg);
 }
 
 /* ============== Job Table ============== */
@@ -113,18 +100,7 @@ struct redirect_info {
  * 通过 TTY IPC 设置前台进程
  */
 static void shell_set_foreground(pid_t pid) {
-    if (g_tty_ep == HANDLE_INVALID) {
-        return;
-    }
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = IO_IOCTL;
-    msg.regs.data[1] = 0; /* session */
-    msg.regs.data[2] = TTY_IOCTL_SET_FOREGROUND;
-    msg.regs.data[3] = (uint32_t)pid;
-
-    struct ipc_message reply = {0};
-    sys_ipc_call(g_tty_ep, &msg, &reply, 100);
+    ioctl(STDIN_FILENO, TTY_IOCTL_SET_FOREGROUND, (unsigned long)pid);
 }
 
 /* 内置命令 */
@@ -525,7 +501,6 @@ static void execute_command(char *line) {
     } else {
         termcolor_set(stdout, TERM_COLOR_WHITE, TERM_COLOR_BLACK);
         printf("Command not found: %s\n", argv[0]);
-        printf("Type 'help' for available commands.\n");
         termcolor_reset(stdout);
     }
 }
@@ -767,7 +742,6 @@ int main(int argc, char **argv) {
 
     /* stdio 已由 init 通过 cfg->stdio 正确注入到 fd 0/1/2.
      * 不再需要手动查找 tty handle 和 dup2 重绑定. */
-    g_tty_ep = fd_get_handle(STDIN_FILENO);
     g_vfs_ep = env_get_handle("vfs_ep");
 
     shell_tty_ioctl(TTY_IOCTL_SET_COOKED, 0);

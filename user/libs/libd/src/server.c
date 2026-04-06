@@ -30,7 +30,7 @@ void udm_server_run(struct udm_server *srv) {
 
         int ret = srv->handler(&msg);
         /* handler 返回 0: 立即回复; 返回 1: 延迟回复(由 handler 自行调用 reply_to) */
-        if (ret == 0) {
+        if (ret == 0 && (msg.flags & ABI_IPC_FLAG_NOREPLY) == 0) {
             sys_ipc_reply(&msg);
         }
     }

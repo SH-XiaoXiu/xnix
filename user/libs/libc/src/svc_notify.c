@@ -21,7 +21,7 @@
 /**
  * 通知 init 服务已就绪
  *
- * 带重试: 如果 sys_ipc_send 失败(权限/超时),最多重试
+ * 带重试: 如果 ready RPC 失败(权限/超时),最多重试
  * SVC_NOTIFY_MAX_RETRIES 次,每次间隔递增.
  */
 int svc_notify_ready(const char *name) {
@@ -50,9 +50,10 @@ int svc_notify_ready(const char *name) {
         memcpy(&msg.regs.data[2], name_buf, sizeof(name_buf));
     }
 
+    struct ipc_message reply = {0};
     uint32_t delay_ms = SVC_NOTIFY_INITIAL_MS;
     for (int attempt = 0; attempt <= SVC_NOTIFY_MAX_RETRIES; attempt++) {
-        int ret = sys_ipc_send((uint32_t)init_ep, &msg, SVC_NOTIFY_SEND_TIMEOUT);
+        int ret = sys_ipc_call((uint32_t)init_ep, &msg, &reply, SVC_NOTIFY_SEND_TIMEOUT);
         if (ret == 0) {
             return 0;
         }
