@@ -38,5 +38,7 @@ void vga_write(struct vga_state *st, const char *data, int len);
 void vga_set_color(struct vga_state *st, uint8_t fg, uint8_t bg);
 void vga_reset_color(struct vga_state *st);
 void vga_clear(struct vga_state *st);
+void vga_set_cursor_pos(struct vga_state *st, int x, int y);
+void vga_scroll_lines(struct vga_state *st, int lines);
 
 #endif

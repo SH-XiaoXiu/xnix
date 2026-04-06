@@ -14,6 +14,7 @@
 #include <xnix/abi/input.h>
 #include <xnix/ipc.h>
 #include <xnix/protocol/input.h>
+#include <xnix/protocol/inputdev.h>
 #include <xnix/syscall.h>
 #include <xnix/ulog.h>
 
@@ -33,6 +34,24 @@ static void decode_input_event(struct ipc_message *reply,
     ev->value2    = INPUT_UNPACK_VALUE2(reg2);
     ev->timestamp = INPUT_UNPACK_TIMESTAMP(reg3);
     ev->_reserved = 0;
+}
+
+static int inputdev_read_event(handle_t ep, struct input_event *ev) {
+    struct ipc_message req, reply;
+    memset(&req, 0, sizeof(req));
+    memset(&reply, 0, sizeof(reply));
+
+    req.regs.data[0] = INPUTDEV_READ;
+
+    if (sys_ipc_call(ep, &req, &reply, 0) < 0) {
+        return -1;
+    }
+    if ((int32_t)reply.regs.data[0] < 0) {
+        return -1;
+    }
+
+    decode_input_event(&reply, ev);
+    return 0;
 }
 
 /**
@@ -157,23 +176,11 @@ static void *kbd_thread(void *arg) {
     struct ws_server *srv = (struct ws_server *)arg;
 
     while (1) {
-        struct ipc_message req, reply;
-        memset(&req, 0, sizeof(req));
-        memset(&reply, 0, sizeof(reply));
-
-        req.regs.data[0] = INPUT_OP_READ_EVENT;
-
-        if (sys_ipc_call(srv->kbd_ep, &req, &reply, 0) < 0) {
+        struct input_event ev;
+        if (inputdev_read_event(srv->kbd_ep, &ev) < 0) {
             sys_sleep(100);
             continue;
         }
-        if (reply.regs.data[0] != 0) {
-            sys_sleep(10);
-            continue;
-        }
-
-        struct input_event ev;
-        decode_input_event(&reply, &ev);
 
         pthread_mutex_lock(&srv->lock);
         route_kbd_event(srv, &ev);

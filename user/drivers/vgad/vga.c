@@ -31,6 +31,13 @@ static void vga_scroll(struct vga_state *st) {
     st->cursor_y = VGA_HEIGHT - 1;
 }
 
+void vga_scroll_lines(struct vga_state *st, int lines) {
+    while (lines-- > 0) {
+        vga_scroll(st);
+    }
+    vga_update_cursor(st);
+}
+
 void vga_state_init(struct vga_state *st) {
     st->buffer   = NULL;
     st->cursor_x = 0;
@@ -116,5 +123,15 @@ void vga_clear(struct vga_state *st) {
 
     st->cursor_x = 0;
     st->cursor_y = 0;
+    vga_update_cursor(st);
+}
+
+void vga_set_cursor_pos(struct vga_state *st, int x, int y) {
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x >= VGA_WIDTH) x = VGA_WIDTH - 1;
+    if (y >= VGA_HEIGHT) y = VGA_HEIGHT - 1;
+    st->cursor_x = x;
+    st->cursor_y = y;
     vga_update_cursor(st);
 }

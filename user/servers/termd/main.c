@@ -49,6 +49,18 @@ enum dev_proto {
     DEV_DISPLAYDEV = 2, /* DISPDEV_WRITE (显示) */
 };
 
+enum ansi_state {
+    ANSI_STATE_NORMAL = 0,
+    ANSI_STATE_ESC,
+    ANSI_STATE_CSI,
+};
+
+struct ansi_parser {
+    enum ansi_state state;
+    char            param_buf[16];
+    int             param_pos;
+};
+
 struct terminal {
     int      id;
     handle_t term_ep;      /* shell 连接的 endpoint */
@@ -76,6 +88,9 @@ struct terminal {
 
     /* 前台进程 */
     int foreground_pid;
+
+    /* ANSI 输出解析 (VGA/displaydev 路径) */
+    struct ansi_parser ansi;
 };
 
 #define MAX_TERMINALS 4
@@ -168,13 +183,163 @@ static int displaydev_write(handle_t ep, const void *buf, size_t len) {
     return (int)reply.regs.data[0];
 }
 
+static int displaydev_clear(handle_t ep) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+    msg.regs.data[0] = DISPDEV_CLEAR;
+    int ret = sys_ipc_call(ep, &msg, &reply, 5000);
+    if (ret < 0) return -1;
+    return (int)reply.regs.data[0];
+}
+
+static int displaydev_set_cursor(handle_t ep, int row, int col) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+    msg.regs.data[0] = DISPDEV_SET_CURSOR;
+    msg.regs.data[1] = (uint32_t)row;
+    msg.regs.data[2] = (uint32_t)col;
+    int ret = sys_ipc_call(ep, &msg, &reply, 5000);
+    if (ret < 0) return -1;
+    return (int)reply.regs.data[0];
+}
+
+static int displaydev_set_color(handle_t ep, uint8_t fg, uint8_t bg) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+    msg.regs.data[0] = DISPDEV_SET_COLOR;
+    msg.regs.data[1] = (uint32_t)((fg & 0x0F) | ((bg & 0x0F) << 4));
+    int ret = sys_ipc_call(ep, &msg, &reply, 5000);
+    if (ret < 0) return -1;
+    return (int)reply.regs.data[0];
+}
+
+static int displaydev_reset_color(handle_t ep) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+    msg.regs.data[0] = DISPDEV_RESET_COLOR;
+    int ret = sys_ipc_call(ep, &msg, &reply, 5000);
+    if (ret < 0) return -1;
+    return (int)reply.regs.data[0];
+}
+
+static uint8_t ansi_to_vga_color(int ansi_code) {
+    static const uint8_t standard_colors[8] = {
+        0x00, 0x04, 0x02, 0x06, 0x01, 0x05, 0x03, 0x07,
+    };
+    static const uint8_t bright_colors[8] = {
+        0x08, 0x0C, 0x0A, 0x0E, 0x09, 0x0D, 0x0B, 0x0F,
+    };
+
+    if (ansi_code >= 30 && ansi_code <= 37) {
+        return standard_colors[ansi_code - 30];
+    }
+    if (ansi_code >= 90 && ansi_code <= 97) {
+        return bright_colors[ansi_code - 90];
+    }
+    return 0x07;
+}
+
+static void term_output_set_color(struct terminal *t, uint8_t fg, uint8_t bg) {
+    if (t->output_proto == DEV_DISPLAYDEV) {
+        displaydev_set_color(t->output_ep, fg, bg);
+    }
+}
+
+static void term_output_reset_color(struct terminal *t) {
+    if (t->output_proto == DEV_DISPLAYDEV) {
+        displaydev_reset_color(t->output_ep);
+    }
+}
+
+static void ansi_execute_csi(struct terminal *t, const char *params, char final) {
+    int code = 0;
+    const char *p = params;
+    while (*p) {
+        if (*p >= '0' && *p <= '9') {
+            code = code * 10 + (*p - '0');
+        } else if (*p == ';') {
+            break;
+        }
+        p++;
+    }
+
+    if (final == 'm') {
+        if (code == 0) {
+            term_output_reset_color(t);
+        } else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) {
+            term_output_set_color(t, ansi_to_vga_color(code), 0);
+        }
+    } else if (final == 'J') {
+        if (code == 2 && t->output_proto == DEV_DISPLAYDEV) {
+            displaydev_clear(t->output_ep);
+            displaydev_set_cursor(t->output_ep, 0, 0);
+        }
+    } else if (final == 'H') {
+        if (t->output_proto == DEV_DISPLAYDEV) {
+            displaydev_set_cursor(t->output_ep, 0, 0);
+        }
+    }
+}
+
+static void term_output_write_parsed(struct terminal *t, const char *data, size_t len) {
+    struct ansi_parser *parser = &t->ansi;
+    char out_buf[256];
+    int out_pos = 0;
+
+    for (size_t i = 0; i < len; i++) {
+        char c = data[i];
+
+        switch (parser->state) {
+        case ANSI_STATE_NORMAL:
+            if (c == '\x1b') {
+                if (out_pos > 0) {
+                    displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+                    out_pos = 0;
+                }
+                parser->state = ANSI_STATE_ESC;
+            } else {
+                out_buf[out_pos++] = c;
+                if (out_pos == (int)sizeof(out_buf)) {
+                    displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+                    out_pos = 0;
+                }
+            }
+            break;
+        case ANSI_STATE_ESC:
+            if (c == '[') {
+                parser->state = ANSI_STATE_CSI;
+                parser->param_pos = 0;
+            } else {
+                parser->state = ANSI_STATE_NORMAL;
+            }
+            break;
+        case ANSI_STATE_CSI:
+            if ((c >= '0' && c <= '9') || c == ';') {
+                if (parser->param_pos < (int)sizeof(parser->param_buf) - 1) {
+                    parser->param_buf[parser->param_pos++] = c;
+                }
+            } else {
+                parser->param_buf[parser->param_pos] = '\0';
+                ansi_execute_csi(t, parser->param_buf, c);
+                parser->state = ANSI_STATE_NORMAL;
+            }
+            break;
+        }
+    }
+
+    if (out_pos > 0) {
+        displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+    }
+}
+
 /* ============== 输出辅助 ============== */
 
 static void term_output_write(struct terminal *t, const void *buf, size_t len) {
-    if (t->output_proto == DEV_DISPLAYDEV)
-        displaydev_write(t->output_ep, buf, len);
-    else
+    if (t->output_proto == DEV_DISPLAYDEV) {
+        term_output_write_parsed(t, (const char *)buf, len);
+    } else {
         chardev_write(t->output_ep, buf, len);
+    }
 }
 
 static void term_output_char(struct terminal *t, char c) {
@@ -412,6 +577,14 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg,
             break;
         case TTY_IOCTL_GET_TTY_COUNT:
             msg->regs.data[0] = (uint32_t)g_term_count;
+            break;
+        case TTY_IOCTL_SET_COLOR:
+            term_output_set_color(t, (uint8_t)msg->regs.data[3], (uint8_t)msg->regs.data[4]);
+            msg->regs.data[0] = 0;
+            break;
+        case TTY_IOCTL_RESET_COLOR:
+            term_output_reset_color(t);
+            msg->regs.data[0] = 0;
             break;
         default:
             msg->regs.data[0] = (uint32_t)-1;
