@@ -806,6 +806,7 @@ int main(int argc, char **argv) {
 
     shell_tty_ioctl(TTY_IOCTL_SET_COOKED, 0);
     shell_tty_ioctl(TTY_IOCTL_SET_ECHO, 1);
+    shell_tty_ioctl(TTY_IOCTL_FLUSH_INPUT, 0);
 
     /* 初始化 VFS 客户端 */
     vfs_client_init(g_vfs_ep);

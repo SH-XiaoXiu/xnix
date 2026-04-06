@@ -45,6 +45,7 @@ enum tty_ioctl {
     TTY_IOCTL_RESET_COLOR    = 8, /* 重置颜色 */
     TTY_IOCTL_SET_ACTIVE_TTY = 9, /* 切换当前前台显示 tty: data[2]=tty_id */
     TTY_IOCTL_GET_ACTIVE_TTY = 10, /* 获取当前前台显示 tty */
+    TTY_IOCTL_FLUSH_INPUT    = 11, /* 清空输入队列和当前行缓冲 */
 };
 
 /* TTY 写缓冲区可通过寄存器传输的最大字节数 */

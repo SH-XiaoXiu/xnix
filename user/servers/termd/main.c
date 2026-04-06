@@ -935,6 +935,17 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg,
             msg->regs.data[0] = (uint32_t)g_active_display_term;
             pthread_mutex_unlock(&g_display_lock);
             break;
+        case TTY_IOCTL_FLUSH_INPUT:
+            pthread_mutex_lock(&t->input_lock);
+            t->input_head    = 0;
+            t->input_tail    = 0;
+            t->line_pos      = 0;
+            t->pending_read  = 0;
+            t->pending_tid   = 0;
+            t->pending_max_len = 0;
+            pthread_mutex_unlock(&t->input_lock);
+            msg->regs.data[0] = 0;
+            break;
         case TTY_IOCTL_SET_COLOR:
             term_output_set_color(t, (uint8_t)msg->regs.data[3], (uint8_t)msg->regs.data[4]);
             msg->regs.data[0] = 0;

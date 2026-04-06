@@ -8,6 +8,7 @@
 
 #include <xnix/drvframework.h>
 #include <xnix/inputdev.h>
+#include <xnix/abi/irq.h>
 #include <xnix/protocol/inputdev.h>
 
 #include <pthread.h>
@@ -32,6 +33,12 @@ struct input_queue {
 
 static struct input_queue g_kbd_queue;
 static struct input_queue g_mouse_queue;
+
+static void drain_irq_bytes(uint8_t irq) {
+    uint8_t byte;
+    while (sys_irq_read(irq, &byte, 1, IRQ_READ_NONBLOCK) > 0) {
+    }
+}
 
 static void input_queue_init(struct input_queue *q) {
     memset(q, 0, sizeof(*q));
@@ -166,6 +173,9 @@ static void *keyboard_thread(void *arg) {
         ulog_errf("[ps2] keyboard IRQ bind failed: %d\n", ret);
         return NULL;
     }
+
+    /* 丢弃驱动启动前积压在 IRQ ring 里的残留字节，避免启动后注入脏输入。 */
+    drain_irq_bytes(IRQ_KEYBOARD);
 
     while (1) {
         uint8_t scancode;
