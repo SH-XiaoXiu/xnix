@@ -10,15 +10,19 @@
 #include <xnix/config.h>
 #include <xnix/errno.h>
 #include <xnix/irq.h>
+#include <xnix/process.h>
 #include <xnix/sync.h>
 #include <xnix/thread_def.h>
 #include <xnix/usraccess.h>
+
+#define IRQ_USER_MAX_BINDINGS 4
 
 /**
  * IRQ 用户态绑定信息
  */
 struct irq_user_binding {
     bool                     bound;       /* 是否已绑定 */
+    struct process          *owner;       /* 绑定所属进程 */
     struct ipc_notification *notif;       /* 目标 notification(可选) */
     uint32_t                 signal_bits; /* 触发时发送的信号位 */
 
@@ -33,72 +37,96 @@ struct irq_user_binding {
     spinlock_t lock;
 };
 
-static struct irq_user_binding irq_bindings[ARCH_NR_IRQS];
+static struct irq_user_binding irq_bindings[ARCH_NR_IRQS][IRQ_USER_MAX_BINDINGS];
 
-int irq_bind_notification(uint8_t irq, struct ipc_notification *notif, uint32_t bits) {
-    if (irq >= ARCH_NR_IRQS) {
-        return -EINVAL;
+static bool irq_has_bound_slots(uint8_t irq) {
+    for (int i = 0; i < IRQ_USER_MAX_BINDINGS; i++) {
+        if (irq_bindings[irq][i].bound) {
+            return true;
+        }
     }
-
-    struct irq_user_binding *bind = &irq_bindings[irq];
-
-    spin_lock(&bind->lock);
-
-    if (bind->bound) {
-        spin_unlock(&bind->lock);
-        return -EBUSY;
-    }
-
-    bind->bound       = true;
-    bind->notif       = notif;
-    bind->signal_bits = bits;
-    bind->head        = 0;
-    bind->tail        = 0;
-    bind->waiter      = NULL;
-
-    if (notif) {
-        notification_ref(notif);
-    }
-
-    spin_unlock(&bind->lock);
-
-    irq_enable(irq);
-
-    return 0;
+    return false;
 }
 
-int irq_unbind_notification(uint8_t irq) {
+int irq_bind_notification(uint8_t irq, struct process *owner,
+                          struct ipc_notification *notif, uint32_t bits) {
     if (irq >= ARCH_NR_IRQS) {
         return -EINVAL;
     }
 
-    struct irq_user_binding *bind = &irq_bindings[irq];
+    for (int i = 0; i < IRQ_USER_MAX_BINDINGS; i++) {
+        struct irq_user_binding *bind = &irq_bindings[irq][i];
 
-    spin_lock(&bind->lock);
+        spin_lock(&bind->lock);
 
-    if (!bind->bound) {
+        if (bind->bound && bind->owner == owner) {
+            spin_unlock(&bind->lock);
+            return -EBUSY;
+        }
+
+        if (!bind->bound) {
+            bind->bound       = true;
+            bind->owner       = owner;
+            bind->notif       = notif;
+            bind->signal_bits = bits;
+            bind->head        = 0;
+            bind->tail        = 0;
+            bind->waiter      = NULL;
+
+            if (notif) {
+                notification_ref(notif);
+            }
+
+            spin_unlock(&bind->lock);
+            irq_enable(irq);
+            return 0;
+        }
+
         spin_unlock(&bind->lock);
-        return -ENOENT;
     }
 
-    irq_disable(irq);
+    return -EBUSY;
+}
 
-    if (bind->notif) {
-        notification_unref(bind->notif);
-    }
-    bind->bound       = false;
-    bind->notif       = NULL;
-    bind->signal_bits = 0;
-
-    /* 唤醒等待的线程(如果有) */
-    if (bind->waiter) {
-        sched_wakeup_thread(bind->waiter);
-        bind->waiter = NULL;
+int irq_unbind_notification(uint8_t irq, struct process *owner) {
+    if (irq >= ARCH_NR_IRQS) {
+        return -EINVAL;
     }
 
-    spin_unlock(&bind->lock);
+    for (int i = 0; i < IRQ_USER_MAX_BINDINGS; i++) {
+        struct irq_user_binding *bind = &irq_bindings[irq][i];
 
-    return 0;
+        spin_lock(&bind->lock);
+
+        if (!bind->bound || bind->owner != owner) {
+            spin_unlock(&bind->lock);
+            continue;
+        }
+
+        if (bind->notif) {
+            notification_unref(bind->notif);
+        }
+        bind->bound       = false;
+        bind->owner       = NULL;
+        bind->notif       = NULL;
+        bind->signal_bits = 0;
+        bind->head        = 0;
+        bind->tail        = 0;
+
+        if (bind->waiter) {
+            sched_wakeup_thread(bind->waiter);
+            bind->waiter = NULL;
+        }
+
+        spin_unlock(&bind->lock);
+
+        if (!irq_has_bound_slots(irq)) {
+            irq_disable(irq);
+        }
+        return 0;
+    }
+
+    return -ENOENT;
 }
 
 void irq_user_push(uint8_t irq, uint8_t data) {
@@ -106,37 +134,67 @@ void irq_user_push(uint8_t irq, uint8_t data) {
         return;
     }
 
-    struct irq_user_binding *bind = &irq_bindings[irq];
+    for (int i = 0; i < IRQ_USER_MAX_BINDINGS; i++) {
+        struct irq_user_binding *bind = &irq_bindings[irq][i];
+        struct ipc_notification *notif;
+        uint32_t                 bits;
 
-    spin_lock(&bind->lock);
+        spin_lock(&bind->lock);
 
-    if (!bind->bound) {
+        if (!bind->bound) {
+            spin_unlock(&bind->lock);
+            continue;
+        }
+
+        {
+            uint16_t next = (bind->head + 1) % CFG_IRQ_USER_BUF_SIZE;
+            if (next != bind->tail) {
+                bind->buffer[bind->head] = data;
+                bind->head               = next;
+            }
+        }
+
+        if (bind->waiter) {
+            sched_wakeup_thread(bind->waiter);
+            bind->waiter = NULL;
+        }
+
+        notif = bind->notif;
+        bits  = bind->signal_bits;
         spin_unlock(&bind->lock);
+
+        if (notif) {
+            notification_signal_by_ptr(notif, bits);
+        }
+    }
+}
+
+void irq_user_signal(uint8_t irq) {
+    if (irq >= ARCH_NR_IRQS) {
         return;
     }
 
-    /* 写入缓冲区 */
-    uint16_t next = (bind->head + 1) % CFG_IRQ_USER_BUF_SIZE;
-    if (next != bind->tail) {
-        bind->buffer[bind->head] = data;
-        bind->head               = next;
-    }
-    /* 缓冲区满则丢弃数据 */
+    for (int i = 0; i < IRQ_USER_MAX_BINDINGS; i++) {
+        struct irq_user_binding *bind = &irq_bindings[irq][i];
+        struct ipc_notification *notif;
+        uint32_t                 bits;
 
-    /* 唤醒等待的线程 */
-    if (bind->waiter) {
-        sched_wakeup_thread(bind->waiter);
-        bind->waiter = NULL;
-    }
+        spin_lock(&bind->lock);
+        if (!bind->bound) {
+            spin_unlock(&bind->lock);
+            continue;
+        }
+        if (bind->waiter) {
+            sched_wakeup_thread(bind->waiter);
+            bind->waiter = NULL;
+        }
+        notif = bind->notif;
+        bits  = bind->signal_bits;
+        spin_unlock(&bind->lock);
 
-    struct ipc_notification *notif = bind->notif;
-    uint32_t                 bits  = bind->signal_bits;
-
-    spin_unlock(&bind->lock);
-
-    /* 发送通知(如果有) */
-    if (notif) {
-        notification_signal_by_ptr(notif, bits);
+        if (notif) {
+            notification_signal_by_ptr(notif, bits);
+        }
     }
 }
 
@@ -145,11 +203,26 @@ int irq_user_read(uint8_t irq, uint8_t *buf, size_t size, bool block) {
         return -EINVAL;
     }
 
-    struct irq_user_binding *bind  = &irq_bindings[irq];
+    struct process          *owner = process_current();
+    struct irq_user_binding *bind  = NULL;
     size_t                   count = 0;
+
+    if (!owner) {
+        return -ESRCH;
+    }
 
     if (size > CFG_IRQ_USER_BUF_SIZE) {
         size = CFG_IRQ_USER_BUF_SIZE;
+    }
+
+    for (int i = 0; i < IRQ_USER_MAX_BINDINGS; i++) {
+        if (irq_bindings[irq][i].bound && irq_bindings[irq][i].owner == owner) {
+            bind = &irq_bindings[irq][i];
+            break;
+        }
+    }
+    if (!bind) {
+        return -ENOENT;
     }
 
     for (;;) {

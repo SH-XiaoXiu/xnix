@@ -15,6 +15,7 @@
 #include <xnix/abi/input.h>
 #include <xnix/abi/tty.h>
 #include <xnix/protocol/chardev.h>
+#include <xnix/protocol/devfs.h>
 #include <xnix/protocol/displaydev.h>
 #include <xnix/protocol/input.h>
 #include <xnix/protocol/inputdev.h>
@@ -37,6 +38,7 @@
 
 #define TERM_INPUT_BUF_SIZE 256
 #define TERM_LINE_BUF_SIZE  256
+#define SERIAL_TERM_COUNT   4
 
 enum ldisc_mode {
     LDISC_RAW    = 0,
@@ -93,9 +95,36 @@ struct terminal {
     struct ansi_parser ansi;
 };
 
-#define MAX_TERMINALS 4
+#define MAX_TERMINALS ABI_TTY_MAX
 static struct terminal g_terms[MAX_TERMINALS];
 static int             g_term_count = 0;
+
+static int register_tty_device(handle_t devfs_ep, int tty_id, handle_t tty_ep) {
+    struct ipc_message reg = {0};
+    struct ipc_message reply = {0};
+    char name[8];
+
+    snprintf(name, sizeof(name), "tty%d", tty_id);
+    reg.regs.data[0] = UDM_DEVFS_REGISTER_TTY;
+    reg.regs.data[1] = (uint32_t)tty_id;
+    reg.handles.handles[0] = tty_ep;
+    reg.handles.count = 1;
+    reg.buffer.data = (uint64_t)(uintptr_t)name;
+    reg.buffer.size = strlen(name);
+
+    int ret = sys_ipc_call(devfs_ep, &reg, &reply, 1000);
+    if (ret < 0) {
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[termd]",
+                  " register /dev/tty%d failed: ipc=%d\n", tty_id, ret);
+        return -1;
+    }
+    ret = (int32_t)reply.regs.data[1];
+    if (ret < 0) {
+        ulog_tagf(stdout, TERM_COLOR_LIGHT_RED, "[termd]",
+                  " register /dev/tty%d failed: devfs=%d\n", tty_id, ret);
+    }
+    return ret;
+}
 
 /* ============== 输入队列 ============== */
 
@@ -502,6 +531,20 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg,
     uint32_t op = msg->regs.data[0];
 
     switch (op) {
+    case TTY_OP_INPUT: {
+        char *data = (char *)(uintptr_t)msg->buffer.data;
+        uint32_t size = msg->buffer.size;
+        if (data && size > 0) {
+            for (uint32_t i = 0; i < size; i++) {
+                term_process_input(t, data[i]);
+            }
+        }
+        msg->regs.data[0] = 0;
+        msg->buffer.data = 0;
+        msg->buffer.size = 0;
+        return 0;
+    }
+
     case IO_WRITE: {
         uint32_t size = msg->regs.data[3];
         char    *data = (char *)(uintptr_t)msg->buffer.data;
@@ -652,6 +695,11 @@ int main(int argc, char **argv) {
     handle_t serial_ep    = env_get_handle("serial");     /* 写 endpoint */
     handle_t serial_in_ep = env_get_handle("serial_in");  /* 读 endpoint */
     handle_t kbd_ep       = env_get_handle("kbd_ep");
+    handle_t devfs_ep     = env_get_handle("devfs_ep");
+
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+              " startup serial=%u serial_in=%u kbd=%u devfs=%u\n",
+              serial_ep, serial_in_ep, kbd_ep, devfs_ep);
 
     /* tty1 (serial 终端): input=serial_in(read), output=serial(write) */
     if (serial_ep != HANDLE_INVALID && serial_in_ep != HANDLE_INVALID) {
@@ -664,7 +712,48 @@ int main(int argc, char **argv) {
                       serial_in_ep, DEV_CHARDEV,
                       serial_ep, DEV_CHARDEV);
             g_term_count++;
+            ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+                      " created tty1 input=%u output=%u\n", serial_in_ep, serial_ep);
         }
+    }
+
+    for (int serial_idx = 1; serial_idx < SERIAL_TERM_COUNT && g_term_count < MAX_TERMINALS;
+         serial_idx++) {
+        char read_name[16];
+        char write_name[16];
+        char tty_name[16];
+        handle_t read_ep;
+        handle_t write_ep;
+        handle_t tty_ep;
+        int tty_id = serial_idx + 1;
+
+        snprintf(read_name, sizeof(read_name), "com_in%d", serial_idx);
+        snprintf(write_name, sizeof(write_name), "com%d", serial_idx);
+        snprintf(tty_name, sizeof(tty_name), "tty%d", tty_id);
+
+        read_ep = sys_handle_find(read_name);
+        write_ep = sys_handle_find(write_name);
+        ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+                  " probe tty%d read=%s:%u write=%s:%u\n",
+                  tty_id, read_name, read_ep, write_name, write_ep);
+        if (read_ep == HANDLE_INVALID || write_ep == HANDLE_INVALID) {
+            continue;
+        }
+
+        tty_ep = env_get_handle(tty_name);
+        if (tty_ep == HANDLE_INVALID) {
+            tty_ep = sys_endpoint_create(tty_name);
+        }
+        if (tty_ep == HANDLE_INVALID) {
+            continue;
+        }
+
+        term_init(&g_terms[g_term_count], tty_id, tty_ep,
+                  read_ep, DEV_CHARDEV,
+                  write_ep, DEV_CHARDEV);
+        g_term_count++;
+        ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+                  " created tty%d input=%u output=%u\n", tty_id, read_ep, write_ep);
     }
 
     /* tty0 (VGA 终端): input=kbd(inputdev), output=fbcond(displaydev) */
@@ -679,6 +768,8 @@ int main(int argc, char **argv) {
                       kbd_ep, DEV_INPUTDEV,
                       fbcon_ep, DEV_DISPLAYDEV);
             g_term_count++;
+            ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+                      " created tty0 input=%u output=%u\n", kbd_ep, fbcon_ep);
         }
     } else {
         /* fbcond 不可用时仍创建 tty0 endpoint 供依赖解析 */
@@ -694,6 +785,15 @@ int main(int argc, char **argv) {
         pthread_t stid;
         pthread_create(&stid, NULL, service_thread, &g_terms[i]);
     }
+
+    if (devfs_ep != HANDLE_INVALID) {
+        for (int i = 0; i < g_term_count; i++) {
+            register_tty_device(devfs_ep, g_terms[i].id, g_terms[i].term_ep);
+        }
+    }
+
+    ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
+              " about to notify ready (%d terminals)\n", g_term_count);
 
     svc_notify_ready("termd");
 

@@ -16,6 +16,9 @@
 #include <xnix/stdio.h>
 
 #define COM1 0x3F8
+#define COM2 0x2F8
+#define COM3 0x3E8
+#define COM4 0x2E8
 
 #define REG_DATA        0
 #define REG_INTR_ENABLE 1
@@ -91,13 +94,27 @@ static void serial_reset_color(void) {
     serial_puts_sync("\x1b[0m");
 }
 
-#define IRQ_SERIAL 4
-
-static void serial_irq_handler(struct irq_regs *frame) {
+static void serial_irq_handler_irq4(struct irq_regs *frame) {
     (void)frame;
+
     if (inb(COM1 + REG_LINE_STATUS) & 0x01) {
-        uint8_t data = inb(COM1 + REG_DATA);
-        irq_user_push(IRQ_SERIAL, data);
+        irq_user_signal(4);
+        return;
+    }
+    if (inb(COM3 + REG_LINE_STATUS) & 0x01) {
+        irq_user_signal(4);
+    }
+}
+
+static void serial_irq_handler_irq3(struct irq_regs *frame) {
+    (void)frame;
+
+    if (inb(COM2 + REG_LINE_STATUS) & 0x01) {
+        irq_user_signal(3);
+        return;
+    }
+    if (inb(COM4 + REG_LINE_STATUS) & 0x01) {
+        irq_user_signal(3);
     }
 }
 
@@ -110,7 +127,8 @@ static void serial_init(void) {
     outb(COM1 + REG_FIFO_CTRL, 0xC7);
     outb(COM1 + REG_MODEM_CTRL, 0x0B);
 
-    irq_set_handler(IRQ_SERIAL, serial_irq_handler);
+    irq_set_handler(3, serial_irq_handler_irq3);
+    irq_set_handler(4, serial_irq_handler_irq4);
 }
 
 static struct early_console_backend serial_backend = {

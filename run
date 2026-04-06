@@ -22,6 +22,7 @@ DEBUG=false
 CONFIG_PATH=""
 QEMU_EXTRA=""
 SERIAL_MODE="stdio"  # stdio | vc | telnet[:port]
+EXTRA_SERIALS=()     # 额外串口后端，按顺序映射到 COM2/COM3/COM4
 EXTRA_DISKS=()   # 挂载的磁盘列表，格式 "file:type"
 
 # 帮助信息
@@ -41,6 +42,7 @@ Xnix 构建运行脚本
   -c, --config PATH     用户服务配置路径
   --attach FILE[:TYPE]  附加磁盘镜像（可重复，TYPE: ide/virtio/scsi，默认 ide）
   --serial MODE         串口模式: stdio(默认), vc(QEMU窗口), telnet[:port](默认4321)
+  --extra-serial MODE   额外串口后端（可重复，依次对应 COM2/COM3/COM4）
   --qemu "ARGS"         额外 QEMU 参数
 
 示例:
@@ -54,6 +56,8 @@ Xnix 构建运行脚本
   ./run --attach data.img:virtio                    # 附加 VirtIO 磁盘
   ./run --serial vc                               # 串口输出到 QEMU 窗口 tab
   ./run --serial telnet                            # 串口走 telnet (localhost:4321)
+  ./run --serial stdio --extra-serial pty --extra-serial pty --extra-serial pty
+  ./run --serial telnet:4321 --extra-serial telnet:4322 --extra-serial telnet:4323
   ./run --qemu "-m 256M -smp 4"
 EOF
 }
@@ -95,6 +99,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --serial)
             SERIAL_MODE="$2"
+            shift 2
+            ;;
+        --extra-serial)
+            EXTRA_SERIALS+=("$2")
             shift 2
             ;;
         --qemu)
@@ -180,6 +188,44 @@ case "$SERIAL_MODE" in
         SERIAL_ARG="-serial $SERIAL_MODE"
         ;;
 esac
+
+format_serial_arg() {
+    local mode="$1"
+    local default_telnet_port="$2"
+
+    case "$mode" in
+        stdio)
+            echo "-serial stdio"
+            ;;
+        vc)
+            echo "-serial vc"
+            ;;
+        pty)
+            echo "-serial pty"
+            ;;
+        telnet*)
+            local port="${mode#telnet:}"
+            if [ "$port" = "$mode" ] || [ "$port" = "telnet" ]; then
+                port="$default_telnet_port"
+            fi
+            echo "串口 telnet: telnet localhost $port" >&2
+            echo "-serial telnet:localhost:$port,server,nowait"
+            ;;
+        *)
+            echo "-serial $mode"
+            ;;
+    esac
+}
+
+for idx in "${!EXTRA_SERIALS[@]}"; do
+    if [ "$idx" -ge 3 ]; then
+        echo "错误: 最多支持 3 个 --extra-serial（对应 COM2/COM3/COM4）"
+        exit 1
+    fi
+    port=$((4322 + idx))
+    EXTRA_SERIAL_ARG="$(format_serial_arg "${EXTRA_SERIALS[$idx]}" "$port")"
+    SERIAL_ARG="$SERIAL_ARG $EXTRA_SERIAL_ARG"
+done
 
 # 串口非 stdio 时，把 QEMU monitor 接到终端 (可用 quit 命令退出)
 if [ "$SERIAL_MODE" != "stdio" ]; then

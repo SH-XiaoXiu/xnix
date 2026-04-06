@@ -48,6 +48,8 @@ void proc_inherit_perm(struct proc_builder *b) {
 
 void proc_add_handle(struct proc_builder *b, handle_t src, const char *name) {
     if (b->args.handle_count >= ABI_EXEC_MAX_HANDLES) {
+        /* TODO(exec ABI): 改为返回错误，不要再依赖定长数组的静默截断。
+         * 终局应使用变长 handle 表，由 exec/sys_exec 做显式容量校验。 */
         return;
     }
     uint32_t i             = b->args.handle_count;
@@ -65,6 +67,7 @@ void proc_add_handle(struct proc_builder *b, handle_t src, const char *name) {
 void proc_add_handle_with_rights(struct proc_builder *b, handle_t h,
                                  const char *name, uint32_t rights) {
     if (b->args.handle_count >= ABI_EXEC_MAX_HANDLES) {
+        /* TODO(exec ABI): 改为返回错误，不要再依赖定长数组的静默截断。 */
         return;
     }
     uint32_t i             = b->args.handle_count;
@@ -178,6 +181,7 @@ void proc_image_set_flags(struct proc_image_builder *b, uint32_t flags) {
 void proc_image_add_handle(struct proc_image_builder *b, handle_t src,
                            const char *name) {
     if (b->args.handle_count >= ABI_EXEC_MAX_HANDLES) {
+        /* TODO(exec ABI): 改为返回错误，不要再依赖定长数组的静默截断。 */
         return;
     }
     uint32_t i             = b->args.handle_count;

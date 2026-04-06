@@ -24,7 +24,15 @@
 #define ABI_EXEC_MAX_ARGS    16  /* 最大参数数量 */
 #define ABI_EXEC_MAX_ARG_LEN 256 /* 单个参数最大长度 */
 #define ABI_EXEC_PATH_MAX    256 /* 路径最大长度 */
-#define ABI_EXEC_MAX_HANDLES 16  /* 最大传递 handle 数量 */
+#define ABI_EXEC_MAX_HANDLES 32  /* 最大传递 handle 数量 */
+/*
+ * TODO(next ABI cleanup):
+ *   handles[] 目前仍是定长内嵌数组，扩展复杂服务图时容易撞上限。
+ *   后续应改成变长 ABI：
+ *     - header + handles_ptr/handle_count
+ *     - 内核二段式 copy + 校验
+ *   argv/args 也可一并从定长数组收敛到变长表示。
+ */
 #define ABI_PROC_NAME_MAX    16  /* 进程名最大长度 */
 
 /**

@@ -41,7 +41,7 @@ static int32_t sys_irq_bind(const uint32_t *args) {
         notif = entry.object;
     }
 
-    int ret = irq_bind_notification(irq, notif, bits);
+    int ret = irq_bind_notification(irq, proc, notif, bits);
     if (notif_handle != HANDLE_INVALID) {
         handle_object_put(entry.type, entry.object);
     }
@@ -50,9 +50,14 @@ static int32_t sys_irq_bind(const uint32_t *args) {
 
 /* SYS_IRQ_UNBIND: ebx=irq */
 static int32_t sys_irq_unbind(const uint32_t *args) {
-    uint8_t irq = (uint8_t)args[0];
+    uint8_t         irq  = (uint8_t)args[0];
+    struct process *proc = process_current();
 
-    return irq_unbind_notification(irq);
+    if (!proc) {
+        return -ESRCH;
+    }
+
+    return irq_unbind_notification(irq, proc);
 }
 
 /* SYS_IRQ_READ: ebx=irq, ecx=buf, edx=size, esi=flags */

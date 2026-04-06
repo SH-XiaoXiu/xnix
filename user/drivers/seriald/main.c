@@ -47,12 +47,20 @@ struct port_context {
     volatile uint8_t  rx_tail;
     handle_t          rx_notif;      /* notification: IRQ → read() 唤醒 */
     pthread_mutex_t   rx_lock;
+    bool              last_was_cr;
 
     /* 输出锁 */
     pthread_mutex_t   tx_lock;
 
     struct char_device read_dev;   /* 读 endpoint (阻塞在 com_read) */
     struct char_device write_dev;  /* 写 endpoint (快速返回) */
+};
+
+struct irq_context {
+    uint8_t irq;
+    handle_t notif;
+    int port_indices[MAX_COM_PORTS];
+    int port_count;
 };
 
 static struct port_context g_ports[MAX_COM_PORTS];
@@ -147,58 +155,48 @@ static struct char_ops com_write_ops = {
 
 /* ============== IRQ 输入线程 ============== */
 
-static void *irq_thread(void *arg) {
-    struct port_context *ctx = (struct port_context *)arg;
-
-    handle_t irq_notif = sys_notification_create();
-    if (irq_notif == HANDLE_INVALID) {
-        return NULL;
+static void serial_consume_port(struct port_context *ctx) {
+    pthread_mutex_lock(&ctx->rx_lock);
+    for (;;) {
+        int c = serial_getc_port(ctx->base);
+        if (c < 0) {
+            break;
+        }
+        if (ctx->last_was_cr && c == '\n') {
+            ctx->last_was_cr = false;
+            continue;
+        }
+        if (c == '\r') {
+            c = '\n';
+            ctx->last_was_cr = true;
+        } else {
+            ctx->last_was_cr = false;
+        }
+        rx_put(ctx, (char)c);
     }
+    pthread_mutex_unlock(&ctx->rx_lock);
+    sys_notification_signal(ctx->rx_notif, 1);
+}
 
-    int ret = sys_irq_bind(ctx->irq, irq_notif, 1 << 0);
+static void *irq_thread(void *arg) {
+    struct irq_context *irq_ctx = (struct irq_context *)arg;
+
+    int ret = sys_irq_bind(irq_ctx->irq, irq_ctx->notif, 1 << 0);
     if (ret < 0) {
         ulog_tagf(stdout, TERM_COLOR_LIGHT_BROWN, "[seriald]",
-                  " COM%d: IRQ %d bind failed\n", ctx->index + 1, ctx->irq);
+                  " IRQ %d bind failed\n", irq_ctx->irq);
         return NULL;
     }
 
-    serial_enable_irq(ctx->base);
-
-    bool last_was_cr = false;
-
     while (1) {
-        uint32_t bits = sys_notification_wait(irq_notif);
+        uint32_t bits = sys_notification_wait(irq_ctx->notif);
         if (bits == 0) {
             msleep(10);
             continue;
         }
-
-        uint8_t buf[128];
-        int n = sys_irq_read(ctx->irq, buf, sizeof(buf), 0);
-        if (n <= 0) {
-            continue;
+        for (int i = 0; i < irq_ctx->port_count; i++) {
+            serial_consume_port(&g_ports[irq_ctx->port_indices[i]]);
         }
-
-        pthread_mutex_lock(&ctx->rx_lock);
-        for (int i = 0; i < n; i++) {
-            int c = buf[i];
-            /* \r\n → \n 去重 */
-            if (last_was_cr && c == '\n') {
-                last_was_cr = false;
-                continue;
-            }
-            if (c == '\r') {
-                c = '\n';
-                last_was_cr = true;
-            } else {
-                last_was_cr = false;
-            }
-            rx_put(ctx, (char)c);
-        }
-        pthread_mutex_unlock(&ctx->rx_lock);
-
-        /* 唤醒阻塞在 read() 的 chardev 服务线程 */
-        sys_notification_signal(ctx->rx_notif, 1);
     }
 
     return NULL;
@@ -207,6 +205,9 @@ static void *irq_thread(void *arg) {
 /* ============== 入口 ============== */
 
 int main(void) {
+    struct irq_context irq_ctxs[2];
+    int irq_ctx_count = 0;
+
     serial_hw_init(COM1_BASE);
 
     env_set_name("seriald");
@@ -221,6 +222,7 @@ int main(void) {
         g_ports[i].rx_tail = 0;
         g_ports[i].write_dev = (struct char_device)CHAR_DEVICE_INIT;
         g_ports[i].read_dev  = (struct char_device)CHAR_DEVICE_INIT;
+        g_ports[i].last_was_cr = false;
         pthread_mutex_init(&g_ports[i].rx_lock, NULL);
         pthread_mutex_init(&g_ports[i].tx_lock, NULL);
 
@@ -285,13 +287,34 @@ int main(void) {
                   i + 1, g_ports[i].base, g_ports[i].irq);
     }
 
-    /* 启动 IRQ 输入线程 */
+    memset(irq_ctxs, 0, sizeof(irq_ctxs));
     for (int i = 0; i < MAX_COM_PORTS; i++) {
         if (!g_ports[i].present) {
             continue;
         }
+        serial_enable_irq(g_ports[i].base);
+
+        int ctx_index = -1;
+        for (int j = 0; j < irq_ctx_count; j++) {
+            if (irq_ctxs[j].irq == g_ports[i].irq) {
+                ctx_index = j;
+                break;
+            }
+        }
+        if (ctx_index < 0) {
+            ctx_index = irq_ctx_count++;
+            irq_ctxs[ctx_index].irq = g_ports[i].irq;
+            irq_ctxs[ctx_index].notif = sys_notification_create();
+        }
+        irq_ctxs[ctx_index].port_indices[irq_ctxs[ctx_index].port_count++] = i;
+    }
+
+    for (int i = 0; i < irq_ctx_count; i++) {
+        if (irq_ctxs[i].notif == HANDLE_INVALID) {
+            continue;
+        }
         pthread_t tid;
-        pthread_create(&tid, NULL, irq_thread, &g_ports[i]);
+        pthread_create(&tid, NULL, irq_thread, &irq_ctxs[i]);
     }
 
     svc_notify_ready("seriald");

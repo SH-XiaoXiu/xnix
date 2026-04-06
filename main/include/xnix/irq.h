@@ -97,6 +97,7 @@ void irq_dispatch(uint8_t irq, irq_frame_t *frame);
  */
 
 struct ipc_notification; /* 前向声明 */
+struct process;          /* 前向声明 */
 
 /**
  * @brief 绑定 IRQ 到 notification
@@ -106,7 +107,8 @@ struct ipc_notification; /* 前向声明 */
  * @param bits  触发时发送的信号位
  * @return 0 成功,负数失败
  */
-int irq_bind_notification(uint8_t irq, struct ipc_notification *notif, uint32_t bits);
+int irq_bind_notification(uint8_t irq, struct process *owner,
+                          struct ipc_notification *notif, uint32_t bits);
 
 /**
  * @brief 解除 IRQ 绑定
@@ -114,7 +116,7 @@ int irq_bind_notification(uint8_t irq, struct ipc_notification *notif, uint32_t 
  * @param irq IRQ 编号
  * @return 0 成功,负数失败
  */
-int irq_unbind_notification(uint8_t irq);
+int irq_unbind_notification(uint8_t irq, struct process *owner);
 
 /**
  * @brief 向 IRQ 缓冲区写入数据
@@ -125,6 +127,7 @@ int irq_unbind_notification(uint8_t irq);
  * @param data 数据字节
  */
 void irq_user_push(uint8_t irq, uint8_t data);
+void irq_user_signal(uint8_t irq);
 
 /**
  * @brief 从 IRQ 缓冲区读取数据
