@@ -43,6 +43,8 @@ enum tty_ioctl {
     TTY_IOCTL_GET_TTY_COUNT  = 6, /* 查询 tty 数量 */
     TTY_IOCTL_SET_COLOR      = 7, /* 设置颜色: data[2]=fg, data[3]=bg (VGA 16 色) */
     TTY_IOCTL_RESET_COLOR    = 8, /* 重置颜色 */
+    TTY_IOCTL_SET_ACTIVE_TTY = 9, /* 切换当前前台显示 tty: data[2]=tty_id */
+    TTY_IOCTL_GET_ACTIVE_TTY = 10, /* 获取当前前台显示 tty */
 };
 
 /* TTY 写缓冲区可通过寄存器传输的最大字节数 */

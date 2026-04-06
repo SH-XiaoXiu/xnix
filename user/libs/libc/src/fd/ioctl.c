@@ -31,6 +31,7 @@ int ioctl(int fd, unsigned long cmd, ...) {
     switch (cmd) {
     case TTY_IOCTL_SET_FOREGROUND:
     case TTY_IOCTL_SET_ECHO:
+    case TTY_IOCTL_SET_ACTIVE_TTY:
         msg.regs.data[3] = va_arg(ap, unsigned int);
         break;
     case TTY_IOCTL_SET_COLOR:

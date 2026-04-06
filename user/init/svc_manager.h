@@ -18,7 +18,7 @@
 #define SVC_HANDLE_NAME_MAX 32
 #define SVC_HANDLES_MAX     32
 #define SVC_DEPS_MAX        8
-#define SVC_MAX_SERVICES    16
+#define SVC_MAX_SERVICES    24
 #define SVC_MAX_HANDLE_DEFS 32
 
 /**

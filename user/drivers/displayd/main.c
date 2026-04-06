@@ -311,7 +311,6 @@ static int init_fb_mode(void) {
     struct physmem_info pinfo;
     uint32_t mapped_size = 0;
     uint8_t *fb_addr;
-    int last_row;
 
     if (fb_handle == HANDLE_INVALID) {
         ulog_errf("[displayd] fb_mem missing\n");
@@ -345,14 +344,10 @@ static int init_fb_mode(void) {
     g_display.u.fb.cols            = (int)(g_display.u.fb.fb_width / CHAR_WIDTH);
     g_display.u.fb.rows            = (int)(g_display.u.fb.fb_height / CHAR_HEIGHT);
     fb_apply_color(&g_display.u.fb, 7, 0);
-
-    last_row = fb_detect_last_row(&g_display.u.fb);
-    if (last_row >= 0) {
-        g_display.u.fb.cursor_y = last_row + 1;
-        if (g_display.u.fb.cursor_y >= g_display.u.fb.rows) {
-            g_display.u.fb.cursor_y = g_display.u.fb.rows - 1;
-        }
-    }
+    fb_fill_rect(&g_display.u.fb, 0, 0, (int)g_display.u.fb.fb_width,
+                 (int)g_display.u.fb.fb_height, g_display.u.fb.bg_color);
+    g_display.u.fb.cursor_x = 0;
+    g_display.u.fb.cursor_y = 0;
     return 0;
 }
 

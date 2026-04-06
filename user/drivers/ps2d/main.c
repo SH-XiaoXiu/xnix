@@ -133,24 +133,6 @@ static void *keyboard_thread(void *arg) {
             continue;
         }
 
-        /* 对终端与 GUI 统一使用“翻译后的按键码”:
-         * 普通按键使用 ASCII, 方向键使用 INPUT_KEY_*.
-         * release 事件保留原始 code，终端侧本来就忽略 release。 */
-        if (ev.type == INPUT_EVENT_KEY_PRESS) {
-            int key = scancode_to_char(scancode);
-            if (key >= 0) {
-                ev.code = (uint16_t)key;
-            } else if (key == KEY_UP) {
-                ev.code = INPUT_KEY_UP;
-            } else if (key == KEY_DOWN) {
-                ev.code = INPUT_KEY_DOWN;
-            } else if (key == KEY_LEFT) {
-                ev.code = INPUT_KEY_LEFT;
-            } else if (key == KEY_RIGHT) {
-                ev.code = INPUT_KEY_RIGHT;
-            }
-        }
-
         input_queue_put(&g_kbd_queue, &ev);
         sys_notification_signal(g_kbd_queue.notif, 1);
     }

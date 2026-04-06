@@ -71,6 +71,7 @@ int main(int argc, char **argv) {
     struct fd_entry *ent;
     struct ipc_message msg = {0};
     char decoded[256];
+    char raw[256];
     size_t decoded_len;
     int ret;
 
@@ -92,18 +93,32 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    raw[0] = '\0';
     {
-        const char *text = argv[2];
-        size_t text_len = strlen(text);
-        char raw[256];
+        size_t raw_pos = 0;
+        for (int i = 2; i < argc && raw_pos + 1 < sizeof(raw); i++) {
+            const char *part = argv[i];
+            size_t part_len = strlen(part);
 
-        text = strip_wrapping_quotes(text, &text_len);
-        if (text_len >= sizeof(raw)) {
-            text_len = sizeof(raw) - 1;
+            if (i > 2 && raw_pos + 1 < sizeof(raw)) {
+                raw[raw_pos++] = ' ';
+            }
+
+            if (raw_pos + part_len >= sizeof(raw)) {
+                part_len = sizeof(raw) - raw_pos - 1;
+            }
+            memcpy(raw + raw_pos, part, part_len);
+            raw_pos += part_len;
         }
-        memcpy(raw, text, text_len);
-        raw[text_len] = '\0';
+        raw[raw_pos] = '\0';
+    }
 
+    {
+        const char *text = raw;
+        size_t text_len = strlen(text);
+        text = strip_wrapping_quotes(text, &text_len);
+        memmove(raw, text, text_len);
+        raw[text_len] = '\0';
         decoded_len = decode_escapes(raw, decoded, sizeof(decoded));
     }
 

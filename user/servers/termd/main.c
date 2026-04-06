@@ -24,6 +24,7 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -63,6 +64,12 @@ struct ansi_parser {
     int             param_pos;
 };
 
+struct term_cell {
+    char    ch;
+    uint8_t fg;
+    uint8_t bg;
+};
+
 struct terminal {
     int      id;
     handle_t term_ep;      /* shell 连接的 endpoint */
@@ -93,11 +100,27 @@ struct terminal {
 
     /* ANSI 输出解析 (VGA/displaydev 路径) */
     struct ansi_parser ansi;
+
+    /* 显示 VT 状态 */
+    int              is_display_vt;
+    int              screen_rows;
+    int              screen_cols;
+    int              cursor_row;
+    int              cursor_col;
+    uint8_t          cur_fg;
+    uint8_t          cur_bg;
+    struct term_cell *screen;
 };
 
 #define MAX_TERMINALS ABI_TTY_MAX
 static struct terminal g_terms[MAX_TERMINALS];
 static int             g_term_count = 0;
+static pthread_mutex_t g_display_lock;
+static int             g_active_display_term = -1;
+
+static void term_init(struct terminal *t, int id, handle_t term_ep,
+                      handle_t input_ep, enum dev_proto input_proto,
+                      handle_t output_ep, enum dev_proto output_proto);
 
 static int register_tty_device(handle_t devfs_ep, int tty_id, handle_t tty_ep) {
     struct ipc_message reg = {0};
@@ -124,6 +147,14 @@ static int register_tty_device(handle_t devfs_ep, int tty_id, handle_t tty_ep) {
                   " register /dev/tty%d failed: devfs=%d\n", tty_id, ret);
     }
     return ret;
+}
+
+static struct terminal *find_term_by_id(int tty_id) {
+    for (int i = 0; i < g_term_count; i++) {
+        if (g_terms[i].id == tty_id)
+            return &g_terms[i];
+    }
+    return NULL;
 }
 
 /* ============== 输入队列 ============== */
@@ -251,6 +282,27 @@ static int displaydev_reset_color(handle_t ep) {
     return (int)reply.regs.data[0];
 }
 
+static int displaydev_info(handle_t ep, int *rows, int *cols) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+    char name_buf[64];
+
+    msg.regs.data[0] = DISPDEV_INFO;
+    reply.buffer.data = (uint64_t)(uintptr_t)name_buf;
+    reply.buffer.size = sizeof(name_buf);
+
+    int ret = sys_ipc_call(ep, &msg, &reply, 1000);
+    if (ret < 0)
+        return -1;
+    if ((int32_t)reply.regs.data[0] < 0)
+        return -1;
+    if (rows)
+        *rows = (int)reply.regs.data[2];
+    if (cols)
+        *cols = (int)reply.regs.data[3];
+    return 0;
+}
+
 static uint8_t ansi_to_vga_color(int ansi_code) {
     static const uint8_t standard_colors[8] = {
         0x00, 0x04, 0x02, 0x06, 0x01, 0x05, 0x03, 0x07,
@@ -268,15 +320,177 @@ static uint8_t ansi_to_vga_color(int ansi_code) {
     return 0x07;
 }
 
+static void term_screen_fill(struct terminal *t, char ch, uint8_t fg, uint8_t bg) {
+    int total = t->screen_rows * t->screen_cols;
+    for (int i = 0; i < total; i++) {
+        t->screen[i].ch = ch;
+        t->screen[i].fg = fg;
+        t->screen[i].bg = bg;
+    }
+}
+
+static void term_screen_clear(struct terminal *t) {
+    if (!t->screen)
+        return;
+    term_screen_fill(t, ' ', t->cur_fg, t->cur_bg);
+    t->cursor_row = 0;
+    t->cursor_col = 0;
+}
+
+static void term_screen_scroll(struct terminal *t, int lines) {
+    if (!t->screen || lines <= 0 || lines > t->screen_rows)
+        return;
+
+    int cols = t->screen_cols;
+    int rows = t->screen_rows;
+    int keep = rows - lines;
+    if (keep > 0) {
+        memmove(t->screen, t->screen + lines * cols,
+                (size_t)(keep * cols) * sizeof(struct term_cell));
+    }
+    for (int row = keep; row < rows; row++) {
+        for (int col = 0; col < cols; col++) {
+            struct term_cell *cell = &t->screen[row * cols + col];
+            cell->ch = ' ';
+            cell->fg = t->cur_fg;
+            cell->bg = t->cur_bg;
+        }
+    }
+}
+
+static void term_screen_newline(struct terminal *t) {
+    t->cursor_col = 0;
+    t->cursor_row++;
+    if (t->cursor_row >= t->screen_rows) {
+        term_screen_scroll(t, 1);
+        t->cursor_row = t->screen_rows - 1;
+    }
+}
+
+static void term_screen_putc(struct terminal *t, char c) {
+    if (!t->screen)
+        return;
+
+    if (c == '\n') {
+        term_screen_newline(t);
+        return;
+    }
+    if (c == '\r') {
+        t->cursor_col = 0;
+        return;
+    }
+    if (c == '\t') {
+        int next = (t->cursor_col + 8) & ~7;
+        if (next >= t->screen_cols)
+            term_screen_newline(t);
+        else
+            t->cursor_col = next;
+        return;
+    }
+    if (c == '\b') {
+        if (t->cursor_col > 0) {
+            t->cursor_col--;
+            t->screen[t->cursor_row * t->screen_cols + t->cursor_col] =
+                (struct term_cell){ .ch = ' ', .fg = t->cur_fg, .bg = t->cur_bg };
+        }
+        return;
+    }
+    if (c < 32 || c > 126)
+        c = '?';
+
+    if (t->cursor_col >= t->screen_cols)
+        term_screen_newline(t);
+
+    t->screen[t->cursor_row * t->screen_cols + t->cursor_col] =
+        (struct term_cell){ .ch = c, .fg = t->cur_fg, .bg = t->cur_bg };
+    t->cursor_col++;
+    if (t->cursor_col >= t->screen_cols)
+        term_screen_newline(t);
+}
+
+static void term_screen_write(struct terminal *t, const char *data, size_t len) {
+    for (size_t i = 0; i < len; i++)
+        term_screen_putc(t, data[i]);
+}
+
+static void term_display_flush(struct terminal *t) {
+    if (!t->is_display_vt)
+        return;
+
+    displaydev_clear(t->output_ep);
+    for (int row = 0; row < t->screen_rows; row++) {
+        int col = 0;
+        while (col < t->screen_cols) {
+            struct term_cell *cell = &t->screen[row * t->screen_cols + col];
+            int run = 1;
+            while (col + run < t->screen_cols) {
+                struct term_cell *next = &t->screen[row * t->screen_cols + col + run];
+                if (next->fg != cell->fg || next->bg != cell->bg)
+                    break;
+                run++;
+            }
+
+            char run_buf[256];
+            if (run > (int)sizeof(run_buf))
+                run = (int)sizeof(run_buf);
+            for (int i = 0; i < run; i++)
+                run_buf[i] = t->screen[row * t->screen_cols + col + i].ch;
+
+            displaydev_set_cursor(t->output_ep, row, col);
+            displaydev_set_color(t->output_ep, cell->fg, cell->bg);
+            displaydev_write(t->output_ep, run_buf, (size_t)run);
+            col += run;
+        }
+    }
+    displaydev_set_color(t->output_ep, t->cur_fg, t->cur_bg);
+    displaydev_set_cursor(t->output_ep, t->cursor_row, t->cursor_col);
+}
+
+static void term_activate_display_vt(struct terminal *t) {
+    pthread_mutex_lock(&g_display_lock);
+    g_active_display_term = t->id;
+    term_display_flush(t);
+    pthread_mutex_unlock(&g_display_lock);
+}
+
+static int term_init_display_vt(struct terminal *t, int id, handle_t term_ep,
+                                handle_t input_ep, handle_t output_ep) {
+    int rows = 0, cols = 0;
+    term_init(t, id, term_ep, input_ep, DEV_INPUTDEV, output_ep, DEV_DISPLAYDEV);
+    if (displaydev_info(output_ep, &rows, &cols) < 0 || rows <= 0 || cols <= 0)
+        return -1;
+
+    t->is_display_vt = 1;
+    t->screen_rows = rows;
+    t->screen_cols = cols;
+    t->cur_fg = 7;
+    t->cur_bg = 0;
+    t->screen = calloc((size_t)rows * (size_t)cols, sizeof(struct term_cell));
+    if (!t->screen)
+        return -1;
+    term_screen_clear(t);
+    return 0;
+}
+
 static void term_output_set_color(struct terminal *t, uint8_t fg, uint8_t bg) {
+    t->cur_fg = fg & 0x0F;
+    t->cur_bg = bg & 0x0F;
     if (t->output_proto == DEV_DISPLAYDEV) {
-        displaydev_set_color(t->output_ep, fg, bg);
+        pthread_mutex_lock(&g_display_lock);
+        if (g_active_display_term == t->id)
+            displaydev_set_color(t->output_ep, t->cur_fg, t->cur_bg);
+        pthread_mutex_unlock(&g_display_lock);
     }
 }
 
 static void term_output_reset_color(struct terminal *t) {
+    t->cur_fg = 7;
+    t->cur_bg = 0;
     if (t->output_proto == DEV_DISPLAYDEV) {
-        displaydev_reset_color(t->output_ep);
+        pthread_mutex_lock(&g_display_lock);
+        if (g_active_display_term == t->id)
+            displaydev_reset_color(t->output_ep);
+        pthread_mutex_unlock(&g_display_lock);
     }
 }
 
@@ -300,12 +514,22 @@ static void ansi_execute_csi(struct terminal *t, const char *params, char final)
         }
     } else if (final == 'J') {
         if (code == 2 && t->output_proto == DEV_DISPLAYDEV) {
-            displaydev_clear(t->output_ep);
-            displaydev_set_cursor(t->output_ep, 0, 0);
+            term_screen_clear(t);
+            pthread_mutex_lock(&g_display_lock);
+            if (g_active_display_term == t->id) {
+                displaydev_clear(t->output_ep);
+                displaydev_set_cursor(t->output_ep, 0, 0);
+            }
+            pthread_mutex_unlock(&g_display_lock);
         }
     } else if (final == 'H') {
         if (t->output_proto == DEV_DISPLAYDEV) {
-            displaydev_set_cursor(t->output_ep, 0, 0);
+            t->cursor_row = 0;
+            t->cursor_col = 0;
+            pthread_mutex_lock(&g_display_lock);
+            if (g_active_display_term == t->id)
+                displaydev_set_cursor(t->output_ep, 0, 0);
+            pthread_mutex_unlock(&g_display_lock);
         }
     }
 }
@@ -322,14 +546,22 @@ static void term_output_write_parsed(struct terminal *t, const char *data, size_
         case ANSI_STATE_NORMAL:
             if (c == '\x1b') {
                 if (out_pos > 0) {
-                    displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+                    term_screen_write(t, out_buf, (size_t)out_pos);
+                    pthread_mutex_lock(&g_display_lock);
+                    if (g_active_display_term == t->id)
+                        displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+                    pthread_mutex_unlock(&g_display_lock);
                     out_pos = 0;
                 }
                 parser->state = ANSI_STATE_ESC;
             } else {
                 out_buf[out_pos++] = c;
                 if (out_pos == (int)sizeof(out_buf)) {
-                    displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+                    term_screen_write(t, out_buf, (size_t)out_pos);
+                    pthread_mutex_lock(&g_display_lock);
+                    if (g_active_display_term == t->id)
+                        displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+                    pthread_mutex_unlock(&g_display_lock);
                     out_pos = 0;
                 }
             }
@@ -357,8 +589,17 @@ static void term_output_write_parsed(struct terminal *t, const char *data, size_
     }
 
     if (out_pos > 0) {
-        displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+        term_screen_write(t, out_buf, (size_t)out_pos);
+        pthread_mutex_lock(&g_display_lock);
+        if (g_active_display_term == t->id)
+            displaydev_write(t->output_ep, out_buf, (size_t)out_pos);
+        pthread_mutex_unlock(&g_display_lock);
     }
+
+    pthread_mutex_lock(&g_display_lock);
+    if (g_active_display_term == t->id)
+        displaydev_set_cursor(t->output_ep, t->cursor_row, t->cursor_col);
+    pthread_mutex_unlock(&g_display_lock);
 }
 
 /* ============== 输出辅助 ============== */
@@ -524,6 +765,34 @@ static void *input_thread(void *arg) {
     return NULL;
 }
 
+static void *display_input_thread(void *arg) {
+    struct terminal *source = (struct terminal *)arg;
+
+    while (1) {
+        struct input_event ev;
+        if (inputdev_read_event(source->input_ep, &ev) < 0) {
+            msleep(100);
+            continue;
+        }
+
+        char chars[8];
+        int n = event_to_chars(&ev, chars, sizeof(chars));
+        if (n <= 0)
+            continue;
+
+        pthread_mutex_lock(&g_display_lock);
+        struct terminal *active = find_term_by_id(g_active_display_term);
+        pthread_mutex_unlock(&g_display_lock);
+        if (!active)
+            continue;
+
+        for (int i = 0; i < n; i++)
+            term_process_input(active, chars[i]);
+    }
+
+    return NULL;
+}
+
 /* ============== 服务线程 ============== */
 
 static int term_handle_msg(struct terminal *t, struct ipc_message *msg,
@@ -621,6 +890,21 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg,
         case TTY_IOCTL_GET_TTY_COUNT:
             msg->regs.data[0] = (uint32_t)g_term_count;
             break;
+        case TTY_IOCTL_SET_ACTIVE_TTY: {
+            struct terminal *target = find_term_by_id((int)msg->regs.data[3]);
+            if (!target || !target->is_display_vt) {
+                msg->regs.data[0] = (uint32_t)-1;
+                break;
+            }
+            term_activate_display_vt(target);
+            msg->regs.data[0] = 0;
+            break;
+        }
+        case TTY_IOCTL_GET_ACTIVE_TTY:
+            pthread_mutex_lock(&g_display_lock);
+            msg->regs.data[0] = (uint32_t)g_active_display_term;
+            pthread_mutex_unlock(&g_display_lock);
+            break;
         case TTY_IOCTL_SET_COLOR:
             term_output_set_color(t, (uint8_t)msg->regs.data[3], (uint8_t)msg->regs.data[4]);
             msg->regs.data[0] = 0;
@@ -681,6 +965,13 @@ static void term_init(struct terminal *t, int id, handle_t term_ep,
     pthread_mutex_init(&t->input_lock, NULL);
 }
 
+static handle_t get_or_create_tty_ep(const char *name) {
+    handle_t ep = env_get_handle(name);
+    if (ep == HANDLE_INVALID)
+        ep = sys_endpoint_create(name);
+    return ep;
+}
+
 /* ============== 入口 ============== */
 
 int main(int argc, char **argv) {
@@ -692,6 +983,7 @@ int main(int argc, char **argv) {
     _stdio_set_fd(stderr, -1);
 
     env_set_name("termd");
+    pthread_mutex_init(&g_display_lock, NULL);
     handle_t serial_ep    = env_get_handle("serial");     /* 写 endpoint */
     handle_t serial_in_ep = env_get_handle("serial_in");  /* 读 endpoint */
     handle_t kbd_ep       = env_get_handle("kbd_ep");
@@ -703,9 +995,7 @@ int main(int argc, char **argv) {
 
     /* tty1 (serial 终端): input=serial_in(read), output=serial(write) */
     if (serial_ep != HANDLE_INVALID && serial_in_ep != HANDLE_INVALID) {
-        handle_t tty1_ep = env_get_handle(ABI_TTY1_HANDLE_NAME);
-        if (tty1_ep == HANDLE_INVALID)
-            tty1_ep = sys_endpoint_create(ABI_TTY1_HANDLE_NAME);
+        handle_t tty1_ep = get_or_create_tty_ep(ABI_TTY1_HANDLE_NAME);
 
         if (tty1_ep != HANDLE_INVALID) {
             term_init(&g_terms[g_term_count], 1, tty1_ep,
@@ -740,10 +1030,7 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        tty_ep = env_get_handle(tty_name);
-        if (tty_ep == HANDLE_INVALID) {
-            tty_ep = sys_endpoint_create(tty_name);
-        }
+        tty_ep = get_or_create_tty_ep(tty_name);
         if (tty_ep == HANDLE_INVALID) {
             continue;
         }
@@ -756,40 +1043,73 @@ int main(int argc, char **argv) {
                   " created tty%d input=%u output=%u\n", tty_id, read_ep, write_ep);
     }
 
-    /* tty0 (VGA 终端): input=kbd(inputdev), output=fbcond(displaydev) */
+    /* tty0/tty5/tty6 (VGA 终端): 共享显示设备和键盘, 前台切换由 termd 管理 */
     handle_t fbcon_ep = env_get_handle("fbcon_ep");
     if (kbd_ep != HANDLE_INVALID && fbcon_ep != HANDLE_INVALID) {
-        handle_t tty0_ep = env_get_handle(ABI_TTY0_HANDLE_NAME);
-        if (tty0_ep == HANDLE_INVALID)
-            tty0_ep = sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
+        static const struct {
+            int id;
+            const char *name;
+        } display_ttys[] = {
+            {0, ABI_TTY0_HANDLE_NAME},
+            {5, ABI_TTY5_HANDLE_NAME},
+            {6, ABI_TTY6_HANDLE_NAME},
+        };
 
-        if (tty0_ep != HANDLE_INVALID) {
-            term_init(&g_terms[g_term_count], 0, tty0_ep,
-                      kbd_ep, DEV_INPUTDEV,
-                      fbcon_ep, DEV_DISPLAYDEV);
-            g_term_count++;
+        for (size_t i = 0; i < sizeof(display_ttys) / sizeof(display_ttys[0]) &&
+                           g_term_count < MAX_TERMINALS; i++) {
+            handle_t tty_ep = get_or_create_tty_ep(display_ttys[i].name);
+            if (tty_ep == HANDLE_INVALID)
+                continue;
+            if (term_init_display_vt(&g_terms[g_term_count], display_ttys[i].id,
+                                     tty_ep, kbd_ep, fbcon_ep) < 0) {
+                continue;
+            }
             ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",
-                      " created tty0 input=%u output=%u\n", kbd_ep, fbcon_ep);
+                      " created tty%d input=%u output=%u\n",
+                      display_ttys[i].id, kbd_ep, fbcon_ep);
+            if (g_active_display_term < 0)
+                g_active_display_term = display_ttys[i].id;
+            g_term_count++;
         }
     } else {
-        /* fbcond 不可用时仍创建 tty0 endpoint 供依赖解析 */
+        /* 显示设备不可用时仍创建 endpoint 供依赖解析 */
         if (env_get_handle(ABI_TTY0_HANDLE_NAME) == HANDLE_INVALID)
             sys_endpoint_create(ABI_TTY0_HANDLE_NAME);
+        if (env_get_handle(ABI_TTY5_HANDLE_NAME) == HANDLE_INVALID)
+            sys_endpoint_create(ABI_TTY5_HANDLE_NAME);
+        if (env_get_handle(ABI_TTY6_HANDLE_NAME) == HANDLE_INVALID)
+            sys_endpoint_create(ABI_TTY6_HANDLE_NAME);
     }
 
     /* 启动各终端的输入线程 + 服务线程 */
     for (int i = 0; i < g_term_count; i++) {
-        pthread_t tid;
-        pthread_create(&tid, NULL, input_thread, &g_terms[i]);
-
         pthread_t stid;
         pthread_create(&stid, NULL, service_thread, &g_terms[i]);
+
+        if (!g_terms[i].is_display_vt) {
+            pthread_t tid;
+            pthread_create(&tid, NULL, input_thread, &g_terms[i]);
+        }
+    }
+
+    for (int i = 0; i < g_term_count; i++) {
+        if (g_terms[i].is_display_vt) {
+            pthread_t tid;
+            pthread_create(&tid, NULL, display_input_thread, &g_terms[i]);
+            break;
+        }
     }
 
     if (devfs_ep != HANDLE_INVALID) {
         for (int i = 0; i < g_term_count; i++) {
             register_tty_device(devfs_ep, g_terms[i].id, g_terms[i].term_ep);
         }
+    }
+
+    if (g_active_display_term >= 0) {
+        struct terminal *active = find_term_by_id(g_active_display_term);
+        if (active)
+            term_activate_display_vt(active);
     }
 
     ulog_tagf(stdout, TERM_COLOR_WHITE, "[termd]",

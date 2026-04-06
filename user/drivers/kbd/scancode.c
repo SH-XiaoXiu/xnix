@@ -171,16 +171,15 @@ int scancode_to_event(uint8_t scancode, struct input_event *ev) {
     bool    release = (scancode & 0x80) != 0;
     uint8_t code    = scancode & 0x7F;
 
-    ev->type      = release ? INPUT_EVENT_KEY_RELEASE : INPUT_EVENT_KEY_PRESS;
-    ev->modifiers = scancode_get_modifiers();
-    ev->value     = release ? 0 : 1;
-    ev->value2    = 0;
-    ev->timestamp = 0; /* 由调用者填充 */
-    ev->_reserved = 0;
-
     /* E0 扩展码 */
     if (e0_prefix_ev) {
         e0_prefix_ev = false;
+        ev->type      = release ? INPUT_EVENT_KEY_RELEASE : INPUT_EVENT_KEY_PRESS;
+        ev->modifiers = scancode_get_modifiers();
+        ev->value     = release ? 0 : 1;
+        ev->value2    = 0;
+        ev->timestamp = 0;
+        ev->_reserved = 0;
         switch (code) {
         case SC_E0_UP:    ev->code = INPUT_KEY_UP;    break;
         case SC_E0_DOWN:  ev->code = INPUT_KEY_DOWN;  break;
@@ -191,6 +190,50 @@ int scancode_to_event(uint8_t scancode, struct input_event *ev) {
         return 0;
     }
 
-    ev->code = code;
+    switch (scancode) {
+    case SC_LSHIFT_PRESS:
+    case SC_RSHIFT_PRESS:
+        shift_held = true;
+        return -1;
+    case SC_LSHIFT_RELEASE:
+    case SC_RSHIFT_RELEASE:
+        shift_held = false;
+        return -1;
+    case SC_LCTRL_PRESS:
+        ctrl_held = true;
+        return -1;
+    case SC_LCTRL_RELEASE:
+        ctrl_held = false;
+        return -1;
+    case SC_CAPS_PRESS:
+        caps_lock = !caps_lock;
+        return -1;
+    default:
+        break;
+    }
+
+    ev->type      = release ? INPUT_EVENT_KEY_RELEASE : INPUT_EVENT_KEY_PRESS;
+    ev->modifiers = scancode_get_modifiers();
+    ev->value     = release ? 0 : 1;
+    ev->value2    = 0;
+    ev->timestamp = 0;
+    ev->_reserved = 0;
+
+    if (release) {
+        ev->code = code;
+        return 0;
+    }
+
+    char c = shift_held ? scancode_shift[code] : scancode_normal[code];
+    if (caps_lock && c >= 'a' && c <= 'z') {
+        c = (char)(c - 'a' + 'A');
+    } else if (caps_lock && c >= 'A' && c <= 'Z') {
+        c = (char)(c - 'A' + 'a');
+    }
+    if (ctrl_held && c >= 'a' && c <= 'z') {
+        c = (char)(c - 'a' + 1);
+    }
+
+    ev->code = c ? (uint16_t)(unsigned char)c : code;
     return 0;
 }

@@ -12,8 +12,10 @@
 #define ABI_TTY2_HANDLE_NAME "tty2" /* Serial 终端 */
 #define ABI_TTY3_HANDLE_NAME "tty3" /* Serial 终端 */
 #define ABI_TTY4_HANDLE_NAME "tty4" /* Serial 终端 */
+#define ABI_TTY5_HANDLE_NAME "tty5" /* VGA 终端 */
+#define ABI_TTY6_HANDLE_NAME "tty6" /* VGA 终端 */
 
 /* TTY 数量上限 */
-#define ABI_TTY_MAX 5
+#define ABI_TTY_MAX 7
 
 #endif /* XNIX_ABI_TTY_H */

@@ -25,6 +25,7 @@
 #include "svc_manager.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -230,12 +231,26 @@ int main(int argc, char **argv) {
     /* 主循环 */
     static bool vfsserver_migrated = false;
     bool        system_ready       = false;
+    bool        stdio_redirected   = false;
     int         loop_count         = 0;
 
     while (1) {
         reap_children();
 
         drain_ready_notifications(init_notify_ep);
+
+        if (!stdio_redirected) {
+            int termd_idx = svc_find_by_name(&g_mgr, "termd");
+            if (termd_idx >= 0 && g_mgr.runtime[termd_idx].ready) {
+                int tty_fd = open("/dev/tty1", O_RDWR);
+                if (tty_fd >= 0) {
+                    _stdio_set_fd(stdout, tty_fd);
+                    _stdio_set_fd(stderr, tty_fd);
+                    stdio_redirected = true;
+                    printf("[INIT] stdio redirected to /dev/tty1\n");
+                }
+            }
+        }
 
         if (g_mgr.graph_valid) {
             svc_tick_parallel(&g_mgr);

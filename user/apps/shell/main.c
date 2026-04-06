@@ -734,9 +734,12 @@ int main(int argc, char **argv) {
 
     /* 解析命令行参数 */
     const char *svc_name = "shell";
+    const char *tty_name = NULL;
     for (int i = 0; i < argc; i++) {
         if (strncmp(argv[i], "--svc=", 6) == 0) {
             svc_name = argv[i] + 6;
+        } else if (strncmp(argv[i], "--tty=", 6) == 0) {
+            tty_name = argv[i] + 6;
         }
     }
 
@@ -754,6 +757,12 @@ int main(int argc, char **argv) {
     path_init();
 
     svc_notify_ready(svc_name);
+
+    if (tty_name &&
+        (strcmp(tty_name, "tty0") == 0 || strcmp(tty_name, "tty5") == 0 ||
+         strcmp(tty_name, "tty6") == 0)) {
+        cmd_clear(0, NULL);
+    }
 
     /* 输出欢迎信息 */
     printf("\nXnix Shell\n");
