@@ -208,7 +208,13 @@ static void fb_draw_x(struct ws_server *srv, int x, int y,
 /**
  * blit 客户端 ARGB32 SHM 到后台缓冲区
  */
-static void blit_window_client(struct ws_server *srv, struct ws_window *win) {
+static int rect_intersects(int x1, int y1, int w1, int h1,
+                           int x2, int y2, int w2, int h2) {
+    return !(x1 + w1 <= x2 || x2 + w2 <= x1 || y1 + h1 <= y2 || y2 + h2 <= y1);
+}
+
+static void blit_window_client_region(struct ws_server *srv, struct ws_window *win,
+                                      int clip_x1, int clip_y1, int clip_x2, int clip_y2) {
     int dx = window_client_x(win);
     int dy = window_client_y(win);
     int w = win->client_w;
@@ -223,11 +229,18 @@ static void blit_window_client(struct ws_server *srv, struct ws_window *win) {
         if (sy < 0 || (uint32_t)sy >= srv->fb_info.height)
             continue;
 
+        if (sy < clip_y1 || sy >= clip_y2)
+            continue;
+
         /* 计算本行有效像素范围 */
         int x_start = dx < 0 ? -dx : 0;
         int x_end = w;
         if (dx + x_end > (int)srv->fb_info.width)
             x_end = (int)srv->fb_info.width - dx;
+        if (dx + x_start < clip_x1)
+            x_start = clip_x1 - dx;
+        if (dx + x_end > clip_x2)
+            x_end = clip_x2 - dx;
         if (x_start >= x_end)
             continue;
 
@@ -251,9 +264,15 @@ static void blit_window_client(struct ws_server *srv, struct ws_window *win) {
 /**
  * 绘制单个窗口 (装饰 + 客户区)
  */
-static void blit_window(struct ws_server *srv, struct ws_window *win) {
+static void blit_window_region(struct ws_server *srv, struct ws_window *win,
+                               int clip_x1, int clip_y1, int clip_x2, int clip_y2) {
     int32_t ow = window_outer_w(win);
     int32_t oh = window_outer_h(win);
+
+    if (!rect_intersects(win->x, win->y, ow, oh,
+                         clip_x1, clip_y1, clip_x2 - clip_x1, clip_y2 - clip_y1)) {
+        return;
+    }
 
     if (!(win->flags & WS_FLAG_NO_DECOR)) {
         /* 边框 */
@@ -287,7 +306,7 @@ static void blit_window(struct ws_server *srv, struct ws_window *win) {
     }
 
     /* 客户区 */
-    blit_window_client(srv, win);
+    blit_window_client_region(srv, win, clip_x1, clip_y1, clip_x2, clip_y2);
 }
 
 /**
@@ -320,7 +339,10 @@ void compositor_composite(struct ws_server *srv) {
 
         for (uint32_t i = 0; i < srv->z_count; i++) {
             struct ws_window *win = &srv->windows[srv->z_order[i]];
-            if (win->id != 0) blit_window(srv, win);
+            if (win->id != 0) {
+                blit_window_region(srv, win, 0, 0, (int)srv->fb_info.width,
+                                   (int)srv->fb_info.height);
+            }
         }
         cursor_draw_backbuf(srv);
         memcpy(srv->fb_addr, srv->backbuf, srv->fb_size);
@@ -393,7 +415,7 @@ void compositor_composite(struct ws_server *srv) {
         struct ws_window *win = &srv->windows[idx];
         if (win->id == 0)
             continue;
-        blit_window(srv, win);
+        blit_window_region(srv, win, dirty_x1, dirty_y1, dirty_x2, dirty_y2);
     }
 
     cursor_draw_backbuf(srv);

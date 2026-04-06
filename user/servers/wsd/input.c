@@ -221,6 +221,23 @@ static int mouse_has_events(struct ws_server *srv) {
     return reply.regs.data[1] != 0;
 }
 
+static void route_coalesced_mouse_move(struct ws_server *srv, int16_t dx, int16_t dy) {
+    if (dx == 0 && dy == 0) {
+        return;
+    }
+
+    struct input_event ev = {
+        .type      = INPUT_EVENT_MOUSE_MOVE,
+        .modifiers = 0,
+        .code      = 0,
+        .value     = dx,
+        .value2    = dy,
+        .timestamp = 0,
+        ._reserved = 0,
+    };
+    route_mouse_event(srv, &ev);
+}
+
 /**
  * 鼠标输入线程
  */
@@ -244,14 +261,33 @@ static void *mouse_thread(void *arg) {
         pthread_mutex_lock(&srv->lock);
 
         /* 处理第一个事件 */
-        route_mouse_event(srv, &ev);
+        int32_t pending_dx = 0;
+        int32_t pending_dy = 0;
+        if (ev.type == INPUT_EVENT_MOUSE_MOVE) {
+            pending_dx += ev.value;
+            pending_dy += ev.value2;
+        } else {
+            route_mouse_event(srv, &ev);
+        }
 
-        /* 批量处理: 读完所有待处理事件再合成 */
+        /* 批量处理: 合并连续鼠标移动，保留按钮事件顺序 */
         while (mouse_has_events(srv)) {
             if (mouse_read_event(srv, &ev) < 0)
                 break;
+
+            if (ev.type == INPUT_EVENT_MOUSE_MOVE) {
+                pending_dx += ev.value;
+                pending_dy += ev.value2;
+                continue;
+            }
+
+            route_coalesced_mouse_move(srv, (int16_t)pending_dx, (int16_t)pending_dy);
+            pending_dx = 0;
+            pending_dy = 0;
             route_mouse_event(srv, &ev);
         }
+
+        route_coalesced_mouse_move(srv, (int16_t)pending_dx, (int16_t)pending_dy);
 
         if (srv->needs_composite)
             compositor_composite(srv);

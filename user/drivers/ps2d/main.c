@@ -49,6 +49,52 @@ static void input_queue_put(struct input_queue *q, const struct input_event *ev)
     pthread_mutex_unlock(&q->lock);
 }
 
+static void mouse_queue_put(struct input_queue *q, const struct input_event *ev) {
+    pthread_mutex_lock(&q->lock);
+
+    if (ev->type == INPUT_EVENT_MOUSE_MOVE && q->head != q->tail) {
+        uint16_t last = (q->head == 0) ? (EVENT_BUF_SIZE - 1) : (q->head - 1);
+        struct input_event *prev = &q->buf[last];
+        if (prev->type == INPUT_EVENT_MOUSE_MOVE) {
+            int32_t dx = (int32_t)prev->value + (int32_t)ev->value;
+            int32_t dy = (int32_t)prev->value2 + (int32_t)ev->value2;
+
+            if (dx > 32767) dx = 32767;
+            if (dx < -32768) dx = -32768;
+            if (dy > 32767) dy = 32767;
+            if (dy < -32768) dy = -32768;
+
+            prev->value  = (int16_t)dx;
+            prev->value2 = (int16_t)dy;
+            pthread_mutex_unlock(&q->lock);
+            return;
+        }
+    }
+
+    uint16_t next = (q->head + 1) % EVENT_BUF_SIZE;
+    if (next != q->tail) {
+        q->buf[q->head] = *ev;
+        q->head         = next;
+    } else if (ev->type == INPUT_EVENT_MOUSE_MOVE && q->head != q->tail) {
+        uint16_t last = (q->head == 0) ? (EVENT_BUF_SIZE - 1) : (q->head - 1);
+        struct input_event *prev = &q->buf[last];
+        if (prev->type == INPUT_EVENT_MOUSE_MOVE) {
+            int32_t dx = (int32_t)prev->value + (int32_t)ev->value;
+            int32_t dy = (int32_t)prev->value2 + (int32_t)ev->value2;
+
+            if (dx > 32767) dx = 32767;
+            if (dx < -32768) dx = -32768;
+            if (dy > 32767) dy = 32767;
+            if (dy < -32768) dy = -32768;
+
+            prev->value  = (int16_t)dx;
+            prev->value2 = (int16_t)dy;
+        }
+    }
+
+    pthread_mutex_unlock(&q->lock);
+}
+
 static int input_queue_get(struct input_queue *q, struct input_event *ev) {
     pthread_mutex_lock(&q->lock);
     if (q->head == q->tail) {
@@ -150,7 +196,7 @@ static void emit_mouse_event(uint8_t type, uint16_t code, int16_t value, int16_t
         .timestamp = 0,
         ._reserved = 0,
     };
-    input_queue_put(&g_mouse_queue, &ev);
+    mouse_queue_put(&g_mouse_queue, &ev);
     sys_notification_signal(g_mouse_queue.notif, 1);
 }
 
