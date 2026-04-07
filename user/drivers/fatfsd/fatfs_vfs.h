@@ -20,7 +20,8 @@ struct fatfs_handle {
     } obj;
     char     path[VFS_PATH_MAX];
     uint32_t flags;
-    uint8_t  type; /* 0=file, 1=dir */
+    handle_t file_ep; /* per-file endpoint (文件类型时有效) */
+    uint8_t  type;    /* 0=file, 1=dir */
     uint8_t  in_use;
 };
 
@@ -40,5 +41,16 @@ int fatfs_init(struct fatfs_ctx *ctx);
  * 获取 vfs_operations
  */
 struct vfs_operations *fatfs_get_ops(void);
+
+/**
+ * 处理 file_ep 上的 IO 消息 (IO_READ/IO_WRITE/IO_CLOSE 等)
+ * @return 0 正常, <0 slot 已关闭(需从 ep 表移除)
+ */
+int fatfs_file_ep_dispatch(struct fatfs_ctx *ctx, int slot, struct ipc_message *msg);
+
+/**
+ * 获取指定 slot 的 file_ep handle
+ */
+handle_t fatfs_get_file_ep(struct fatfs_ctx *ctx, int slot);
 
 #endif /* FATFS_VFS_H */

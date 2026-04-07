@@ -7,7 +7,10 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <xnix/abi/io.h>
 #include <xnix/errno.h>
+#include <xnix/ipc.h>
+#include <xnix/syscall.h>
 
 /* 分配节点 */
 static struct ramfs_node *alloc_node(struct ramfs_ctx *ctx) {
@@ -418,44 +421,6 @@ static int ramfs_del(void *vctx, const char *path) {
     return 0;
 }
 
-static int ramfs_truncate(void *vctx, uint32_t handle, uint64_t new_size) {
-    struct ramfs_ctx    *ctx = vctx;
-    struct ramfs_handle *h   = get_handle(ctx, handle);
-    if (!h) {
-        return -EBADF;
-    }
-
-    struct ramfs_node *node = h->node;
-    if (node->type == RAMFS_TYPE_DIR) {
-        return -EISDIR;
-    }
-
-    if (new_size > node->capacity) {
-        uint32_t new_cap = ((uint32_t)new_size + 4095) & ~4095;
-        char    *new_buf = realloc(node->data, new_cap);
-        if (!new_buf) {
-            return -ENOMEM;
-        }
-        if (new_cap > node->capacity) {
-            memset(new_buf + node->capacity, 0, new_cap - node->capacity);
-        }
-        node->data     = new_buf;
-        node->capacity = new_cap;
-    }
-
-    node->size = (uint32_t)new_size;
-    return 0;
-}
-
-static int ramfs_sync(void *vctx, uint32_t handle) {
-    struct ramfs_ctx *ctx = vctx;
-    if (!get_handle(ctx, handle)) {
-        return -EBADF;
-    }
-    /* 内存文件系统不需要同步 */
-    return 0;
-}
-
 static int ramfs_rename(void *vctx, const char *old_path, const char *new_path) {
     struct ramfs_ctx  *ctx  = vctx;
     struct ramfs_node *node = lookup_path(ctx, old_path);
@@ -503,21 +468,33 @@ static int ramfs_rename(void *vctx, const char *old_path, const char *new_path) 
     return 0;
 }
 
-/* 操作接口 */
+/* VFS open wrapper (新签名: 创建 per-file ep) */
+static int ramfs_open_vfs(void *vctx, const char *path, uint32_t flags, handle_t *out_ep) {
+    int h = ramfs_open(vctx, path, flags);
+    if (h < 0) return h;
+
+    struct ramfs_ctx *ctx = vctx;
+    handle_t ep = sys_endpoint_create(NULL);
+    if (ep == HANDLE_INVALID) {
+        ramfs_close(vctx, (uint32_t)h);
+        return -ENOMEM;
+    }
+
+    ctx->handles[h].file_ep = ep;
+    *out_ep = ep;
+    return 0;
+}
+
+/* 操作接口(命名空间 + 目录 close,文件 IO 通过 file_ep 处理) */
 static struct vfs_operations ramfs_ops = {
-    .open     = ramfs_open,
-    .close    = ramfs_close,
-    .read     = ramfs_read,
-    .write    = ramfs_write,
-    .info     = ramfs_info,
-    .finfo    = ramfs_finfo,
-    .opendir  = ramfs_opendir,
-    .readdir  = ramfs_readdir,
-    .mkdir    = ramfs_mkdir,
-    .del      = ramfs_del,
-    .truncate = ramfs_truncate,
-    .sync     = ramfs_sync,
-    .rename   = ramfs_rename,
+    .open    = ramfs_open_vfs,
+    .close   = ramfs_close,
+    .info    = ramfs_info,
+    .opendir = ramfs_opendir,
+    .readdir = ramfs_readdir,
+    .mkdir   = ramfs_mkdir,
+    .del     = ramfs_del,
+    .rename  = ramfs_rename,
 };
 
 void ramfs_init(struct ramfs_ctx *ctx) {
@@ -536,4 +513,59 @@ void ramfs_init(struct ramfs_ctx *ctx) {
 
 struct vfs_operations *ramfs_get_ops(void) {
     return &ramfs_ops;
+}
+
+handle_t ramfs_get_file_ep(struct ramfs_ctx *ctx, int slot) {
+    if (slot < 0 || slot >= RAMFS_MAX_HANDLES || !ctx->handles[slot].in_use) {
+        return HANDLE_INVALID;
+    }
+    return ctx->handles[slot].file_ep;
+}
+
+#define RAMFS_FILE_EP_BUF_SIZE 4096
+static char g_ramfs_file_buf[RAMFS_FILE_EP_BUF_SIZE];
+
+int ramfs_file_ep_dispatch(struct ramfs_ctx *ctx, int slot, struct ipc_message *msg) {
+    uint32_t op = msg->regs.data[0];
+    int      result = -ENOSYS;
+    struct ipc_message reply = {0};
+
+    switch (op) {
+    case IO_READ: {
+        uint32_t offset = msg->regs.data[2];
+        uint32_t size   = msg->regs.data[3];
+        if (size > RAMFS_FILE_EP_BUF_SIZE) size = RAMFS_FILE_EP_BUF_SIZE;
+        result = ramfs_read(ctx, slot, g_ramfs_file_buf, offset, size);
+        if (result > 0) {
+            reply.buffer.data = (uint64_t)(uintptr_t)g_ramfs_file_buf;
+            reply.buffer.size = (uint32_t)result;
+        }
+        break;
+    }
+    case IO_WRITE: {
+        uint32_t offset = msg->regs.data[2];
+        uint32_t size   = msg->regs.data[3];
+        if (msg->buffer.data && msg->buffer.size > 0) {
+            if (size > msg->buffer.size) size = msg->buffer.size;
+            if (size > RAMFS_FILE_EP_BUF_SIZE) size = RAMFS_FILE_EP_BUF_SIZE;
+            memcpy(g_ramfs_file_buf, (const void *)(uintptr_t)msg->buffer.data, size);
+            result = ramfs_write(ctx, slot, g_ramfs_file_buf, offset, size);
+        } else {
+            result = -EINVAL;
+        }
+        break;
+    }
+    case IO_CLOSE: {
+        result = ramfs_close(ctx, slot);
+        reply.regs.data[0] = (uint32_t)result;
+        sys_ipc_reply_to(msg->sender_tid, &reply);
+        return -1; /* slot 已关闭 */
+    }
+    default:
+        break;
+    }
+
+    reply.regs.data[0] = (uint32_t)result;
+    sys_ipc_reply_to(msg->sender_tid, &reply);
+    return 0;
 }

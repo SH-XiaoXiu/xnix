@@ -82,7 +82,7 @@ struct abi_ipc_message {
  *
  * 同时等待多个 Endpoint/Notification,返回第一个就绪的 handle.
  */
-#define ABI_IPC_WAIT_MAX 8
+#define ABI_IPC_WAIT_MAX 64
 
 struct abi_ipc_wait_set {
     handle_t handles[ABI_IPC_WAIT_MAX];

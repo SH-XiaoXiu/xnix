@@ -11,19 +11,18 @@
 #include <xnix/protocol/vfs.h>
 
 struct vfs_operations {
-    int (*open)(void *ctx, const char *path, uint32_t flags);
-    int (*close)(void *ctx, uint32_t handle);
-    int (*read)(void *ctx, uint32_t handle, void *buf, uint32_t offset, uint32_t size);
-    int (*write)(void *ctx, uint32_t handle, const void *buf, uint32_t offset, uint32_t size);
+    /* 命名空间操作(路径层) */
+    int (*open)(void *ctx, const char *path, uint32_t flags, handle_t *out_ep);
+    int (*close)(void *ctx, uint32_t handle);  /* 目录 handle 关闭(文件 close 走 file_ep) */
     int (*info)(void *ctx, const char *path, struct vfs_info *info);
-    int (*finfo)(void *ctx, uint32_t handle, struct vfs_info *info);
     int (*opendir)(void *ctx, const char *path);
     int (*readdir)(void *ctx, uint32_t handle, uint32_t index, struct vfs_dirent *entry);
     int (*mkdir)(void *ctx, const char *path);
     int (*del)(void *ctx, const char *path);
-    int (*truncate)(void *ctx, uint32_t handle, uint64_t new_size);
-    int (*sync)(void *ctx, uint32_t handle);
     int (*rename)(void *ctx, const char *old_path, const char *new_path);
+
+    /* 文件 IO (read/write/finfo/truncate/sync) 已从接口移除,
+       由各 backend 在各自 file_ep 的 event loop 中直接处理 IO_READ/IO_WRITE/IO_CLOSE */
 };
 
 int vfs_dispatch(struct vfs_operations *ops, void *ctx, struct ipc_message *msg);

@@ -9,7 +9,10 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <xnix/abi/io.h>
 #include <xnix/errno.h>
+#include <xnix/protocol/vfs.h>
+#include <xnix/syscall.h>
 
 /* FatFs 错误码转换为 errno */
 static int fresult_to_errno(FRESULT res) {
@@ -110,7 +113,7 @@ static BYTE vfs_flags_to_fatfs(uint32_t vfs_flags) {
 }
 
 /* 打开文件 */
-static int fatfs_open(void *ctx, const char *path, uint32_t flags) {
+static int fatfs_open(void *ctx, const char *path, uint32_t flags, handle_t *out_ep) {
     struct fatfs_ctx *fctx = (struct fatfs_ctx *)ctx;
 
     int h = alloc_handle(fctx);
@@ -127,10 +130,21 @@ static int fatfs_open(void *ctx, const char *path, uint32_t flags) {
         return fresult_to_errno(res);
     }
 
+    /* 创建 per-file endpoint */
+    handle_t ep = sys_endpoint_create(NULL);
+    if (ep == HANDLE_INVALID) {
+        f_close(&handle->obj.file);
+        free_handle(fctx, h);
+        return -ENOMEM;
+    }
+
     strncpy(handle->path, path, sizeof(handle->path) - 1);
-    handle->type  = 0; /* file */
-    handle->flags = flags;
-    return h;
+    handle->type    = 0; /* file */
+    handle->flags   = flags;
+    handle->file_ep = ep;
+
+    *out_ep = ep;
+    return 0;
 }
 
 /* 关闭文件 */
@@ -229,26 +243,6 @@ static int fatfs_info(void *ctx, const char *path, struct vfs_info *info) {
     return 0;
 }
 
-/* 获取文件信息(通过句柄) */
-static int fatfs_finfo(void *ctx, uint32_t h, struct vfs_info *info) {
-    struct fatfs_ctx    *fctx   = (struct fatfs_ctx *)ctx;
-    struct fatfs_handle *handle = get_handle(fctx, h);
-
-    if (!handle) {
-        return -EBADF;
-    }
-
-    if (handle->type == 0) {
-        info->type = VFS_TYPE_FILE;
-        info->size = f_size(&handle->obj.file);
-    } else {
-        info->type = VFS_TYPE_DIR;
-        info->size = 0;
-    }
-
-    return 0;
-}
-
 /* 打开目录 */
 static int fatfs_opendir(void *ctx, const char *path) {
     struct fatfs_ctx *fctx = (struct fatfs_ctx *)ctx;
@@ -320,39 +314,6 @@ static int fatfs_del(void *ctx, const char *path) {
     return fresult_to_errno(res);
 }
 
-/* 截断文件 */
-static int fatfs_truncate(void *ctx, uint32_t h, uint64_t new_size) {
-    struct fatfs_ctx    *fctx   = (struct fatfs_ctx *)ctx;
-    struct fatfs_handle *handle = get_handle(fctx, h);
-
-    if (!handle || handle->type != 0) {
-        return -EBADF;
-    }
-
-    /* 移动到新大小位置 */
-    FRESULT res = f_lseek(&handle->obj.file, (FSIZE_t)new_size);
-    if (res != FR_OK) {
-        return fresult_to_errno(res);
-    }
-
-    /* 截断 */
-    res = f_truncate(&handle->obj.file);
-    return fresult_to_errno(res);
-}
-
-/* 同步文件 */
-static int fatfs_sync(void *ctx, uint32_t h) {
-    struct fatfs_ctx    *fctx   = (struct fatfs_ctx *)ctx;
-    struct fatfs_handle *handle = get_handle(fctx, h);
-
-    if (!handle || handle->type != 0) {
-        return -EBADF;
-    }
-
-    FRESULT res = f_sync(&handle->obj.file);
-    return fresult_to_errno(res);
-}
-
 /* 重命名 */
 static int fatfs_rename(void *ctx, const char *old_path, const char *new_path) {
     (void)ctx;
@@ -361,21 +322,16 @@ static int fatfs_rename(void *ctx, const char *old_path, const char *new_path) {
     return fresult_to_errno(res);
 }
 
-/* VFS 操作表 */
+/* VFS 操作表(命名空间 + 目录 close,文件 IO 通过 file_ep 处理) */
 static struct vfs_operations g_fatfs_ops = {
-    .open     = fatfs_open,
-    .close    = fatfs_close,
-    .read     = fatfs_read,
-    .write    = fatfs_write,
-    .info     = fatfs_info,
-    .finfo    = fatfs_finfo,
-    .opendir  = fatfs_opendir,
-    .readdir  = fatfs_readdir,
-    .mkdir    = fatfs_mkdir,
-    .del      = fatfs_del,
-    .truncate = fatfs_truncate,
-    .sync     = fatfs_sync,
-    .rename   = fatfs_rename,
+    .open    = fatfs_open,
+    .close   = fatfs_close,
+    .info    = fatfs_info,
+    .opendir = fatfs_opendir,
+    .readdir = fatfs_readdir,
+    .mkdir   = fatfs_mkdir,
+    .del     = fatfs_del,
+    .rename  = fatfs_rename,
 };
 
 int fatfs_init(struct fatfs_ctx *ctx) {
@@ -393,4 +349,60 @@ int fatfs_init(struct fatfs_ctx *ctx) {
 
 struct vfs_operations *fatfs_get_ops(void) {
     return &g_fatfs_ops;
+}
+
+handle_t fatfs_get_file_ep(struct fatfs_ctx *ctx, int slot) {
+    if (slot < 0 || slot >= FATFS_MAX_HANDLES || !ctx->handles[slot].in_use) {
+        return HANDLE_INVALID;
+    }
+    return ctx->handles[slot].file_ep;
+}
+
+#define FILE_EP_BUF_SIZE 4096
+static char g_file_ep_buf[FILE_EP_BUF_SIZE];
+
+int fatfs_file_ep_dispatch(struct fatfs_ctx *ctx, int slot, struct ipc_message *msg) {
+    uint32_t op = msg->regs.data[0];
+    int      result = -ENOSYS;
+    struct ipc_message reply = {0};
+
+    switch (op) {
+    case IO_READ: {
+        uint32_t offset = msg->regs.data[2];
+        uint32_t size   = msg->regs.data[3];
+        if (size > FILE_EP_BUF_SIZE) size = FILE_EP_BUF_SIZE;
+        result = fatfs_read(ctx, slot, g_file_ep_buf, offset, size);
+        if (result > 0) {
+            reply.buffer.data = (uint64_t)(uintptr_t)g_file_ep_buf;
+            reply.buffer.size = (uint32_t)result;
+        }
+        break;
+    }
+    case IO_WRITE: {
+        uint32_t offset = msg->regs.data[2];
+        uint32_t size   = msg->regs.data[3];
+        if (msg->buffer.data && msg->buffer.size > 0) {
+            if (size > msg->buffer.size) size = msg->buffer.size;
+            if (size > FILE_EP_BUF_SIZE) size = FILE_EP_BUF_SIZE;
+            memcpy(g_file_ep_buf, (const void *)(uintptr_t)msg->buffer.data, size);
+            result = fatfs_write(ctx, slot, g_file_ep_buf, offset, size);
+        } else {
+            result = -EINVAL;
+        }
+        break;
+    }
+    case IO_CLOSE: {
+        result = fatfs_close(ctx, slot);
+        reply.regs.data[0] = (uint32_t)result;
+        sys_ipc_reply_to(msg->sender_tid, &reply);
+        return -1; /* 通知调用者: slot 已关闭 */
+    }
+    /* TODO: IO_IOCTL for finfo/truncate/sync when needed */
+    default:
+        break;
+    }
+
+    reply.regs.data[0] = (uint32_t)result;
+    sys_ipc_reply_to(msg->sender_tid, &reply);
+    return 0;
 }

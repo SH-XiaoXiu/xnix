@@ -118,7 +118,7 @@ int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply);
 /**
  * 等待多个对象(Endpoint 或 Notification)
  */
-#define IPC_WAIT_MAX 8
+#define IPC_WAIT_MAX 64
 struct ipc_wait_set {
     handle_t handles[IPC_WAIT_MAX];
     uint32_t count;

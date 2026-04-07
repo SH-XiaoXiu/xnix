@@ -7,19 +7,59 @@
 
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 #include <vfs/vfs.h>
-#include <xnix/sys/server.h>
+#include <xnix/abi/ipc.h>
 #include <xnix/syscall.h>
 
 /* 全局 service 指针(用于 handler 访问) */
 static struct ramfsd_service *g_service = NULL;
 
-/* VFS 请求处理回调 */
-static int vfs_handler(struct ipc_message *msg) {
-    if (!g_service) {
-        return -1;
+/* 查找 file_ep 对应的 slot */
+static int find_slot_for_ep(handle_t ep) {
+    for (int i = 0; i < RAMFS_MAX_HANDLES; i++) {
+        if (ramfs_get_file_ep(&g_service->ramfs, i) == ep) return i;
     }
-    return vfs_dispatch(ramfs_get_ops(), &g_service->ramfs, msg);
+    return -1;
+}
+
+/* ramfsd 自定义事件循环: 同时监听 main_ep 和所有 file_ep */
+#define RAMFSD_RECV_BUF_SIZE 4096
+static char g_ramfsd_recv_buf[RAMFSD_RECV_BUF_SIZE];
+
+static void ramfsd_main_loop(handle_t main_ep) {
+    struct ipc_message msg;
+
+    while (1) {
+        /* 构建 wait set: main_ep + 所有活跃 file_ep */
+        struct abi_ipc_wait_set set = {0};
+        set.handles[0] = main_ep;
+        set.count = 1;
+        for (int i = 0; i < RAMFS_MAX_HANDLES; i++) {
+            handle_t ep = ramfs_get_file_ep(&g_service->ramfs, i);
+            if (ep != HANDLE_INVALID && set.count < ABI_IPC_WAIT_MAX) {
+                set.handles[set.count++] = ep;
+            }
+        }
+
+        handle_t ready = sys_ipc_wait_any(&set, 0);
+        if (ready == HANDLE_INVALID) continue;
+
+        memset(&msg, 0, sizeof(msg));
+        msg.buffer.data = (uint64_t)(uintptr_t)g_ramfsd_recv_buf;
+        msg.buffer.size = RAMFSD_RECV_BUF_SIZE;
+
+        if (sys_ipc_receive(ready, &msg, 0) < 0) continue;
+
+        if (ready == main_ep) {
+            vfs_dispatch(ramfs_get_ops(), &g_service->ramfs, &msg);
+        } else {
+            int slot = find_slot_for_ep(ready);
+            if (slot >= 0) {
+                ramfs_file_ep_dispatch(&g_service->ramfs, slot, &msg);
+            }
+        }
+    }
 }
 
 /* ramfsd 服务线程入口 */
@@ -28,14 +68,7 @@ static void *ramfsd_thread(void *arg) {
 
     printf("[ramfsd] service thread started\n");
 
-    struct sys_server srv = {
-        .endpoint = service->endpoint,
-        .handler  = vfs_handler,
-        .name     = "ramfsd",
-    };
-
-    sys_server_init(&srv);
-    sys_server_run(&srv);
+    ramfsd_main_loop(service->endpoint);
 
     printf("[ramfsd] service thread exiting\n");
     return NULL;

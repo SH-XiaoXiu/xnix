@@ -285,7 +285,7 @@ static int devfs_handle_register_tty(struct ipc_message *msg) {
 
 /* ============== VFS 操作实现 ============== */
 
-static int devfs_open(void *ctx, const char *path, uint32_t flags) {
+static int devfs_open(void *ctx, const char *path, uint32_t flags, handle_t *out_ep) {
     (void)ctx;
     (void)flags;
 
@@ -295,149 +295,18 @@ static int devfs_open(void *ctx, const char *path, uint32_t flags) {
     struct dev_entry *ent = devfs_find(path);
     if (!ent) return -1;
 
-    return (int)(ent - g_devfs.entries);
+    /* TTY 和 block 设备都有独立的 blk_ep,直接返回 */
+    if (ent->blk_ep != HANDLE_INVALID) {
+        *out_ep = ent->blk_ep;
+    }
+
+    return 0;
 }
 
 static int devfs_close(void *ctx, uint32_t handle) {
     (void)ctx;
     (void)handle;
     return 0;
-}
-
-static int devfs_read(void *ctx, uint32_t handle, void *buf,
-                      uint32_t offset, uint32_t size) {
-    (void)ctx;
-
-    if (handle >= DEVFS_MAX_FILES || !g_devfs.entries[handle].valid)
-        return -1;
-
-    struct dev_entry *ent = &g_devfs.entries[handle];
-
-    switch (ent->type) {
-    case DEV_TYPE_NULL:
-        return 0;
-
-    case DEV_TYPE_ZERO:
-        memset(buf, 0, size);
-        return (int)size;
-
-    case DEV_TYPE_BLOCK: {
-        if (ent->blk_ep == HANDLE_INVALID) return -1;
-
-        uint32_t ss = ent->sector_size;
-        if (ss == 0) ss = 512;
-
-        uint64_t lba = ent->base_lba + offset / ss;
-        uint32_t sector_offset = offset % ss;
-        uint32_t sectors = (sector_offset + size + ss - 1) / ss;
-
-        /* 越界保护 */
-        uint64_t part_end = ent->base_lba + ent->part_sectors;
-        if (lba >= part_end) return 0;
-        if (lba + sectors > part_end)
-            sectors = (uint32_t)(part_end - lba);
-
-        /* 分批读取 (每次最多 BLK_IO_MAX_SECTORS 扇区) */
-        uint32_t total_copied = 0;
-        char *out = (char *)buf;
-
-        while (sectors > 0 && total_copied < size) {
-            uint32_t batch = sectors;
-            if (batch > BLK_IO_MAX_SECTORS) batch = BLK_IO_MAX_SECTORS;
-
-            int ret = blk_ipc_read(ent->blk_ep, lba, batch, g_blk_buf);
-            if (ret < 0) return (total_copied > 0) ? (int)total_copied : ret;
-
-            /* 从扇区数据中提取请求范围 */
-            uint32_t avail = batch * ss;
-            uint32_t skip = sector_offset;
-            uint32_t copy = avail - skip;
-            if (copy > size - total_copied) copy = size - total_copied;
-
-            memcpy(out + total_copied, g_blk_buf + skip, copy);
-            total_copied += copy;
-
-            lba += batch;
-            sectors -= batch;
-            sector_offset = 0; /* 后续批次从扇区头开始 */
-        }
-
-        return (int)total_copied;
-    }
-
-    default:
-        return -1;
-    }
-}
-
-static int devfs_write(void *ctx, uint32_t handle, const void *buf,
-                       uint32_t offset, uint32_t size) {
-    (void)ctx;
-
-    if (handle >= DEVFS_MAX_FILES || !g_devfs.entries[handle].valid)
-        return -1;
-
-    struct dev_entry *ent = &g_devfs.entries[handle];
-
-    switch (ent->type) {
-    case DEV_TYPE_NULL:
-    case DEV_TYPE_ZERO:
-        return (int)size;
-
-    case DEV_TYPE_BLOCK: {
-        if (ent->blk_ep == HANDLE_INVALID) return -1;
-
-        uint32_t ss = ent->sector_size;
-        if (ss == 0) ss = 512;
-
-        uint64_t lba = ent->base_lba + offset / ss;
-        uint32_t sector_offset = offset % ss;
-        uint32_t sectors = (sector_offset + size + ss - 1) / ss;
-
-        /* 越界保护 */
-        uint64_t part_end = ent->base_lba + ent->part_sectors;
-        if (lba >= part_end) return 0;
-        if (lba + sectors > part_end) {
-            sectors = (uint32_t)(part_end - lba);
-            uint32_t max_bytes = sectors * ss - sector_offset;
-            if (size > max_bytes) size = max_bytes;
-        }
-
-        /* 分批写入 */
-        uint32_t total_written = 0;
-        const char *in = (const char *)buf;
-
-        while (sectors > 0 && total_written < size) {
-            uint32_t batch = sectors;
-            if (batch > BLK_IO_MAX_SECTORS) batch = BLK_IO_MAX_SECTORS;
-
-            /* 非对齐写入需要读-改-写 */
-            if (sector_offset != 0 || (size - total_written) < batch * ss) {
-                int ret = blk_ipc_read(ent->blk_ep, lba, batch, g_blk_buf);
-                if (ret < 0)
-                    return (total_written > 0) ? (int)total_written : ret;
-            }
-
-            uint32_t copy = batch * ss - sector_offset;
-            if (copy > size - total_written) copy = size - total_written;
-            memcpy(g_blk_buf + sector_offset, in + total_written, copy);
-
-            int ret = blk_ipc_write(ent->blk_ep, lba, batch, g_blk_buf);
-            if (ret < 0)
-                return (total_written > 0) ? (int)total_written : ret;
-
-            total_written += copy;
-            lba += batch;
-            sectors -= batch;
-            sector_offset = 0;
-        }
-
-        return (int)total_written;
-    }
-
-    default:
-        return -1;
-    }
 }
 
 static int devfs_info(void *ctx, const char *path, struct vfs_info *info) {
@@ -454,23 +323,6 @@ static int devfs_info(void *ctx, const char *path, struct vfs_info *info) {
     if (!ent) return -1;
 
     info->type = VFS_TYPE_FILE;
-    if (ent->type == DEV_TYPE_BLOCK) {
-        info->size = (uint32_t)(ent->part_sectors * ent->sector_size);
-    } else {
-        info->size = 0;
-    }
-    return 0;
-}
-
-static int devfs_finfo(void *ctx, uint32_t handle, struct vfs_info *info) {
-    (void)ctx;
-
-    if (handle >= DEVFS_MAX_FILES || !g_devfs.entries[handle].valid)
-        return -1;
-
-    struct dev_entry *ent = &g_devfs.entries[handle];
-    info->type = VFS_TYPE_FILE;
-
     if (ent->type == DEV_TYPE_BLOCK) {
         info->size = (uint32_t)(ent->part_sectors * ent->sector_size);
     } else {
@@ -516,37 +368,22 @@ static int devfs_del(void *ctx, const char *path) {
     return -1;
 }
 
-static int devfs_truncate(void *ctx, uint32_t handle, uint64_t new_size) {
-    (void)ctx; (void)handle; (void)new_size;
-    return -1;
-}
-
-static int devfs_sync(void *ctx, uint32_t handle) {
-    (void)ctx; (void)handle;
-    return 0;
-}
-
 static int devfs_rename(void *ctx, const char *old_path,
                         const char *new_path) {
     (void)ctx; (void)old_path; (void)new_path;
     return -1;
 }
 
-/* VFS 操作表 */
+/* VFS 操作表(命名空间 + 目录 close,文件 IO 通过 blk_ep 处理) */
 static struct vfs_operations devfs_ops = {
-    .open     = devfs_open,
-    .close    = devfs_close,
-    .read     = devfs_read,
-    .write    = devfs_write,
-    .info     = devfs_info,
-    .finfo    = devfs_finfo,
-    .opendir  = devfs_opendir,
-    .readdir  = devfs_readdir,
-    .mkdir    = devfs_mkdir,
-    .del      = devfs_del,
-    .truncate = devfs_truncate,
-    .sync     = devfs_sync,
-    .rename   = devfs_rename,
+    .open    = devfs_open,
+    .close   = devfs_close,
+    .info    = devfs_info,
+    .opendir = devfs_opendir,
+    .readdir = devfs_readdir,
+    .mkdir   = devfs_mkdir,
+    .del     = devfs_del,
+    .rename  = devfs_rename,
 };
 
 /* ============== 消息处理 ============== */
@@ -573,21 +410,6 @@ static int devfsd_handler(struct ipc_message *msg) {
         msg->buffer.size = 0;
         msg->handles.count = 0;
         return 0;
-    }
-
-    /* VFS OPEN: 对 TTY 设备返回 endpoint handle 和类型标记 */
-    if (op == UDM_VFS_OPEN) {
-        int ret = vfs_dispatch(&devfs_ops, &g_devfs, msg);
-        int32_t handle = (int32_t)msg->regs.data[1];
-        if (handle >= 0 && (uint32_t)handle < DEVFS_MAX_FILES) {
-            struct dev_entry *ent = &g_devfs.entries[handle];
-            if (ent->valid && ent->type == DEV_TYPE_TTY) {
-                msg->regs.data[2] = DEVFS_TYPE_TTY;
-                msg->handles.handles[0] = ent->blk_ep;
-                msg->handles.count = 1;
-            }
-        }
-        return ret;
     }
 
     return vfs_dispatch(&devfs_ops, &g_devfs, msg);

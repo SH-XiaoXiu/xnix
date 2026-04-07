@@ -37,6 +37,7 @@ struct ramfs_node {
 struct ramfs_handle {
     struct ramfs_node *node;
     uint32_t           flags;
+    handle_t           file_ep; /* per-file endpoint (VFS 路径时有效) */
     bool               in_use;
 };
 
@@ -67,5 +68,15 @@ int ramfs_close(void *vctx, uint32_t handle);
 int ramfs_read(void *vctx, uint32_t handle, void *buf, uint32_t offset, uint32_t size);
 int ramfs_write(void *vctx, uint32_t handle, const void *buf, uint32_t offset, uint32_t size);
 int ramfs_finfo(void *vctx, uint32_t handle, struct vfs_info *info);
+
+/**
+ * 处理 file_ep 上的 IO 消息
+ */
+int ramfs_file_ep_dispatch(struct ramfs_ctx *ctx, int slot, struct ipc_message *msg);
+
+/**
+ * 获取指定 slot 的 file_ep handle
+ */
+handle_t ramfs_get_file_ep(struct ramfs_ctx *ctx, int slot);
 
 #endif /* RAMFS_H */
