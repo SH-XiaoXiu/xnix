@@ -575,6 +575,7 @@ static inline handle_t sys_shm_create(uint32_t size) {
 struct proc_info {
     int32_t  pid;
     int32_t  ppid;
+    int32_t  pgid; /**< 进程组 ID */
     uint8_t  state; /**< 0=RUNNING, 1=ZOMBIE */
     uint8_t  reserved[3];
     uint32_t thread_count;
