@@ -3,8 +3,8 @@
  * @brief ps2 - unified PS/2 keyboard + mouse driver
  */
 
-#include "../ps2/scancode.h"
-#include "../ps2/ps2_mouse.h"
+#include "scancode.h"
+#include "ps2_mouse.h"
 
 #include <xnix/drvframework.h>
 #include <xnix/inputdev.h>

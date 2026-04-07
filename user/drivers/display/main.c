@@ -1,4 +1,4 @@
-#include "../display/vga.h"
+#include "vga.h"
 
 #include <xnix/displaydev.h>
 #include <xnix/drvframework.h>

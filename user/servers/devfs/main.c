@@ -74,9 +74,6 @@ struct devfs_ctx {
 
 static struct devfs_ctx g_devfs;
 
-/* BLK IPC IO 缓冲区 (单次最大 4096 字节 = 8 扇区) */
-static char g_blk_buf[BLK_IO_BUF_SIZE];
-
 /* ============== 辅助函数 ============== */
 
 /* 查找设备文件 */
@@ -96,45 +93,6 @@ static int devfs_alloc_slot(void) {
         if (!g_devfs.entries[i].valid) return i;
     }
     return -1;
-}
-
-/* 通过 BLK IPC 读扇区 */
-static int blk_ipc_read(handle_t ep, uint64_t lba, uint32_t count, void *buf) {
-    struct ipc_message req   = {0};
-    struct ipc_message reply = {0};
-
-    req.regs.data[0] = UDM_BLK_READ;
-    req.regs.data[1] = (uint32_t)lba;
-    req.regs.data[2] = (uint32_t)(lba >> 32);
-    req.regs.data[3] = count;
-
-    reply.buffer.data = (uint64_t)(uintptr_t)buf;
-    reply.buffer.size = count * 512;
-
-    int ret = sys_ipc_call(ep, &req, &reply, 5000);
-    if (ret < 0) return ret;
-
-    int32_t result = (int32_t)reply.regs.data[1];
-    return result;
-}
-
-/* 通过 BLK IPC 写扇区 */
-static int blk_ipc_write(handle_t ep, uint64_t lba, uint32_t count,
-                         const void *buf) {
-    struct ipc_message req   = {0};
-    struct ipc_message reply = {0};
-
-    req.regs.data[0] = UDM_BLK_WRITE;
-    req.regs.data[1] = (uint32_t)lba;
-    req.regs.data[2] = (uint32_t)(lba >> 32);
-    req.regs.data[3] = count;
-    req.buffer.data = (uint64_t)(uintptr_t)buf;
-    req.buffer.size = count * 512;
-
-    int ret = sys_ipc_call(ep, &req, &reply, 5000);
-    if (ret < 0) return ret;
-
-    return (int32_t)reply.regs.data[1];
 }
 
 /* ============== 块设备注册 ============== */
