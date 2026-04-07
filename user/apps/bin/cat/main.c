@@ -5,16 +5,40 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <vfs_client.h>
 #include <xnix/protocol/vfs.h>
 #include <xnix/syscall.h>
 
 #define READ_BUF_SIZE 256
 
-int main(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: cat <file>\n");
+static int cat_fd(int fd, const char *name, int is_vfs) {
+    char buf[READ_BUF_SIZE];
+    int  n;
+
+    if (is_vfs) {
+        while ((n = vfs_read(fd, buf, sizeof(buf))) > 0) {
+            for (int i = 0; i < n; i++)
+                putchar(buf[i]);
+        }
+    } else {
+        while ((n = (int)read(fd, buf, sizeof(buf))) > 0) {
+            for (int i = 0; i < n; i++)
+                putchar(buf[i]);
+        }
+    }
+
+    if (n < 0) {
+        printf("cat: %s: %s\n", name, strerror(is_vfs ? -n : errno));
         return 1;
+    }
+    return 0;
+}
+
+int main(int argc, char **argv) {
+    /* 无参数: 从 stdin 读 */
+    if (argc < 2) {
+        return cat_fd(STDIN_FILENO, "<stdin>", 0);
     }
 
     const char *path = argv[1];
@@ -25,21 +49,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    char buf[READ_BUF_SIZE];
-    int  n;
-    while ((n = vfs_read(fd, buf, sizeof(buf))) > 0) {
-        /* 输出读取的字节 */
-        for (int i = 0; i < n; i++) {
-            putchar(buf[i]);
-        }
-    }
-
-    if (n < 0) {
-        printf("cat: read error: %s\n", strerror(-n));
-        vfs_close(fd);
-        return 1;
-    }
-
+    int ret = cat_fd(fd, path, 1);
     vfs_close(fd);
-    return 0;
+    return ret;
 }

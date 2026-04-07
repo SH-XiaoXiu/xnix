@@ -308,36 +308,37 @@ static void run_external(const char *path, int argc, char **argv, int background
     proc_init(&b, path);
     proc_inherit_named(&b);
 
-    /* 根据重定向情况决定 stdio handle */
+    int out_fd = -1;
+    int in_fd  = -1;
+
+    /* stdout 重定向 */
     if (redir->stdout_file) {
         int flags = O_WRONLY | O_CREAT;
         flags |= redir->stdout_append ? O_APPEND : O_TRUNC;
-        /* 当前 libc 的 open 还是简化两参接口，mode 语义尚未下沉。 */
-        int out_fd = open(redir->stdout_file, flags);
+        out_fd = open(redir->stdout_file, flags);
         if (out_fd < 0) {
-            printf("%s: %s\n", redir->stdout_file, strerror(-out_fd));
+            printf("%s: %s\n", redir->stdout_file, strerror(errno));
             return;
         }
-        /* 子进程 stdout 指向文件的 VFS endpoint
-         * 但 VFS fd 没有内核 handle(handle=INVALID),
-         * 无法直接传递. 改为传递 tty handle 然后在子进程中重定向.
-         * 实际上, 对于 VFS 文件重定向, 我们需要不同的策略:
-         * 不传递 stdout handle,让子进程继承后由 libc 初始化.
-         * 这里先关闭 out_fd, 使用常规 stdio. */
-        /* TODO: 完善 VFS 文件重定向(需要子进程侧支持) */
-        close(out_fd);
-        /* 暂时: 走常规继承 */
-        proc_add_handle(&b, fd_get_handle(STDOUT_FILENO), HANDLE_STDIO_STDOUT);
+        proc_add_handle(&b, fd_get_handle(out_fd), HANDLE_STDIO_STDOUT);
     } else {
         proc_add_handle(&b, fd_get_handle(STDOUT_FILENO), HANDLE_STDIO_STDOUT);
     }
 
     proc_add_handle(&b, fd_get_handle(STDERR_FILENO), HANDLE_STDIO_STDERR);
 
+    /* stdin 重定向 */
     if (redir->stdin_file) {
-        /* TODO: stdin 文件重定向 */
+        in_fd = open(redir->stdin_file, O_RDONLY);
+        if (in_fd < 0) {
+            printf("%s: %s\n", redir->stdin_file, strerror(errno));
+            if (out_fd >= 0) close(out_fd);
+            return;
+        }
+        proc_add_handle(&b, fd_get_handle(in_fd), HANDLE_STDIO_STDIN);
+    } else {
+        proc_add_handle(&b, fd_get_handle(STDIN_FILENO), HANDLE_STDIO_STDIN);
     }
-    proc_add_handle(&b, fd_get_handle(STDIN_FILENO), HANDLE_STDIO_STDIN);
 
     for (int i = 0; i < argc; i++) {
         proc_add_arg(&b, argv[i]);
@@ -346,6 +347,8 @@ static void run_external(const char *path, int argc, char **argv, int background
     int pid = proc_spawn(&b);
     if (pid < 0) {
         printf("%s: %s\n", argv[0], strerror(-pid));
+        if (out_fd >= 0) close(out_fd);
+        if (in_fd >= 0)  close(in_fd);
         return;
     }
 
@@ -355,6 +358,7 @@ static void run_external(const char *path, int argc, char **argv, int background
         if (job_id > 0) {
             printf("[%d] %d\n", job_id, pid);
         }
+        /* 后台进程: 不等子进程,但也不提前 close 重定向 fd */
         return;
     }
 
@@ -364,6 +368,10 @@ static void run_external(const char *path, int argc, char **argv, int background
     waitpid(pid, &status, 0);
 
     shell_set_foreground(0);
+
+    /* 子进程退出后再 close 重定向 fd(确保 fatfsd 不提前关闭文件) */
+    if (out_fd >= 0) close(out_fd);
+    if (in_fd >= 0)  close(in_fd);
 
     /* 进程被 Ctrl+Z 暂停 → 标记为 STOPPED */
     if (status == -SIGTSTP || status == -SIGSTOP) {
@@ -531,7 +539,44 @@ static void execute_command(char *line) {
     const struct builtin_cmd *cmd = find_builtin(argv[0]);
     if (cmd) {
         if (cmd->handler) {
+            /* 内建命令支持重定向: 临时替换 stdout/stdin */
+            int saved_stdout = -1;
+            int saved_stdin  = -1;
+            int out_fd = -1;
+            int in_fd  = -1;
+
+            if (redir.stdout_file) {
+                int flags = O_WRONLY | O_CREAT;
+                flags |= redir.stdout_append ? O_APPEND : O_TRUNC;
+                out_fd = open(redir.stdout_file, flags);
+                if (out_fd < 0) {
+                    printf("%s: %s\n", redir.stdout_file, strerror(errno));
+                    return;
+                }
+                saved_stdout = dup(STDOUT_FILENO);
+                dup2(out_fd, STDOUT_FILENO);
+            }
+            if (redir.stdin_file) {
+                in_fd = open(redir.stdin_file, O_RDONLY);
+                if (in_fd >= 0) {
+                    saved_stdin = dup(STDIN_FILENO);
+                    dup2(in_fd, STDIN_FILENO);
+                }
+            }
+
             cmd->handler(argc, argv);
+
+            /* 恢复 stdio */
+            if (saved_stdout >= 0) {
+                dup2(saved_stdout, STDOUT_FILENO);
+                close(saved_stdout);
+            }
+            if (saved_stdin >= 0) {
+                dup2(saved_stdin, STDIN_FILENO);
+                close(saved_stdin);
+            }
+            if (out_fd >= 0) close(out_fd);
+            if (in_fd >= 0)  close(in_fd);
         } else if (strcmp(cmd->name, "exit") == 0) {
             printf("Use Ctrl+D or close terminal to exit.\n");
         }

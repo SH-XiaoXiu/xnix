@@ -108,20 +108,15 @@ int vfs_open(const char *path, uint32_t flags) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
+        fd_free(fd);
         return ret;
     }
 
-    int32_t result = (int32_t)reply.regs.data[1];
+    /* 后端结果: data[0] 为 0(成功)或 <0(错误码) */
+    int32_t result = (int32_t)reply.regs.data[0];
     if (result < 0) {
+        fd_free(fd);
         return result;
-    }
-
-    /* 设备类型检查: devfsd 对 TTY 设备返回 DEVFS_TYPE_TTY + endpoint handle */
-    uint32_t dev_type = reply.regs.data[2];
-    if (dev_type == DEVFS_TYPE_TTY && reply.handles.count > 0) {
-        fd_install(fd, reply.handles.handles[0], 0, 0,
-                   FD_FLAG_READ | FD_FLAG_WRITE);
-        return fd;
     }
 
     handle_t fs_ep = HANDLE_INVALID;
@@ -130,8 +125,9 @@ int vfs_open(const char *path, uint32_t flags) {
     }
 
     struct fd_entry *ent =
-        fd_install(fd, fs_ep, (uint32_t)result, 0, FD_FLAG_READ | FD_FLAG_WRITE);
+        fd_install(fd, fs_ep, 0, 0, FD_FLAG_READ | FD_FLAG_WRITE);
     if (!ent) {
+        fd_free(fd);
         return -EMFILE;
     }
 
