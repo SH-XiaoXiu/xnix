@@ -43,7 +43,7 @@ static void drain_irq_bytes(uint8_t irq) {
 static void input_queue_init(struct input_queue *q) {
     memset(q, 0, sizeof(*q));
     pthread_mutex_init(&q->lock, NULL);
-    q->notif = sys_notification_create();
+    q->notif = sys_event_create();
 }
 
 static void input_queue_put(struct input_queue *q, const struct input_event *ev) {
@@ -131,7 +131,7 @@ static int queue_read_event(struct input_queue *q, struct input_event *ev) {
         if (input_queue_get(q, ev) == 0) {
             return 0;
         }
-        sys_notification_wait(q->notif);
+        sys_event_wait(q->notif);
     }
 }
 
@@ -190,7 +190,7 @@ static void *keyboard_thread(void *arg) {
         }
 
         input_queue_put(&g_kbd_queue, &ev);
-        sys_notification_signal(g_kbd_queue.notif, 1);
+        sys_event_signal(g_kbd_queue.notif, 1);
     }
 
     return NULL;
@@ -207,7 +207,7 @@ static void emit_mouse_event(uint8_t type, uint16_t code, int16_t value, int16_t
         ._reserved = 0,
     };
     mouse_queue_put(&g_mouse_queue, &ev);
-    sys_notification_signal(g_mouse_queue.notif, 1);
+    sys_event_signal(g_mouse_queue.notif, 1);
 }
 
 static void *mouse_thread(void *arg) {

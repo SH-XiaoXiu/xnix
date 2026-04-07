@@ -112,6 +112,8 @@ int handle_acquire(struct process *proc, handle_t h, handle_type_t expected_type
 
 void handle_object_get(handle_type_t type, void *object);
 void handle_object_put(handle_type_t type, void *object);
+void handle_object_open(handle_type_t type, void *object);
+void handle_object_destroy(handle_type_t type, void *object);
 
 /* Handle 解析函数 */
 

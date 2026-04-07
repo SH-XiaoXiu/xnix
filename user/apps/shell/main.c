@@ -7,6 +7,7 @@
 
 #include <xnix/protocol/tty.h>
 #include <xnix/protocol/vfs.h>
+#include <xnix/abi/io.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -20,6 +21,7 @@
 #include <xnix/env.h>
 #include <xnix/fd.h>
 #include <xnix/ipc.h>
+#include <xnix/perm_api.h>
 #include <xnix/proc.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
@@ -27,6 +29,7 @@
 
 #define MAX_LINE 256
 #define MAX_ARGS 16
+#define MAX_PIPE_STAGES 8
 
 static handle_t g_vfs_ep = HANDLE_INVALID;
 
@@ -305,7 +308,7 @@ static void run_external(const char *path, int argc, char **argv, int background
     }
 
     struct proc_builder b;
-    proc_init(&b, path);
+    proc_new(&b, path);
     proc_inherit_named(&b);
 
     int out_fd = -1;
@@ -397,121 +400,200 @@ static void run_external(const char *path, int argc, char **argv, int background
     }
 }
 
-/**
- * 执行管道: cmd1 | cmd2
- */
-static void run_pipeline(char *left_line, char *right_line) {
-    int pfd[2];
-    if (pipe(pfd) < 0) {
-        printf("pipe: failed to create pipe\n");
-        return;
+static char *trim_spaces(char *s) {
+    while (*s == ' ' || *s == '\t') {
+        s++;
     }
 
-    /* 解析左右命令 */
-    char                *left_argv[MAX_ARGS];
-    char                *right_argv[MAX_ARGS];
-    struct redirect_info left_redir, right_redir;
+    size_t len = strlen(s);
+    while (len > 0 && (s[len - 1] == ' ' || s[len - 1] == '\t')) {
+        s[--len] = '\0';
+    }
+    return s;
+}
 
-    int left_argc  = parse_cmdline(left_line, left_argv, MAX_ARGS, &left_redir);
-    int right_argc = parse_cmdline(right_line, right_argv, MAX_ARGS, &right_redir);
+static int split_pipeline(char *line, char **stages, int max_stages) {
+    int count = 0;
+    char *cur = line;
 
-    if (left_argc == 0 || right_argc == 0) {
-        close(pfd[0]);
-        close(pfd[1]);
+    while (cur && *cur) {
+        if (count >= max_stages) {
+            return -1;
+        }
+
+        char *sep = strchr(cur, '|');
+        if (sep) {
+            *sep = '\0';
+        }
+
+        cur = trim_spaces(cur);
+        if (*cur == '\0') {
+            return -1;
+        }
+        stages[count++] = cur;
+
+        if (!sep) {
+            break;
+        }
+        cur = sep + 1;
+    }
+
+    return count;
+}
+
+static void run_pipeline(char *line) {
+    char *stages[MAX_PIPE_STAGES];
+    char *argvs[MAX_PIPE_STAGES][MAX_ARGS];
+    struct redirect_info redirs[MAX_PIPE_STAGES];
+    char paths[MAX_PIPE_STAGES][256];
+    int  pids[MAX_PIPE_STAGES];
+    int  pipe_fds[MAX_PIPE_STAGES - 1][2]; /* [i][0]=read, [i][1]=write */
+
+    int stage_count = split_pipeline(line, stages, MAX_PIPE_STAGES);
+    if (stage_count < 2) {
         printf("Invalid pipe syntax\n");
         return;
     }
 
-    /* 解析左命令的路径 */
-    char left_path[256], right_path[256];
-    if (!path_find(left_argv[0], left_path, sizeof(left_path))) {
-        close(pfd[0]);
-        close(pfd[1]);
-        printf("Command not found: %s\n", left_argv[0]);
-        return;
-    }
-    if (!path_find(right_argv[0], right_path, sizeof(right_path))) {
-        close(pfd[0]);
-        close(pfd[1]);
-        printf("Command not found: %s\n", right_argv[0]);
-        return;
+    memset(pids, 0, sizeof(pids));
+    memset(pipe_fds, -1, sizeof(pipe_fds));
+
+    /* 解析所有 stage */
+    for (int i = 0; i < stage_count; i++) {
+        int argc = parse_cmdline(stages[i], argvs[i], MAX_ARGS, &redirs[i]);
+        if (argc == 0) {
+            printf("Invalid pipe syntax\n");
+            return;
+        }
+        if (!path_find(argvs[i][0], paths[i], sizeof(paths[i]))) {
+            printf("Command not found: %s\n", argvs[i][0]);
+            return;
+        }
+        if (i > 0 && redirs[i].stdin_file) {
+            printf("pipe: stdin redirection is only allowed on the first stage\n");
+            return;
+        }
+        if (i < stage_count - 1 && redirs[i].stdout_file) {
+            printf("pipe: stdout redirection is only allowed on the last stage\n");
+            return;
+        }
     }
 
-    /* 启动左命令: stdout → pipe 写端 */
-    struct proc_builder lb;
-    proc_init(&lb, left_path);
-    proc_inherit_named(&lb);
-    proc_add_handle(&lb, fd_get_handle(STDIN_FILENO), HANDLE_STDIO_STDIN);
-    proc_add_handle(&lb, fd_get_handle(pfd[1]), HANDLE_STDIO_STDOUT);
-    proc_add_handle(&lb, fd_get_handle(STDERR_FILENO), HANDLE_STDIO_STDERR);
-    for (int i = 0; i < left_argc; i++) {
-        proc_add_arg(&lb, left_argv[i]);
-    }
-    int left_pid = proc_spawn(&lb);
-    if (left_pid > 0) {
-        vfs_copy_cwd_to_child(left_pid);
+    /* 创建管道 */
+    int pipe_count = stage_count - 1;
+    for (int i = 0; i < pipe_count; i++) {
+        if (pipe(pipe_fds[i]) < 0) {
+            printf("pipe: failed to create pipe: %s\n", strerror(errno));
+            for (int j = 0; j < i; j++) {
+                close(pipe_fds[j][0]);
+                close(pipe_fds[j][1]);
+            }
+            return;
+        }
     }
 
-    /* 启动右命令: stdin → pipe 读端 */
-    struct proc_builder rb;
-    proc_init(&rb, right_path);
-    proc_inherit_named(&rb);
-    proc_add_handle(&rb, fd_get_handle(pfd[0]), HANDLE_STDIO_STDIN);
-    proc_add_handle(&rb, fd_get_handle(STDOUT_FILENO), HANDLE_STDIO_STDOUT);
-    proc_add_handle(&rb, fd_get_handle(STDERR_FILENO), HANDLE_STDIO_STDERR);
-    for (int i = 0; i < right_argc; i++) {
-        proc_add_arg(&rb, right_argv[i]);
-    }
-    int right_pid = proc_spawn(&rb);
-    if (right_pid > 0) {
-        vfs_copy_cwd_to_child(right_pid);
+    /* 启动各 stage */
+    for (int i = 0; i < stage_count; i++) {
+        struct proc_builder b;
+        proc_new(&b, paths[i]);
+        proc_inherit_named(&b);
+
+        int in_fd  = -1;
+        int out_fd = -1;
+        handle_t stdin_handle;
+        handle_t stdout_handle;
+
+        /* stdin */
+        if (i == 0 && redirs[i].stdin_file) {
+            in_fd = open(redirs[i].stdin_file, O_RDONLY);
+            if (in_fd < 0) {
+                printf("%s: %s\n", redirs[i].stdin_file, strerror(errno));
+                goto cleanup;
+            }
+            stdin_handle = fd_get_handle(in_fd);
+        } else if (i > 0) {
+            stdin_handle = fd_get_handle(pipe_fds[i - 1][0]);
+        } else {
+            stdin_handle = fd_get_handle(STDIN_FILENO);
+        }
+
+        /* stdout */
+        if (i == stage_count - 1 && redirs[i].stdout_file) {
+            int flags = O_WRONLY | O_CREAT;
+            flags |= redirs[i].stdout_append ? O_APPEND : O_TRUNC;
+            out_fd = open(redirs[i].stdout_file, flags);
+            if (out_fd < 0) {
+                if (in_fd >= 0) close(in_fd);
+                printf("%s: %s\n", redirs[i].stdout_file, strerror(errno));
+                goto cleanup;
+            }
+            stdout_handle = fd_get_handle(out_fd);
+        } else if (i < stage_count - 1) {
+            stdout_handle = fd_get_handle(pipe_fds[i][1]);
+        } else {
+            stdout_handle = fd_get_handle(STDOUT_FILENO);
+        }
+
+        proc_add_handle(&b, stdin_handle, HANDLE_STDIO_STDIN);
+        proc_add_handle(&b, stdout_handle, HANDLE_STDIO_STDOUT);
+        proc_add_handle(&b, fd_get_handle(STDERR_FILENO), HANDLE_STDIO_STDERR);
+
+        for (int j = 0; argvs[i][j]; j++) {
+            proc_add_arg(&b, argvs[i][j]);
+        }
+
+        pids[i] = proc_spawn(&b);
+        if (in_fd >= 0) close(in_fd);
+        if (out_fd >= 0) close(out_fd);
+
+        if (pids[i] < 0) {
+            printf("%s: %s\n", argvs[i][0], strerror(-pids[i]));
+            goto cleanup;
+        }
+        vfs_copy_cwd_to_child(pids[i]);
     }
 
-    /* 父进程关闭 pipe 两端 */
-    close(pfd[0]);
-    close(pfd[1]);
-
-    if (left_pid < 0) {
-        printf("%s: %s\n", left_argv[0], strerror(-left_pid));
-    }
-    if (right_pid < 0) {
-        printf("%s: %s\n", right_argv[0], strerror(-right_pid));
+    /* 关闭 shell 侧的 pipe fd — 子进程已继承 handle */
+    for (int i = 0; i < pipe_count; i++) {
+        close(pipe_fds[i][0]);
+        close(pipe_fds[i][1]);
+        pipe_fds[i][0] = -1;
+        pipe_fds[i][1] = -1;
     }
 
-    /* 等待两个子进程 */
-    if (left_pid > 0) {
-        shell_set_foreground(left_pid);
-        int status;
-        waitpid(left_pid, &status, 0);
-    }
-    if (right_pid > 0) {
-        shell_set_foreground(right_pid);
-        int status;
-        waitpid(right_pid, &status, 0);
+    shell_set_foreground(pids[stage_count - 1]);
+
+    /* 等待所有 stage */
+    for (int i = 0; i < stage_count; i++) {
+        if (pids[i] > 0) {
+            int status;
+            waitpid(pids[i], &status, 0);
+        }
     }
 
     shell_set_foreground(0);
-}
+    return;
 
-/**
- * 检查命令行中是否有管道符号 '|'
- * @return 管道位置指针, NULL=无管道
- */
-static char *find_pipe(char *line) {
-    for (char *p = line; *p; p++) {
-        if (*p == '|') {
-            return p;
+cleanup:
+    /* 关闭所有管道 fd */
+    for (int i = 0; i < pipe_count; i++) {
+        if (pipe_fds[i][0] >= 0) close(pipe_fds[i][0]);
+        if (pipe_fds[i][1] >= 0) close(pipe_fds[i][1]);
+    }
+    /* 等待已启动的进程 */
+    for (int i = 0; i < stage_count; i++) {
+        if (pids[i] > 0) {
+            int status;
+            waitpid(pids[i], &status, 0);
         }
     }
-    return NULL;
+    shell_set_foreground(0);
 }
 
 static void execute_command(char *line) {
     /* 先检查管道 */
-    char *pipe_pos = find_pipe(line);
-    if (pipe_pos) {
-        *pipe_pos = '\0';
-        run_pipeline(line, pipe_pos + 1);
+    if (strchr(line, '|') != NULL) {
+        run_pipeline(line);
         return;
     }
 

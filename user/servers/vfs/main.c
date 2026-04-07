@@ -735,11 +735,17 @@ static int vfsd_path_handler(struct ipc_message *msg) {
             vfsd_resolve_path(pid, rel_path, abs_path, sizeof(abs_path));
 
             int ret = vfsd_opendir(msg, abs_path);
-            if (ret == 0 && msg->handles.count == 0) {
+            if (ret < 0) {
+                msg->regs.data[0] = (uint32_t)ret;
+                msg->regs.data[1] = (uint32_t)ret;
+                msg->handles.count = 0;
+                return 0;
+            }
+            if (msg->handles.count == 0) {
                 msg->handles.handles[0] = g_vfs_dir_ep;
                 msg->handles.count      = 1;
             }
-            return ret;
+            return 0;
         }
         msg->regs.data[0] = op;
         msg->regs.data[1] = (uint32_t)-22;
@@ -756,13 +762,13 @@ static int vfsd_path_handler(struct ipc_message *msg) {
 
         int ret = vfsd_forward(msg, pid, path);
         if (ret < 0) {
-            msg->regs.data[0] = op;
+            msg->regs.data[0] = (uint32_t)ret;
             msg->regs.data[1] = (uint32_t)ret;
         }
         return 0;
     }
 
-    msg->regs.data[0] = op;
+    msg->regs.data[0] = (uint32_t)-22;
     msg->regs.data[1] = (uint32_t)-22;
     return 0;
 }
@@ -848,7 +854,7 @@ int main(void) {
         wait_set.handles[1] = g_vfs_dir_ep;
         wait_set.count      = 2;
 
-        handle_t ready = sys_ipc_wait_any(&wait_set, 0);
+        handle_t ready = sys_ipc_wait_any(&wait_set, 10000);
         if (ready == HANDLE_INVALID) {
             continue;
         }

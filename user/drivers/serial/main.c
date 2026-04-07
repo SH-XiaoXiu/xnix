@@ -125,7 +125,7 @@ static int com_read(struct char_device *dev, void *buf, size_t max) {
 
         if (count == 0) {
             /* 等待 IRQ 线程唤醒 */
-            sys_notification_wait(ctx->rx_notif);
+            sys_event_wait(ctx->rx_notif);
         }
     }
 
@@ -175,7 +175,7 @@ static void serial_consume_port(struct port_context *ctx) {
         rx_put(ctx, (char)c);
     }
     pthread_mutex_unlock(&ctx->rx_lock);
-    sys_notification_signal(ctx->rx_notif, 1);
+    sys_event_signal(ctx->rx_notif, 1);
 }
 
 static void *irq_thread(void *arg) {
@@ -189,7 +189,7 @@ static void *irq_thread(void *arg) {
     }
 
     while (1) {
-        uint32_t bits = sys_notification_wait(irq_ctx->notif);
+        uint32_t bits = sys_event_wait(irq_ctx->notif);
         if (bits == 0) {
             msleep(10);
             continue;
@@ -242,7 +242,7 @@ int main(void) {
             continue;
         }
 
-        g_ports[i].rx_notif = sys_notification_create();
+        g_ports[i].rx_notif = sys_event_create();
 
         /* 写 endpoint: COM1 使用 init 注入的 "serial" */
         if (i == 0) {
@@ -302,7 +302,7 @@ int main(void) {
         if (ctx_index < 0) {
             ctx_index = irq_ctx_count++;
             irq_ctxs[ctx_index].irq = g_ports[i].irq;
-            irq_ctxs[ctx_index].notif = sys_notification_create();
+            irq_ctxs[ctx_index].notif = sys_event_create();
         }
         irq_ctxs[ctx_index].port_indices[irq_ctxs[ctx_index].port_count++] = i;
     }

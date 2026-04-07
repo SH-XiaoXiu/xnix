@@ -26,3 +26,8 @@ void __libc_init(int argc, char **argv) {
     fd_table_init();
     _libc_stdio_init();
 }
+
+void __libc_fini(void) {
+    _libc_stdio_fini();
+    fd_table_fini();
+}

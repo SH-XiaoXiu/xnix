@@ -116,7 +116,7 @@ int ipc_reply(struct ipc_message *reply);
 int ipc_reply_to(tid_t sender_tid, struct ipc_message *reply);
 
 /**
- * 等待多个对象(Endpoint 或 Notification)
+ * 等待多个对象(Endpoint 或 Event)
  */
 #define IPC_WAIT_MAX 64
 struct ipc_wait_set {
@@ -134,27 +134,27 @@ struct ipc_wait_set {
 handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t timeout_ms);
 
 /**
- * 创建 Notification
+ * 创建 Event
  *
- * @return Notification 句柄
+ * @return Event 句柄
  */
-handle_t notification_create(void);
+handle_t event_create(void);
 
 /**
  * 发送信号(非阻塞,设置 bit)
  *
- * @param notif_handle Notification 句柄
+ * @param event_handle Event 句柄
  * @param bits         要设置的位
  */
-void notification_signal(handle_t notif_handle, uint32_t bits);
+void event_signal(handle_t event_handle, uint32_t bits);
 
 /**
  * 等待信号(阻塞直到有信号)
  *
- * @param notif_handle Notification 句柄
+ * @param event_handle Event 句柄
  * @return 收到的位
  */
-uint32_t notification_wait(handle_t notif_handle);
+uint32_t event_wait(handle_t event_handle);
 
 /*
  * 内核接口

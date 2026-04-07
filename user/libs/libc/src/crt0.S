@@ -4,6 +4,7 @@
 .global _start
 .extern main
 .extern __libc_init
+.extern __libc_fini
 
 _start:
     movl (%esp), %eax
@@ -22,6 +23,9 @@ _start:
     addl $8, %esp
 
     movl %eax, %ebx
+    pushl %ebx
+    call __libc_fini
+    popl %ebx
     movl $SYS_EXIT, %eax
     int $0x80
 

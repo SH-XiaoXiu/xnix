@@ -45,7 +45,9 @@ void sched_cleanup_zombie(void) {
         z->next = NULL;
 
         if (z->owner) {
-            process_remove_thread(z->owner, z);
+            struct process *owner = z->owner;
+            process_remove_thread(owner, z);
+            process_unref(owner);
         }
 
         tid_free(z->tid);

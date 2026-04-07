@@ -38,7 +38,7 @@ void handle_table_destroy(struct handle_table *table) {
     /* 释放所有 handle */
     for (uint32_t i = 0; i < table->capacity; i++) {
         if (table->entries[i].type != HANDLE_NONE) {
-            handle_object_put(table->entries[i].type, table->entries[i].object);
+            handle_object_destroy(table->entries[i].type, table->entries[i].object);
             memset(&table->entries[i], 0, sizeof(struct handle_entry));
         }
     }

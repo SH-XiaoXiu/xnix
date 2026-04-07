@@ -341,6 +341,13 @@ void process_add_thread(struct process *proc, struct thread *t) {
         return;
     }
 
+    /*
+     * 每个存活/待清理线程都持有一份进程引用,避免父进程 waitpid 提前
+     * process_unref() 后, zombie 线程清理路径再通过 z->owner 访问已释放
+     * 的 process 对象.
+     */
+    process_ref(proc);
+
     mutex_lock(proc->thread_lock);
 
     t->proc_next  = proc->threads;

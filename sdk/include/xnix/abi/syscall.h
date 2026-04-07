@@ -27,6 +27,11 @@
 #define SYS_IPC_REPLY_TO    105 /* 延迟回复: ebx=sender_tid, ecx=msg* */
 #define SYS_IPC_WAIT_ANY    106 /* 等待多个对象: ebx=wait_set*, ecx=timeout_ms */
 
+/* Pipe (110-119) — 字节流通道 */
+#define SYS_PIPE_CREATE     110 /* 创建管道: ebx=read_h*, ecx=write_h* */
+#define SYS_PIPE_READ       111 /* 读管道: ebx=handle, ecx=buf, edx=size */
+#define SYS_PIPE_WRITE      112 /* 写管道: ebx=handle, ecx=buf, edx=size */
+
 /* 内存管理 (200-219) */
 #define SYS_SBRK 200 /* 堆管理: ebx=increment, 返回旧堆顶或 -1 */
 #define SYS_MMAP_PHYS \
@@ -86,9 +91,9 @@
 #define SYS_MUTEX_DESTROY 703 /* 销毁锁: ebx=handle */
 
 /* 通知/信号 (800-819) */
-#define SYS_NOTIFICATION_CREATE 800 /* 创建通知, 返回 handle */
-#define SYS_NOTIFICATION_WAIT   801 /* 等待通知: ebx=handle */
-#define SYS_NOTIFICATION_SIGNAL 802 /* 发送通知: ebx=handle, ecx=bits */
+#define SYS_EVENT_CREATE 800 /* 创建事件, 返回 handle */
+#define SYS_EVENT_WAIT   801 /* 等待事件: ebx=handle */
+#define SYS_EVENT_SIGNAL 802 /* 发送事件: ebx=handle, ecx=bits */
 
 /* 内核日志 (850-859) */
 #define SYS_KMSG_READ 850 /* 读取内核日志: ebx=seq_ptr, ecx=buf, edx=size */

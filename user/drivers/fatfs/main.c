@@ -233,18 +233,14 @@ static int blk_handler(struct ipc_message *msg) {
     }
 }
 
-/* 查找 file_ep 对应的 slot */
-static int find_slot_for_ep(handle_t ep) {
-    for (int i = 0; i < FATFS_MAX_HANDLES; i++) {
-        if (fatfs_get_file_ep(&g_fatfs, i) == ep) return i;
-    }
-    return -1;
-}
-
 /* 组合 handler: VFS + BLK (主 ep 上的消息) */
 static int combined_handler(struct ipc_message *msg) {
     uint32_t op = UDM_MSG_OPCODE(msg);
     /* BLK 协议: 100-199, IO 协议: 0x100+ (256+), VFS 协议: 0-99 */
+    if (op >= IO_READ && op <= IO_CLOSE) {
+        uint32_t slot = msg->regs.data[1];
+        return fatfs_file_ep_dispatch(&g_fatfs, (int)slot, msg);
+    }
     if (op >= 100 && op < 0x100) return blk_handler(msg);
     return vfs_dispatch(fatfs_get_ops(), &g_fatfs, msg);
 }
@@ -287,7 +283,7 @@ static void register_blkdev_to_devfsd(handle_t self_ep) {
     sys_ipc_call(devfs, &reg, &reply, 5000);
 }
 
-/* fatfs 自定义事件循环: 同时监听 main_ep 和所有 file_ep */
+/* fatfs 主事件循环: 统一处理命名空间和文件会话 IO。 */
 #define FATFS_RECV_BUF_SIZE 4096
 static char g_fatfs_recv_buf[FATFS_RECV_BUF_SIZE];
 
@@ -295,34 +291,15 @@ static void fatfs_main_loop(handle_t main_ep) {
     struct ipc_message msg;
 
     while (1) {
-        /* 构建 wait set: main_ep + 所有活跃 file_ep */
-        struct abi_ipc_wait_set set = {0};
-        set.handles[0] = main_ep;
-        set.count = 1;
-        for (int i = 0; i < FATFS_MAX_HANDLES; i++) {
-            handle_t ep = fatfs_get_file_ep(&g_fatfs, i);
-            if (ep != HANDLE_INVALID && set.count < ABI_IPC_WAIT_MAX) {
-                set.handles[set.count++] = ep;
-            }
-        }
-
-        handle_t ready = sys_ipc_wait_any(&set, 0);
-        if (ready == HANDLE_INVALID) continue;
-
         memset(&msg, 0, sizeof(msg));
         msg.buffer.data = (uint64_t)(uintptr_t)g_fatfs_recv_buf;
         msg.buffer.size = FATFS_RECV_BUF_SIZE;
 
-        if (sys_ipc_receive(ready, &msg, 0) < 0) continue;
-
-        if (ready == main_ep) {
-            combined_handler(&msg);
-        } else {
-            int slot = find_slot_for_ep(ready);
-            if (slot >= 0) {
-                fatfs_file_ep_dispatch(&g_fatfs, slot, &msg);
-            }
+        if (sys_ipc_receive(main_ep, &msg, 0) < 0) {
+            continue;
         }
+
+        combined_handler(&msg);
     }
 }
 

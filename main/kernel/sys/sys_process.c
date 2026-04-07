@@ -24,15 +24,13 @@
 #include <xnix/thread_def.h>
 #include <xnix/usraccess.h>
 
-extern void thread_exit(int code);
-
 /* 用户态 spawn 参数结构(使用 ABI 定义) */
 /* 使用 xnix/abi/handle.h 中的 struct spawn_handle */
 /* 使用 xnix/abi/process.h 中的 struct abi_spawn_args */
 
 /* SYS_EXIT: ebx=code */
 static int32_t sys_exit(const uint32_t *args) {
-    thread_exit((int)args[0]);
+    process_exit_current((int)args[0]);
     /* 不会返回 */
     return 0;
 }

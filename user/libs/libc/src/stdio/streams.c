@@ -74,6 +74,11 @@ void _libc_stdio_init(void) {
     _stderr_file.channel  = _detect_channel(STDERR_FILENO);
 }
 
+void _libc_stdio_fini(void) {
+    _file_flush(&_stdout_file);
+    _file_flush(&_stderr_file);
+}
+
 void _stdio_set_fd(FILE *f, int fd) {
     if (f) {
         f->fd = fd;
@@ -94,7 +99,14 @@ int _file_flush(FILE *f) {
         _debug_write(f->buf, f->buf_pos);
         break;
     case STDIO_CH_FD:
-        write(f->fd, f->buf, f->buf_pos);
+        for (int off = 0; off < f->buf_pos;) {
+            ssize_t n = write(f->fd, f->buf + off, (size_t)(f->buf_pos - off));
+            if (n <= 0) {
+                f->error = 1;
+                break;
+            }
+            off += (int)n;
+        }
         break;
     case STDIO_CH_NONE:
         /* 丢弃 */

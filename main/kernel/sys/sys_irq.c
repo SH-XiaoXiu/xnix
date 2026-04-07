@@ -3,7 +3,7 @@
  * @brief IRQ 绑定系统调用
  */
 
-#include <ipc/notification.h>
+#include <ipc/event.h>
 #include <sys/syscall.h>
 #include <xnix/abi/irq.h>
 #include <xnix/errno.h>
@@ -14,14 +14,14 @@
 #include <xnix/stdio.h>
 #include <xnix/syscall.h>
 
-/* SYS_IRQ_BIND: ebx=irq, ecx=notif_handle(-1 表示无), edx=bits */
+/* SYS_IRQ_BIND: ebx=irq, ecx=event_handle(-1 表示无), edx=bits */
 static int32_t sys_irq_bind(const uint32_t *args) {
-    uint8_t                  irq          = (uint8_t)args[0];
-    handle_t                 notif_handle = (handle_t)args[1];
-    uint32_t                 bits         = args[2];
-    struct process          *proc         = process_current();
-    struct ipc_notification *notif        = NULL;
-    struct handle_entry      entry;
+    uint8_t             irq          = (uint8_t)args[0];
+    handle_t            event_handle = (handle_t)args[1];
+    uint32_t            bits         = args[2];
+    struct process     *proc         = process_current();
+    struct ipc_event   *event        = NULL;
+    struct handle_entry entry;
 
     if (!proc) {
         return -ESRCH;
@@ -32,17 +32,16 @@ static int32_t sys_irq_bind(const uint32_t *args) {
         return -EPERM;
     }
 
-    /* notification 可选 */
-    if (notif_handle != HANDLE_INVALID) {
-        /* Notification 通常不需要额外权限,只要拥有 handle */
-        if (handle_acquire(proc, notif_handle, HANDLE_NOTIFICATION, &entry) < 0) {
-            return -EINVAL; /* 或 EPERM */
+    /* event 可选 */
+    if (event_handle != HANDLE_INVALID) {
+        if (handle_acquire(proc, event_handle, HANDLE_EVENT, &entry) < 0) {
+            return -EINVAL;
         }
-        notif = entry.object;
+        event = entry.object;
     }
 
-    int ret = irq_bind_notification(irq, proc, notif, bits);
-    if (notif_handle != HANDLE_INVALID) {
+    int ret = irq_bind_event(irq, proc, event, bits);
+    if (event_handle != HANDLE_INVALID) {
         handle_object_put(entry.type, entry.object);
     }
     return ret;
@@ -57,7 +56,7 @@ static int32_t sys_irq_unbind(const uint32_t *args) {
         return -ESRCH;
     }
 
-    return irq_unbind_notification(irq, proc);
+    return irq_unbind_event(irq, proc);
 }
 
 /* SYS_IRQ_READ: ebx=irq, ecx=buf, edx=size, esi=flags */

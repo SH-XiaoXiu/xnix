@@ -2,8 +2,9 @@
  * @file io.c
  * @brief 统一 POSIX I/O 函数
  *
- * write/read 只有两条路径: pipe 和 IO 协议.
- * 不关心对端是 TTY/VFS/syslog/其他 — 全部走 IO_READ/IO_WRITE.
+ * 所有 fd 统一走 IO_READ/IO_WRITE 协议.
+ * pipe 也走 IO 协议 — pipe server thread 在对端处理.
+ * 进程退出前 libc 会统一 close 所有 fd, 因此 pipe close 同样发送 IO_CLOSE。
  */
 
 #include <stdio_internal.h>
@@ -20,28 +21,9 @@
 #include <xnix/ipc.h>
 #include <xnix/syscall.h>
 
-/* pipe 数据消息 opcode */
-#define PIPE_OP_DATA 0xFD01
-#define PIPE_OP_EOF  0xFD02
-
 /* ---- write ---- */
 
-static ssize_t write_pipe(struct fd_entry *ent, const void *buf, size_t n) {
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-    msg.regs.data[0] = PIPE_OP_DATA;
-    msg.regs.data[1] = (uint32_t)n;
-    msg.buffer.data  = (uint64_t)(uintptr_t)buf;
-    msg.buffer.size  = (uint32_t)n;
-
-    int ret = sys_ipc_send(ent->handle, &msg, 5000);
-    if (ret < 0) {
-        return -EIO;
-    }
-    return (ssize_t)n;
-}
-
-static ssize_t write_io(struct fd_entry *ent, const void *buf, size_t n) {
+static ssize_t write_io(int fd, struct fd_entry *ent, const void *buf, size_t n) {
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
@@ -53,10 +35,16 @@ static ssize_t write_io(struct fd_entry *ent, const void *buf, size_t n) {
     msg.buffer.size  = (uint32_t)n;
 
     int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
-    if (ret < 0) { errno = EIO; return -1; }
+    if (ret < 0) {
+        (void)fd;
+        return -1;
+    }
 
     int32_t written = (int32_t)reply.regs.data[0];
-    if (written < 0) { errno = -written; return -1; }
+    if (written < 0) {
+        errno = -written;
+        return -1;
+    }
     if (written > 0) ent->offset += (uint32_t)written;
     return (ssize_t)written;
 }
@@ -72,34 +60,15 @@ ssize_t write(int fd, const void *buf, size_t n) {
     }
 
     if (ent->flags & FD_FLAG_PIPE) {
-        return write_pipe(ent, buf, n);
+        return (ssize_t)sys_pipe_write(ent->handle, buf, (uint32_t)n);
     }
-    return write_io(ent, buf, n);
+
+    return write_io(fd, ent, buf, n);
 }
 
 /* ---- read ---- */
 
-static ssize_t read_pipe(struct fd_entry *ent, void *buf, size_t n) {
-    struct ipc_message msg;
-    memset(&msg, 0, sizeof(msg));
-
-    msg.buffer.data = (uint64_t)(uintptr_t)buf;
-    msg.buffer.size = (uint32_t)n;
-
-    int ret = sys_ipc_receive(ent->handle, &msg, 0);
-    if (ret < 0) {
-        return -EIO;
-    }
-
-    uint32_t op = msg.regs.data[0];
-    if (op == PIPE_OP_EOF) {
-        return 0;
-    }
-
-    return (ssize_t)msg.regs.data[1];
-}
-
-static ssize_t read_io(struct fd_entry *ent, void *buf, size_t n) {
+static ssize_t read_io(int fd, struct fd_entry *ent, void *buf, size_t n) {
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
 
@@ -113,7 +82,7 @@ static ssize_t read_io(struct fd_entry *ent, void *buf, size_t n) {
 
     int ret = sys_ipc_call(ent->handle, &msg, &reply, 30000);
     if (ret < 0) {
-        errno = EIO;
+        (void)fd;
         return -1;
     }
 
@@ -139,9 +108,10 @@ ssize_t read(int fd, void *buf, size_t n) {
     }
 
     if (ent->flags & FD_FLAG_PIPE) {
-        return read_pipe(ent, buf, n);
+        return (ssize_t)sys_pipe_read(ent->handle, buf, (uint32_t)n);
     }
-    return read_io(ent, buf, n);
+
+    return read_io(fd, ent, buf, n);
 }
 
 /* ---- close ---- */
@@ -153,13 +123,18 @@ int close(int fd) {
         return -1;
     }
 
-    if (!(ent->flags & FD_FLAG_PIPE)) {
-        struct ipc_message msg   = {0};
-        struct ipc_message reply = {0};
-        msg.regs.data[0] = IO_CLOSE;
-        msg.regs.data[1] = ent->session;
-        sys_ipc_call(ent->handle, &msg, &reply, 1000);
+    if (ent->flags & FD_FLAG_PIPE) {
+        /* Pipe: 内核 handle close 自动触发 EOF/EPIPE, 不需要发 IO_CLOSE */
+        sys_handle_close(ent->handle);
+        fd_free(fd);
+        return 0;
     }
+
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+    msg.regs.data[0] = IO_CLOSE;
+    msg.regs.data[1] = ent->session;
+    sys_ipc_call(ent->handle, &msg, &reply, 1000);
 
     sys_handle_close(ent->handle);
     fd_free(fd);
@@ -231,36 +206,29 @@ int dup2(int oldfd, int newfd) {
 /* ---- pipe ---- */
 
 int pipe(int fds[2]) {
-    int ep = sys_endpoint_create(NULL);
-    if (ep < 0) {
-        errno = EMFILE;
-        return -1;
-    }
-
-    int dup_ep = sys_handle_duplicate((uint32_t)ep, HANDLE_INVALID, NULL);
-    if (dup_ep < 0) {
-        sys_handle_close((uint32_t)ep);
-        errno = EMFILE;
+    handle_t rh, wh;
+    int ret = sys_pipe_create(&rh, &wh);
+    if (ret < 0) {
         return -1;
     }
 
     int rfd = fd_alloc();
     if (rfd < 0) {
-        sys_handle_close((uint32_t)ep);
-        sys_handle_close((uint32_t)dup_ep);
+        sys_handle_close(rh);
+        sys_handle_close(wh);
         errno = EMFILE;
         return -1;
     }
-    fd_install(rfd, (handle_t)ep, 0, 0, FD_FLAG_READ | FD_FLAG_PIPE);
+    fd_install(rfd, rh, 0, 0, FD_FLAG_READ | FD_FLAG_PIPE);
 
     int wfd = fd_alloc();
     if (wfd < 0) {
         close(rfd);
-        sys_handle_close((uint32_t)dup_ep);
+        sys_handle_close(wh);
         errno = EMFILE;
         return -1;
     }
-    fd_install(wfd, (handle_t)dup_ep, 0, 0, FD_FLAG_WRITE | FD_FLAG_PIPE);
+    fd_install(wfd, wh, 0, 0, FD_FLAG_WRITE | FD_FLAG_PIPE);
 
     fds[0] = rfd;
     fds[1] = wfd;
@@ -317,7 +285,7 @@ int open(const char *path, int flags) {
         return -1;
     }
 
-    int32_t result = (int32_t)reply.regs.data[1];
+    int32_t result = (int32_t)reply.regs.data[0];
     if (result < 0) {
         fd_free(fd);
         errno = -result;

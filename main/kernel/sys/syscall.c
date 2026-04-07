@@ -59,6 +59,7 @@ extern void sys_mm_init(void);
 extern void sys_handle_init(void);
 extern void sys_cap_init(void);
 extern void sys_kmsg_init(void);
+extern void sys_pipe_init(void);
 
 /**
  * 初始化系统调用子系统
@@ -78,6 +79,7 @@ void syscall_init(void) {
     sys_handle_init();
     sys_cap_init();
     sys_kmsg_init();
+    sys_pipe_init();
 
     pr_info("syscall: initialized %d syscalls", CFG_NR_SYSCALLS);
 }

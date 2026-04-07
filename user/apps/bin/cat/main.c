@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <vfs_client.h>
 #include <xnix/protocol/vfs.h>
-#include <xnix/syscall.h>
 
 #define READ_BUF_SIZE 256
 

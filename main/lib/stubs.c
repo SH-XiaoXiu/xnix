@@ -60,18 +60,18 @@ __attribute__((weak)) handle_t ipc_wait_any(struct ipc_wait_set *set, uint32_t t
     return HANDLE_INVALID;
 }
 
-__attribute__((weak)) int sys_notification_create(const char *name) {
+__attribute__((weak)) int sys_event_create(const char *name) {
     (void)name;
     return HANDLE_INVALID;
 }
 
-__attribute__((weak)) void notification_signal(handle_t notif_handle, uint32_t bits) {
-    (void)notif_handle;
+__attribute__((weak)) void event_signal(handle_t event_handle, uint32_t bits) {
+    (void)event_handle;
     (void)bits;
 }
 
-__attribute__((weak)) uint32_t notification_wait(handle_t notif_handle) {
-    (void)notif_handle;
+__attribute__((weak)) uint32_t event_wait(handle_t event_handle) {
+    (void)event_handle;
     return 0;
 }
 

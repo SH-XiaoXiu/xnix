@@ -73,7 +73,7 @@ int vfs_mount(const char *path, uint32_t fs_ep) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     return (int32_t)reply.regs.data[1];
@@ -109,7 +109,7 @@ int vfs_open(const char *path, uint32_t flags) {
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
         fd_free(fd);
-        return ret;
+        return -errno;
     }
 
     /* 后端结果: data[0] 为 0(成功)或 <0(错误码) */
@@ -125,7 +125,7 @@ int vfs_open(const char *path, uint32_t flags) {
     }
 
     struct fd_entry *ent =
-        fd_install(fd, fs_ep, 0, 0, FD_FLAG_READ | FD_FLAG_WRITE);
+        fd_install(fd, fs_ep, (uint32_t)result, 0, FD_FLAG_READ | FD_FLAG_WRITE);
     if (!ent) {
         fd_free(fd);
         return -EMFILE;
@@ -151,6 +151,7 @@ int vfs_close(int fd) {
 
     sys_ipc_call(ent->handle, &msg, &reply, 1000);
 
+    sys_handle_close(ent->handle);
     fd_free(fd);
     return 0;
 }
@@ -181,7 +182,7 @@ ssize_t vfs_read(int fd, void *buf, size_t size) {
 
     int ret = sys_ipc_call(ent->handle, &msg, &reply, 30000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     int32_t result = (int32_t)reply.regs.data[0];
@@ -220,7 +221,7 @@ ssize_t vfs_write(int fd, const void *buf, size_t size) {
 
     int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     int32_t result = (int32_t)reply.regs.data[0];
@@ -253,7 +254,7 @@ int vfs_mkdir(const char *path) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     return (int32_t)reply.regs.data[1];
@@ -281,7 +282,7 @@ int vfs_delete(const char *path) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     return (int32_t)reply.regs.data[1];
@@ -309,7 +310,7 @@ int vfs_stat(const char *path, struct vfs_stat *st) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     int32_t result = (int32_t)reply.regs.data[1];
@@ -350,7 +351,7 @@ int vfs_opendir(const char *path) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     int32_t result = (int32_t)reply.regs.data[1];
@@ -399,7 +400,7 @@ int vfs_readdir(int fd, char *name, size_t size) {
 
     int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     int32_t result = (int32_t)reply.regs.data[0];
@@ -439,7 +440,7 @@ int vfs_chdir(const char *path) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     return (int32_t)reply.regs.data[1];
@@ -468,7 +469,7 @@ int vfs_getcwd(char *buf, size_t size) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     int32_t result = (int32_t)reply.regs.data[1];
@@ -503,7 +504,7 @@ int vfs_copy_cwd_to_child(pid_t child_pid) {
 
     int ret = sys_ipc_call(g_vfsd_ep, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     return (int32_t)reply.regs.data[1];
@@ -535,7 +536,7 @@ int vfs_readdir_index(int fd, uint32_t index, struct vfs_dirent *dirent) {
 
     int ret = sys_ipc_call(ent->handle, &msg, &reply, 5000);
     if (ret < 0) {
-        return ret;
+        return -errno;
     }
 
     int32_t result = (int32_t)reply.regs.data[0];

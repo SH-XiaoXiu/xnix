@@ -11,7 +11,9 @@ static const char *type_str(handle_type_t type) {
     switch (type) {
     case HANDLE_ENDPOINT:     return "ENDPOINT";
     case HANDLE_PHYSMEM:      return "PHYSMEM";
-    case HANDLE_NOTIFICATION: return "NOTIFY";
+    case HANDLE_EVENT: return "EVENT";
+    case HANDLE_PIPE_READ: return "PIPE_R";
+    case HANDLE_PIPE_WRITE: return "PIPE_W";
     case HANDLE_THREAD:       return "THREAD";
     case HANDLE_PROCESS:      return "PROCESS";
     default:                  return "?";

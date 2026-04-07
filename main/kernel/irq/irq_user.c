@@ -6,7 +6,7 @@
  */
 
 #include <asm/irq.h>
-#include <ipc/notification.h>
+#include <ipc/event.h>
 #include <xnix/config.h>
 #include <xnix/errno.h>
 #include <xnix/irq.h>
@@ -23,7 +23,7 @@
 struct irq_user_binding {
     bool                     bound;       /* 是否已绑定 */
     struct process          *owner;       /* 绑定所属进程 */
-    struct ipc_notification *notif;       /* 目标 notification(可选) */
+    struct ipc_event        *notif;       /* 目标 event(可选) */
     uint32_t                 signal_bits; /* 触发时发送的信号位 */
 
     /* 数据缓冲区(环形) */
@@ -48,8 +48,8 @@ static bool irq_has_bound_slots(uint8_t irq) {
     return false;
 }
 
-int irq_bind_notification(uint8_t irq, struct process *owner,
-                          struct ipc_notification *notif, uint32_t bits) {
+int irq_bind_event(uint8_t irq, struct process *owner,
+                   struct ipc_event *notif, uint32_t bits) {
     if (irq >= ARCH_NR_IRQS) {
         return -EINVAL;
     }
@@ -74,7 +74,7 @@ int irq_bind_notification(uint8_t irq, struct process *owner,
             bind->waiter      = NULL;
 
             if (notif) {
-                notification_ref(notif);
+                event_ref(notif);
             }
 
             spin_unlock(&bind->lock);
@@ -88,7 +88,7 @@ int irq_bind_notification(uint8_t irq, struct process *owner,
     return -EBUSY;
 }
 
-int irq_unbind_notification(uint8_t irq, struct process *owner) {
+int irq_unbind_event(uint8_t irq, struct process *owner) {
     if (irq >= ARCH_NR_IRQS) {
         return -EINVAL;
     }
@@ -104,7 +104,7 @@ int irq_unbind_notification(uint8_t irq, struct process *owner) {
         }
 
         if (bind->notif) {
-            notification_unref(bind->notif);
+            event_unref(bind->notif);
         }
         bind->bound       = false;
         bind->owner       = NULL;
@@ -136,7 +136,7 @@ void irq_user_push(uint8_t irq, uint8_t data) {
 
     for (int i = 0; i < IRQ_USER_MAX_BINDINGS; i++) {
         struct irq_user_binding *bind = &irq_bindings[irq][i];
-        struct ipc_notification *notif;
+        struct ipc_event        *notif;
         uint32_t                 bits;
 
         spin_lock(&bind->lock);
@@ -164,7 +164,7 @@ void irq_user_push(uint8_t irq, uint8_t data) {
         spin_unlock(&bind->lock);
 
         if (notif) {
-            notification_signal_by_ptr(notif, bits);
+            event_signal_by_ptr(notif, bits);
         }
     }
 }
@@ -176,7 +176,7 @@ void irq_user_signal(uint8_t irq) {
 
     for (int i = 0; i < IRQ_USER_MAX_BINDINGS; i++) {
         struct irq_user_binding *bind = &irq_bindings[irq][i];
-        struct ipc_notification *notif;
+        struct ipc_event        *notif;
         uint32_t                 bits;
 
         spin_lock(&bind->lock);
@@ -193,7 +193,7 @@ void irq_user_signal(uint8_t irq) {
         spin_unlock(&bind->lock);
 
         if (notif) {
-            notification_signal_by_ptr(notif, bits);
+            event_signal_by_ptr(notif, bits);
         }
     }
 }

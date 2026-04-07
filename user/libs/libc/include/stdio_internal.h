@@ -88,6 +88,11 @@ struct _FILE {
 void _libc_stdio_init(void);
 
 /**
+ * 进程退出前刷新标准流
+ */
+void _libc_stdio_fini(void);
+
+/**
  * 刷新 FILE 流
  */
 int _file_flush(FILE *f);

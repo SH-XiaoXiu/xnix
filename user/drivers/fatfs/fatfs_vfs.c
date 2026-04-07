@@ -7,7 +7,6 @@
 
 #include "fatfs_vfs.h"
 
-#include <stdio.h>
 #include <string.h>
 #include <xnix/abi/io.h>
 #include <xnix/errno.h>
@@ -52,11 +51,43 @@ static int fresult_to_errno(FRESULT res) {
     }
 }
 
+#define FATFS_FILE_SESSION_SLOT_MASK 0x0000FFFFu
+#define FATFS_FILE_SESSION_GEN_SHIFT 16
+
+static uint32_t fatfs_make_file_session(struct fatfs_handle *handle, uint32_t slot) {
+    return ((uint32_t)handle->generation << FATFS_FILE_SESSION_GEN_SHIFT) |
+           (slot & FATFS_FILE_SESSION_SLOT_MASK);
+}
+
+static struct fatfs_handle *fatfs_get_file_handle(struct fatfs_ctx *ctx, uint32_t session,
+                                                  uint32_t *slot_out) {
+    uint32_t slot = session & FATFS_FILE_SESSION_SLOT_MASK;
+    if (slot_out) {
+        *slot_out = slot;
+    }
+    if (slot >= FATFS_MAX_HANDLES) {
+        return NULL;
+    }
+
+    struct fatfs_handle *handle = &ctx->handles[slot];
+    uint32_t generation = session >> FATFS_FILE_SESSION_GEN_SHIFT;
+    if (!handle->in_use || handle->type != 0 || handle->generation != generation) {
+        return NULL;
+    }
+    return handle;
+}
+
 /* 分配句柄 */
 static int alloc_handle(struct fatfs_ctx *ctx) {
     for (int i = 0; i < FATFS_MAX_HANDLES; i++) {
         if (!ctx->handles[i].in_use) {
+            uint16_t generation = (uint16_t)(ctx->handles[i].generation + 1u);
+            if (generation == 0) {
+                generation = 1;
+            }
             memset(&ctx->handles[i], 0, sizeof(ctx->handles[i]));
+            ctx->handles[i].file_ep = HANDLE_INVALID;
+            ctx->handles[i].generation = generation;
             ctx->handles[i].in_use = 1;
             return i;
         }
@@ -67,6 +98,7 @@ static int alloc_handle(struct fatfs_ctx *ctx) {
 /* 释放句柄 */
 static void free_handle(struct fatfs_ctx *ctx, uint32_t h) {
     if (h < FATFS_MAX_HANDLES) {
+        ctx->handles[h].file_ep = HANDLE_INVALID;
         ctx->handles[h].in_use = 0;
     }
 }
@@ -112,7 +144,7 @@ static BYTE vfs_flags_to_fatfs(uint32_t vfs_flags) {
     return mode;
 }
 
-/* 打开文件 */
+/* 打开文件。fatfs 使用 main_ep + session 模型，不再为每个文件创建独立 endpoint。 */
 static int fatfs_open(void *ctx, const char *path, uint32_t flags, handle_t *out_ep) {
     struct fatfs_ctx *fctx = (struct fatfs_ctx *)ctx;
 
@@ -130,21 +162,14 @@ static int fatfs_open(void *ctx, const char *path, uint32_t flags, handle_t *out
         return fresult_to_errno(res);
     }
 
-    /* 创建 per-file endpoint */
-    handle_t ep = sys_endpoint_create(NULL);
-    if (ep == HANDLE_INVALID) {
-        f_close(&handle->obj.file);
-        free_handle(fctx, h);
-        return -ENOMEM;
-    }
-
     strncpy(handle->path, path, sizeof(handle->path) - 1);
     handle->type    = 0; /* file */
     handle->flags   = flags;
-    handle->file_ep = ep;
-
-    *out_ep = ep;
-    return 0;
+    handle->file_ep = HANDLE_INVALID;
+    if (out_ep) {
+        *out_ep = HANDLE_INVALID;
+    }
+    return (int)fatfs_make_file_session(handle, (uint32_t)h);
 }
 
 /* 关闭文件 */
@@ -170,9 +195,9 @@ static int fatfs_close(void *ctx, uint32_t h) {
 /* 读取文件 */
 static int fatfs_read(void *ctx, uint32_t h, void *buf, uint32_t offset, uint32_t size) {
     struct fatfs_ctx    *fctx   = (struct fatfs_ctx *)ctx;
-    struct fatfs_handle *handle = get_handle(fctx, h);
+    struct fatfs_handle *handle = fatfs_get_file_handle(fctx, h, NULL);
 
-    if (!handle || handle->type != 0) {
+    if (!handle) {
         return -EBADF;
     }
 
@@ -194,9 +219,9 @@ static int fatfs_read(void *ctx, uint32_t h, void *buf, uint32_t offset, uint32_
 /* 写入文件 */
 static int fatfs_write(void *ctx, uint32_t h, const void *buf, uint32_t offset, uint32_t size) {
     struct fatfs_ctx    *fctx   = (struct fatfs_ctx *)ctx;
-    struct fatfs_handle *handle = get_handle(fctx, h);
+    struct fatfs_handle *handle = fatfs_get_file_handle(fctx, h, NULL);
 
-    if (!handle || handle->type != 0) {
+    if (!handle) {
         return -EBADF;
     }
 
@@ -362,16 +387,23 @@ handle_t fatfs_get_file_ep(struct fatfs_ctx *ctx, int slot) {
 static char g_file_ep_buf[FILE_EP_BUF_SIZE];
 
 int fatfs_file_ep_dispatch(struct fatfs_ctx *ctx, int slot, struct ipc_message *msg) {
+    (void)slot;
     uint32_t op = msg->regs.data[0];
     int      result = -ENOSYS;
     struct ipc_message reply = {0};
 
     switch (op) {
     case IO_READ: {
+        uint32_t session = msg->regs.data[1];
         uint32_t offset = msg->regs.data[2];
         uint32_t size   = msg->regs.data[3];
         if (size > FILE_EP_BUF_SIZE) size = FILE_EP_BUF_SIZE;
-        result = fatfs_read(ctx, slot, g_file_ep_buf, offset, size);
+        struct fatfs_handle *handle = fatfs_get_file_handle(ctx, session, NULL);
+        if (!handle) {
+            result = -EBADF;
+        } else {
+            result = fatfs_read(ctx, session, g_file_ep_buf, offset, size);
+        }
         if (result > 0) {
             reply.buffer.data = (uint64_t)(uintptr_t)g_file_ep_buf;
             reply.buffer.size = (uint32_t)result;
@@ -379,20 +411,28 @@ int fatfs_file_ep_dispatch(struct fatfs_ctx *ctx, int slot, struct ipc_message *
         break;
     }
     case IO_WRITE: {
+        uint32_t session = msg->regs.data[1];
         uint32_t offset = msg->regs.data[2];
         uint32_t size   = msg->regs.data[3];
         if (msg->buffer.data && msg->buffer.size > 0) {
             if (size > msg->buffer.size) size = msg->buffer.size;
             if (size > FILE_EP_BUF_SIZE) size = FILE_EP_BUF_SIZE;
             memcpy(g_file_ep_buf, (const void *)(uintptr_t)msg->buffer.data, size);
-            result = fatfs_write(ctx, slot, g_file_ep_buf, offset, size);
+            result = fatfs_write(ctx, session, g_file_ep_buf, offset, size);
         } else {
             result = -EINVAL;
         }
         break;
     }
     case IO_CLOSE: {
-        result = fatfs_close(ctx, slot);
+        uint32_t session = msg->regs.data[1];
+        uint32_t resolved_slot = 0;
+        struct fatfs_handle *handle = fatfs_get_file_handle(ctx, session, &resolved_slot);
+        if (!handle) {
+            result = -EBADF;
+        } else {
+            result = fatfs_close(ctx, resolved_slot);
+        }
         reply.regs.data[0] = (uint32_t)result;
         sys_ipc_reply_to(msg->sender_tid, &reply);
         return -1; /* 通知调用者: slot 已关闭 */

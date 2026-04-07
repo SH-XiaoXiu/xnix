@@ -93,22 +93,22 @@ void irq_dispatch(uint8_t irq, irq_frame_t *frame);
  * IRQ 用户态绑定
  *
  * 允许用户态进程接收 IRQ 通知.
- * 绑定后,IRQ 触发时会向指定的 notification 发送信号.
+ * 绑定后,IRQ 触发时会向指定的 event 发送信号.
  */
 
-struct ipc_notification; /* 前向声明 */
-struct process;          /* 前向声明 */
+struct ipc_event;   /* 前向声明 */
+struct process;     /* 前向声明 */
 
 /**
- * @brief 绑定 IRQ 到 notification
+ * @brief 绑定 IRQ 到 event
  *
  * @param irq   IRQ 编号
- * @param notif notification 对象指针
+ * @param event event 对象指针
  * @param bits  触发时发送的信号位
  * @return 0 成功,负数失败
  */
-int irq_bind_notification(uint8_t irq, struct process *owner,
-                          struct ipc_notification *notif, uint32_t bits);
+int irq_bind_event(uint8_t irq, struct process *owner,
+                   struct ipc_event *event, uint32_t bits);
 
 /**
  * @brief 解除 IRQ 绑定
@@ -116,7 +116,7 @@ int irq_bind_notification(uint8_t irq, struct process *owner,
  * @param irq IRQ 编号
  * @return 0 成功,负数失败
  */
-int irq_unbind_notification(uint8_t irq, struct process *owner);
+int irq_unbind_event(uint8_t irq, struct process *owner);
 
 /**
  * @brief 向 IRQ 缓冲区写入数据

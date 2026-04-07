@@ -18,7 +18,7 @@
  * 绑定 IRQ 到通知 handle
  *
  * @param irq    IRQ 号
- * @param handle 通知 handle (HANDLE_NOTIFICATION)
+ * @param handle 事件 handle (HANDLE_EVENT)
  * @return 0 成功, -EPERM 权限不足, -EBUSY 已被占用
  *
  * 需要权限: xnix.irq.<irq>

@@ -4,7 +4,7 @@
  */
 
 #include <ipc/endpoint.h>
-#include <ipc/notification.h>
+#include <ipc/event.h>
 #include <sys/syscall.h>
 #include <xnix/config.h>
 #include <xnix/errno.h>
@@ -328,27 +328,27 @@ static int32_t sys_ipc_reply_to(const uint32_t *args) {
     return ret;
 }
 
-/* SYS_NOTIFICATION_CREATE */
-static int32_t sys_notification_create(const uint32_t *args) {
+/* SYS_EVENT_CREATE */
+static int32_t sys_event_create(const uint32_t *args) {
     (void)args;
-    handle_t h = notification_create();
+    handle_t h = event_create();
     if (h == HANDLE_INVALID) {
         return -ENOMEM;
     }
     return (int32_t)h;
 }
 
-/* SYS_NOTIFICATION_WAIT: ebx=handle */
-static int32_t sys_notification_wait(const uint32_t *args) {
+/* SYS_EVENT_WAIT: ebx=handle */
+static int32_t sys_event_wait(const uint32_t *args) {
     handle_t h = (handle_t)args[0];
-    return (int32_t)notification_wait(h);
+    return (int32_t)event_wait(h);
 }
 
-/* SYS_NOTIFICATION_SIGNAL: ebx=handle, ecx=bits */
-static int32_t sys_notification_signal(const uint32_t *args) {
+/* SYS_EVENT_SIGNAL: ebx=handle, ecx=bits */
+static int32_t sys_event_signal(const uint32_t *args) {
     handle_t h    = (handle_t)args[0];
     uint32_t bits = args[1];
-    notification_signal(h, bits);
+    event_signal(h, bits);
     return 0;
 }
 
@@ -393,9 +393,9 @@ void sys_ipc_init(void) {
     syscall_register(SYS_IPC_CALL, sys_ipc_call, 4, "ipc_call");
     syscall_register(SYS_IPC_REPLY, sys_ipc_reply, 1, "ipc_reply");
     syscall_register(SYS_IPC_REPLY_TO, sys_ipc_reply_to, 2, "ipc_reply_to");
-    /* 通知系统调用移至 800-819 范围 */
-    syscall_register(SYS_NOTIFICATION_CREATE, sys_notification_create, 0, "notification_create");
-    syscall_register(SYS_NOTIFICATION_WAIT, sys_notification_wait, 1, "notification_wait");
-    syscall_register(SYS_NOTIFICATION_SIGNAL, sys_notification_signal, 2, "notification_signal");
+    /* 事件系统调用 (800-819) */
+    syscall_register(SYS_EVENT_CREATE, sys_event_create, 0, "event_create");
+    syscall_register(SYS_EVENT_WAIT, sys_event_wait, 1, "event_wait");
+    syscall_register(SYS_EVENT_SIGNAL, sys_event_signal, 2, "event_signal");
     syscall_register(SYS_IPC_WAIT_ANY, sys_ipc_wait_any, 2, "ipc_wait_any");
 }

@@ -1,25 +1,12 @@
 #ifndef KERNEL_IPC_ENDPOINT_H
 #define KERNEL_IPC_ENDPOINT_H
 
+#include <ipc/wait.h>
 #include <xnix/handle.h>
 #include <xnix/ipc.h>
 #include <xnix/sync.h>
 
 struct thread;
-struct poll_entry;
-
-/**
- * Poll 等待项
- *
- * 用于 ipc_wait_any 实现多路复用.
- * 一个线程可以创建多个 poll_entry 加入不同对象的 poll_queue.
- */
-struct poll_entry {
-    struct thread     *waiter;    /* 等待的线程 */
-    handle_t           handle;    /* 对应的句柄(用于返回) */
-    struct poll_entry *next;      /* 对象内的 poll 链表 */
-    volatile bool      triggered; /* 是否已触发 */
-};
 
 /**
  * IPC Endpoint 对象

@@ -238,8 +238,8 @@ static inline int sys_endpoint_create(const char *name) {
  *
  * @return Handle 值,-1 失败(设置 errno)
  */
-static inline int sys_notification_create(void) {
-    int ret = syscall0(SYS_NOTIFICATION_CREATE);
+static inline int sys_event_create(void) {
+    int ret = syscall0(SYS_EVENT_CREATE);
     if (ret < 0) {
         errno = -ret;
         return -1;
@@ -248,13 +248,13 @@ static inline int sys_notification_create(void) {
 }
 
 /**
- * 等待 Notification
+ * 等待 Event
  *
- * @param handle Notification handle
+ * @param handle Event handle
  * @return 信号位掩码,失败返回 0 并设置 errno
  */
-static inline uint32_t sys_notification_wait(uint32_t handle) {
-    int ret = syscall1(SYS_NOTIFICATION_WAIT, handle);
+static inline uint32_t sys_event_wait(uint32_t handle) {
+    int ret = syscall1(SYS_EVENT_WAIT, handle);
     if (ret < 0) {
         errno = -ret;
         return 0;
@@ -263,14 +263,60 @@ static inline uint32_t sys_notification_wait(uint32_t handle) {
 }
 
 /**
- * 发送 Notification 信号
+ * 发送 Event 信号
  *
- * @param handle Notification handle
+ * @param handle Event handle
  * @param bits   要设置的位
  * @return 0 成功,-1 失败(设置 errno)
  */
-static inline int sys_notification_signal(uint32_t handle, uint32_t bits) {
-    int ret = syscall2(SYS_NOTIFICATION_SIGNAL, handle, bits);
+static inline int sys_event_signal(uint32_t handle, uint32_t bits) {
+    int ret = syscall2(SYS_EVENT_SIGNAL, handle, bits);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
+/*
+ * Pipe 系统调用
+ */
+
+/**
+ * 创建管道
+ * @param read_h  输出: 读端 handle
+ * @param write_h 输出: 写端 handle
+ * @return 0 成功, 负数失败
+ */
+static inline int sys_pipe_create(handle_t *read_h, handle_t *write_h) {
+    int ret = syscall2(SYS_PIPE_CREATE, (uint32_t)(uintptr_t)read_h,
+                       (uint32_t)(uintptr_t)write_h);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * 从管道读取
+ * @return 读取字节数, 0=EOF, -1 失败
+ */
+static inline int sys_pipe_read(handle_t h, void *buf, uint32_t size) {
+    int ret = syscall3(SYS_PIPE_READ, h, (uint32_t)(uintptr_t)buf, size);
+    if (ret < 0) {
+        errno = -ret;
+        return -1;
+    }
+    return ret;
+}
+
+/**
+ * 向管道写入
+ * @return 写入字节数, -1 失败
+ */
+static inline int sys_pipe_write(handle_t h, const void *buf, uint32_t size) {
+    int ret = syscall3(SYS_PIPE_WRITE, h, (uint32_t)(uintptr_t)buf, size);
     if (ret < 0) {
         errno = -ret;
         return -1;

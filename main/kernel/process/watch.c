@@ -7,7 +7,7 @@
 
 #include <arch/cpu.h>
 
-#include <ipc/notification.h>
+#include <ipc/event.h>
 #include <xnix/handle.h>
 #include <xnix/mm.h>
 #include <xnix/process_def.h>
@@ -17,7 +17,7 @@ struct process_watch {
     uint32_t                 refcount;
     struct process_watch    *next;
     struct process          *target;
-    struct ipc_notification *notif;
+    struct ipc_event *notif;
     uint32_t                 bits;
     uint8_t                  armed;
 };
@@ -54,7 +54,7 @@ void process_watch_ref(void *ptr) {
 void process_watch_unref(void *ptr) {
     struct process_watch    *watch = ptr;
     struct process          *target = NULL;
-    struct ipc_notification *notif = NULL;
+    struct ipc_event *notif = NULL;
     uint32_t                 flags;
     uint8_t                  free_now = 0;
 
@@ -90,7 +90,7 @@ void process_watch_unref(void *ptr) {
         process_unref(target);
     }
     if (notif) {
-        notification_unref(notif);
+        event_unref(notif);
     }
     kfree(watch);
 }
@@ -103,7 +103,7 @@ void process_watch_subsystem_init(void) {
 handle_t process_watch_create(struct process *owner, pid_t pid, handle_t notif_handle, uint32_t bits) {
     struct process          *target;
     struct handle_entry      notif_entry;
-    struct ipc_notification *notif;
+    struct ipc_event *notif;
     struct process_watch    *watch;
     uint32_t                 flags;
     handle_t                 watch_handle;
@@ -117,7 +117,7 @@ handle_t process_watch_create(struct process *owner, pid_t pid, handle_t notif_h
         return HANDLE_INVALID;
     }
 
-    if (handle_acquire(owner, notif_handle, HANDLE_NOTIFICATION, &notif_entry) < 0) {
+    if (handle_acquire(owner, notif_handle, HANDLE_EVENT, &notif_entry) < 0) {
         process_unref(target);
         return HANDLE_INVALID;
     }
@@ -145,7 +145,7 @@ handle_t process_watch_create(struct process *owner, pid_t pid, handle_t notif_h
         spin_unlock(&g_process_watch_lock);
         cpu_irq_restore(flags);
 
-        notification_signal_by_ptr(notif, bits);
+        event_signal_by_ptr(notif, bits);
         process_unref(target);
     } else {
         watch->next          = g_process_watch_list;
@@ -180,7 +180,7 @@ void process_watch_signal_exit(struct process *proc) {
 
         if (watch->armed && watch->target == proc) {
             struct process          *target = watch->target;
-            struct ipc_notification *notif  = watch->notif;
+            struct ipc_event *notif  = watch->notif;
             uint32_t                 bits   = watch->bits;
 
             process_watch_unlink_locked(watch);
@@ -188,7 +188,7 @@ void process_watch_signal_exit(struct process *proc) {
             watch->target = NULL;
 
             if (notif && bits) {
-                notification_signal_by_ptr(notif, bits);
+                event_signal_by_ptr(notif, bits);
             }
             if (target) {
                 process_unref(target);

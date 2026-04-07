@@ -7,11 +7,35 @@
  */
 
 #include <string.h>
+#include <unistd.h>
 #include <xnix/abi/handle.h>
 #include <xnix/env.h>
 #include <xnix/fd.h>
+#include <xnix/syscall.h>
 
 static struct fd_entry g_fd_table[FD_MAX];
+
+/**
+ * 查询 handle 类型, 判断是否为 pipe handle
+ */
+static uint8_t detect_pipe_flags(handle_t h, uint8_t base_flags) {
+    if (h == HANDLE_INVALID) return base_flags;
+
+    struct abi_handle_info info;
+    int count = sys_handle_list(&info, 1);
+    /* 用 handle_list 太重; 改用遍历查找 */
+    struct abi_handle_info buf[16];
+    count = sys_handle_list(buf, 16);
+    for (int i = 0; i < count; i++) {
+        if (buf[i].handle == h) {
+            if (buf[i].type == HANDLE_PIPE_READ || buf[i].type == HANDLE_PIPE_WRITE) {
+                return base_flags | FD_FLAG_PIPE;
+            }
+            break;
+        }
+    }
+    return base_flags;
+}
 
 void fd_table_init(void) {
     memset(g_fd_table, 0, sizeof(g_fd_table));
@@ -20,12 +44,23 @@ void fd_table_init(void) {
     handle_t out = env_get_handle(HANDLE_STDIO_STDOUT);
     handle_t err = env_get_handle(HANDLE_STDIO_STDERR);
 
+    uint8_t in_flags  = detect_pipe_flags(in, FD_FLAG_READ);
+    uint8_t out_flags = detect_pipe_flags(out, FD_FLAG_WRITE);
+
     /* 不做 fallback: 没有 stdio handle 时 fd 0/1/2 不安装,
      * stdio 层会自动使用 DEBUG 通道 (SYS_DEBUG_WRITE). */
 
-    if (in  != HANDLE_INVALID) fd_install(0, in,  0, 0, FD_FLAG_READ);
-    if (out != HANDLE_INVALID) fd_install(1, out, 0, 0, FD_FLAG_WRITE);
+    if (in  != HANDLE_INVALID) fd_install(0, in,  0, 0, in_flags);
+    if (out != HANDLE_INVALID) fd_install(1, out, 0, 0, out_flags);
     if (err != HANDLE_INVALID) fd_install(2, err, 0, 0, FD_FLAG_WRITE);
+}
+
+void fd_table_fini(void) {
+    for (int fd = 0; fd < FD_MAX; fd++) {
+        if (fd_get(fd) != NULL) {
+            close(fd);
+        }
+    }
 }
 
 int fd_alloc(void) {

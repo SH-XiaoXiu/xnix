@@ -112,6 +112,25 @@ void process_terminate_current(int signal) {
     __builtin_unreachable();
 }
 
+void process_exit_current(int exit_code) {
+    struct process *proc    = process_get_current();
+    struct thread  *current = sched_current();
+
+    if (!proc || proc->pid == 0) {
+        panic("Attempt to exit kernel process!");
+    }
+
+    if (proc->pid == XNIX_PID_INIT) {
+        panic("Init process exited with code %d!", exit_code);
+    }
+
+    process_exit(proc, exit_code);
+    process_terminate_threads(proc, current);
+
+    thread_exit(exit_code);
+    __builtin_unreachable();
+}
+
 void process_exit(struct process *proc, int exit_code) {
     if (!proc || proc->pid == 0) {
         return;
@@ -193,8 +212,6 @@ pid_t process_waitpid(pid_t pid, int *status, int options) {
                     *status = -SIGTSTP;
                 }
                 current->wait_chan = NULL;
-                spin_unlock(&process_list_lock);
-                cpu_irq_restore(flags);
                 pr_debug("[PROC] waitpid: child=%d stopped\n", ret_pid);
                 return ret_pid;
             }

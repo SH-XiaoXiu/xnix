@@ -180,6 +180,13 @@ pid_t process_spawn(const char *name, void *elf_data, uint32_t elf_size,
 void process_terminate_current(int signal);
 
 /**
+ * 正常退出当前进程
+ * 终止当前进程的所有线程并设置退出码
+ * @param exit_code 进程退出码
+ */
+void process_exit_current(int exit_code);
+
+/**
  * 进程退出处理
  * 设置退出码,通知父进程,处理子进程托管
  * @param proc 退出的进程

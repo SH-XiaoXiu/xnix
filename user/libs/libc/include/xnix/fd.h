@@ -41,6 +41,11 @@ struct fd_entry {
 void fd_table_init(void);
 
 /**
+ * 关闭当前进程中所有已安装 fd
+ */
+void fd_table_fini(void);
+
+/**
  * 分配最小可用 fd
  * @return fd >= 0 成功, -1 无可用 fd
  */

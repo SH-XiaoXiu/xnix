@@ -138,7 +138,7 @@ void handle_free(struct process *proc, handle_t h) {
     if (h < table->capacity && table->entries[h].type != HANDLE_NONE) {
         pr_debug("[HANDLE] free: proc=%d handle=%d type=%d\n", proc->pid, h,
                  table->entries[h].type);
-        handle_object_put(table->entries[h].type, table->entries[h].object);
+        handle_object_destroy(table->entries[h].type, table->entries[h].object);
         memset(&table->entries[h], 0, sizeof(struct handle_entry));
     }
 

@@ -40,6 +40,10 @@ handle_t handle_transfer(struct process *src, handle_t src_h, struct process *ds
     if (dst_h == HANDLE_INVALID) {
         handle_object_put(src_entry.type, src_entry.object);
     } else {
+        /* 为新 handle 打开对象引用 (pipe 需要增加 reader/writer count) */
+        handle_object_open(src_entry.type, src_entry.object);
+        /* 释放 acquire 的临时引用 */
+        handle_object_put(src_entry.type, src_entry.object);
         /* 设置目标 handle 的 rights: 取交集(只能缩小) */
         uint32_t dst_rights = (rights == 0) ? src_entry.rights : (src_entry.rights & rights);
         struct handle_table *table = dst->handles;

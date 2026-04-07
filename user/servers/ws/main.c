@@ -60,7 +60,7 @@ static void *client_watch_thread(void *arg) {
     watch_handle = srv->client_watches[slot].watch_handle;
     pthread_mutex_unlock(&srv->lock);
 
-    sys_notification_wait(notif_handle);
+    sys_event_wait(notif_handle);
 
     pthread_mutex_lock(&srv->lock);
     for (uint32_t i = 0; i < WS_MAX_WINDOWS; i++) {
@@ -101,7 +101,7 @@ static int attach_client_watch(struct ws_server *srv, uint32_t pid) {
         return -1;
     }
 
-    notif_handle = (handle_t)sys_notification_create();
+    notif_handle = (handle_t)sys_event_create();
     if (notif_handle == HANDLE_INVALID) {
         return -1;
     }

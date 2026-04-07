@@ -44,11 +44,13 @@ typedef enum {
     HANDLE_NONE         = 0,
     HANDLE_ENDPOINT     = 1, /* IPC endpoint */
     HANDLE_PHYSMEM      = 2, /* 物理内存区域 */
-    HANDLE_NOTIFICATION = 3, /* 异步通知 */
+    HANDLE_EVENT        = 3, /* 异步事件 */
     HANDLE_VMAR         = 4, /* 虚拟内存区域(预留) */
     HANDLE_THREAD       = 5, /* 线程 */
     HANDLE_PROCESS      = 6, /* 进程 */
     HANDLE_PROC_WATCH   = 7, /* 进程生命周期观察器 */
+    HANDLE_PIPE_READ    = 8, /* 管道读端 */
+    HANDLE_PIPE_WRITE   = 9, /* 管道写端 */
 } handle_type_t;
 
 /**
