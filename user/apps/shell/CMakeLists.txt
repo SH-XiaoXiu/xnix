@@ -6,7 +6,7 @@
 # 这部分后续在 libposix 有足够高层接口后再迁移
 
 set(APP_NAME "shell")
-set(APP_SOURCES main.c path.c)
+set(APP_SOURCES main.c path.c line.c)
 set(APP_LIBS c sys pthread proc posix)
 
 include(${CMAKE_SOURCE_DIR}/user/app.cmake)

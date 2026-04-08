@@ -3,6 +3,7 @@
  * @brief Xnix Shell
  */
 
+#include "line.h"
 #include "path.h"
 
 #include <xnix/protocol/tty.h>
@@ -147,6 +148,17 @@ static int simple_atoi(const char *s) {
         s++;
     }
     return neg ? -n : n;
+}
+
+/**
+ * 供 line.c Tab 补全查询内建命令名
+ */
+const char *shell_get_builtin_name(int index) {
+    if (index < 0) return NULL;
+    for (int i = 0; i <= index; i++) {
+        if (!builtins[i].name) return NULL;
+    }
+    return builtins[index].name;
 }
 
 /**
@@ -917,8 +929,6 @@ int main(int argc, char **argv) {
      * 不再需要手动查找 tty handle 和 dup2 重绑定. */
     g_vfs_ep = env_get_handle("vfs_ep");
 
-    shell_tty_ioctl(TTY_IOCTL_SET_COOKED, 0);
-    shell_tty_ioctl(TTY_IOCTL_SET_ECHO, 1);
     shell_tty_ioctl(TTY_IOCTL_FLUSH_INPUT, 0);
 
     /* 初始化 VFS 客户端 */
@@ -926,6 +936,9 @@ int main(int argc, char **argv) {
 
     /* 初始化 PATH */
     path_init();
+
+    /* 初始化行编辑器(加载历史) */
+    line_init();
 
     svc_notify_ready(svc_name);
 
@@ -936,31 +949,27 @@ int main(int argc, char **argv) {
     while (1) {
         jobs_reap(); /* 收割已完成的后台 jobs */
 
-        if (!prompt_shown) {
-            char cwd[256];
-            int  cwd_ret = vfs_getcwd(cwd, sizeof(cwd));
-
-            if (cwd_ret >= 0) {
-                printf("%s> ", cwd);
-                fflush(stdout);
-            } else {
-                printf("> ");
-                fflush(stdout);
-            }
-            prompt_shown = 1;
+        char prompt[280];
+        char cwd[256];
+        int  cwd_ret = vfs_getcwd(cwd, sizeof(cwd));
+        if (cwd_ret >= 0) {
+            snprintf(prompt, sizeof(prompt), "%s> ", cwd);
+        } else {
+            strcpy(prompt, "> ");
         }
 
-        if (gets_s(line, sizeof(line)) == NULL) {
+        if (line_read(line, sizeof(line), prompt) == NULL) {
             msleep(100);
             continue;
         }
-        prompt_shown = 0;
 
-        /* 防止用户按住回车键时产生输入风暴 */
         if (line[0] == '\0') {
-            msleep(20);
             continue;
         }
+
+        /* 添加到历史 */
+        line_add_history(line);
+        line_save_history();
 
         execute_command(line);
     }

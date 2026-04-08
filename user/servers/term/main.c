@@ -654,21 +654,20 @@ static void try_fulfill_pending_read(struct terminal *t) {
 /* ============== 行规程 ============== */
 
 static void term_process_input(struct terminal *t, char c) {
-    /* Ctrl+C */
-    if (c == 0x03) {
-        if (t->foreground_pid > 0)
-            sys_kill(t->foreground_pid, SIGINT);
-        return;
-    }
-
     if (t->mode == LDISC_RAW) {
+        /* RAW 模式: 所有字符(包括 Ctrl+C)直接传递给应用 */
         pthread_mutex_lock(&t->input_lock);
         input_put(t, c);
         try_fulfill_pending_read(t);
         pthread_mutex_unlock(&t->input_lock);
 
-        if (t->echo)
-            term_output_char(t, c);
+        return;
+    }
+
+    /* Ctrl+C (仅 COOKED 模式) */
+    if (c == 0x03) {
+        if (t->foreground_pid > 0)
+            sys_kill(t->foreground_pid, SIGINT);
         return;
     }
 
