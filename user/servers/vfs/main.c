@@ -470,7 +470,7 @@ static int vfsd_opendir(struct ipc_message *msg, const char *abs_path) {
         return ret;
     }
 
-    int32_t result = (int32_t)reply.regs.data[1];
+    int32_t result = (int32_t)reply.regs.data[0];
     if (result < 0) {
         return result;
     }
