@@ -331,6 +331,12 @@ static void flip_region(struct ws_server *srv, int x, int y, int w, int h) {
 }
 
 void compositor_composite(struct ws_server *srv) {
+    /* 非活跃状态不写 framebuffer */
+    if (!srv->active) {
+        srv->needs_composite = 0;
+        return;
+    }
+
     /* 首次合成: 全屏清除 */
     if (srv->first_composite) {
         uint32_t bg = argb_to_fb(srv, WS_COLOR_DESKTOP);

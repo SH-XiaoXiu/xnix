@@ -486,8 +486,8 @@ char *line_read(char *buf, int size, const char *prompt) {
         char c;
         int n = (int)read(STDIN_FILENO, &c, 1);
         if (n <= 0) {
-            result = NULL;
-            break;
+            msleep(10);
+            continue;
         }
 
         if (c == '\r' || c == '\n') {

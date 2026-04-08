@@ -282,6 +282,17 @@ static int displaydev_reset_color(handle_t ep) {
     return (int)reply.regs.data[0];
 }
 
+static int displaydev_draw_cursor(handle_t ep, int row, int col) {
+    struct ipc_message msg   = {0};
+    struct ipc_message reply = {0};
+    msg.regs.data[0] = DISPDEV_DRAW_CURSOR;
+    msg.regs.data[1] = (uint32_t)row;
+    msg.regs.data[2] = (uint32_t)col;
+    int ret = sys_ipc_call(ep, &msg, &reply, 5000);
+    if (ret < 0) return -1;
+    return (int)reply.regs.data[0];
+}
+
 static int displaydev_info(handle_t ep, int *rows, int *cols) {
     struct ipc_message msg   = {0};
     struct ipc_message reply = {0};
@@ -390,8 +401,6 @@ static void term_screen_putc(struct terminal *t, char c) {
     if (c == '\b') {
         if (t->cursor_col > 0) {
             t->cursor_col--;
-            t->screen[t->cursor_row * t->screen_cols + t->cursor_col] =
-                (struct term_cell){ .ch = ' ', .fg = t->cur_fg, .bg = t->cur_bg };
         }
         return;
     }
@@ -444,6 +453,7 @@ static void term_display_flush(struct terminal *t) {
     }
     displaydev_set_color(t->output_ep, t->cur_fg, t->cur_bg);
     displaydev_set_cursor(t->output_ep, t->cursor_row, t->cursor_col);
+    displaydev_draw_cursor(t->output_ep, t->cursor_row, t->cursor_col);
 }
 
 static void term_activate_display_vt(struct terminal *t) {
@@ -531,6 +541,30 @@ static void ansi_execute_csi(struct terminal *t, const char *params, char final)
                 displaydev_set_cursor(t->output_ep, 0, 0);
             pthread_mutex_unlock(&g_display_lock);
         }
+    } else if (final == 'K') {
+        /* Erase in Line: code 0 (default) = cursor to end of line */
+        if (code == 0 && t->screen) {
+            for (int col = t->cursor_col; col < t->screen_cols; col++) {
+                t->screen[t->cursor_row * t->screen_cols + col] =
+                    (struct term_cell){ .ch = ' ', .fg = t->cur_fg, .bg = t->cur_bg };
+            }
+            /* 在 display 上用空格覆盖到行尾 */
+            if (t->output_proto == DEV_DISPLAYDEV) {
+                int n = t->screen_cols - t->cursor_col;
+                if (n > 0) {
+                    char spaces[256];
+                    if (n > (int)sizeof(spaces)) n = (int)sizeof(spaces);
+                    memset(spaces, ' ', (size_t)n);
+                    pthread_mutex_lock(&g_display_lock);
+                    if (g_active_display_term == t->id) {
+                        displaydev_set_cursor(t->output_ep, t->cursor_row, t->cursor_col);
+                        displaydev_write(t->output_ep, spaces, (size_t)n);
+                        displaydev_set_cursor(t->output_ep, t->cursor_row, t->cursor_col);
+                    }
+                    pthread_mutex_unlock(&g_display_lock);
+                }
+            }
+        }
     }
 }
 
@@ -597,8 +631,10 @@ static void term_output_write_parsed(struct terminal *t, const char *data, size_
     }
 
     pthread_mutex_lock(&g_display_lock);
-    if (g_active_display_term == t->id)
+    if (g_active_display_term == t->id) {
         displaydev_set_cursor(t->output_ep, t->cursor_row, t->cursor_col);
+        displaydev_draw_cursor(t->output_ep, t->cursor_row, t->cursor_col);
+    }
     pthread_mutex_unlock(&g_display_lock);
 }
 
@@ -915,6 +951,12 @@ static int term_handle_msg(struct terminal *t, struct ipc_message *msg,
         case TTY_IOCTL_SET_ACTIVE_TTY: {
             if (msg->regs.data[3] == UINT32_MAX) {
                 pthread_mutex_lock(&g_display_lock);
+                /* 隐藏光标,阻止闪烁线程在 GUI 模式下写 FB */
+                if (g_active_display_term >= 0) {
+                    struct terminal *prev = find_term_by_id(g_active_display_term);
+                    if (prev && prev->is_display_vt)
+                        displaydev_draw_cursor(prev->output_ep, -1, -1);
+                }
                 g_active_display_term = -1;
                 pthread_mutex_unlock(&g_display_lock);
                 msg->regs.data[0] = 0;

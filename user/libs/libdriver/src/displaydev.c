@@ -60,6 +60,14 @@ static int displaydev_handle_msg(struct display_device *dev, struct ipc_message 
         return 0;
     }
 
+    case DISPDEV_DRAW_CURSOR: {
+        int row = (int)msg->regs.data[1];
+        int col = (int)msg->regs.data[2];
+        int ret = dev->ops->draw_cursor ? dev->ops->draw_cursor(dev, row, col) : -ENOSYS;
+        msg->regs.data[0] = (uint32_t)ret;
+        return 0;
+    }
+
     case DISPDEV_SET_COLOR: {
         uint8_t attr = (uint8_t)(msg->regs.data[1] & 0xFF);
         int ret = dev->ops->set_color ? dev->ops->set_color(dev, attr) : -ENOSYS;

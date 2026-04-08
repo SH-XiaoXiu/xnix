@@ -30,6 +30,9 @@ struct display_ops {
     /** 设置光标位置 (可选). 返回 0 或负 errno */
     int (*set_cursor)(struct display_device *dev, int row, int col);
 
+    /** 在指定位置渲染可见光标 (可选). 返回 0 或负 errno */
+    int (*draw_cursor)(struct display_device *dev, int row, int col);
+
     /** 设置颜色. attr = fg | (bg << 4). 返回 0 或负 errno */
     int (*set_color)(struct display_device *dev, uint8_t attr);
 

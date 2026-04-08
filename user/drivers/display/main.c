@@ -1,8 +1,5 @@
+#include "unistd.h"
 #include "vga.h"
-
-#include <xnix/displaydev.h>
-#include <xnix/drvframework.h>
-#include <xnix/protocol/displaydev.h>
 
 #include <font/font.h>
 #include <font/utf8.h>
@@ -11,7 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <xnix/abi/handle.h>
+#include <xnix/displaydev.h>
+#include <xnix/drvframework.h>
 #include <xnix/env.h>
+#include <xnix/protocol/displaydev.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
 #include <xnix/ulog.h>
@@ -41,6 +41,10 @@ struct fb_display_state {
 
     uint8_t  cur_fg, cur_bg;
     uint32_t fg_color, bg_color;
+
+    int prev_cursor_row;  /* 上次 draw_cursor 位置, -1 = 无 */
+    int prev_cursor_col;
+    int cursor_visible;   /* 闪烁状态: 1=可见 0=隐藏 */
 };
 
 struct displayd_state {
@@ -162,8 +166,6 @@ static void fb_putc(struct fb_display_state *st, uint32_t cp) {
     if (cp == '\b') {
         if (st->cursor_x > 0) {
             st->cursor_x--;
-            fb_fill_rect(st, st->cursor_x * CHAR_WIDTH, st->cursor_y * CHAR_HEIGHT,
-                         CHAR_WIDTH, CHAR_HEIGHT, st->bg_color);
         }
         return;
     }
@@ -213,6 +215,8 @@ static int displayd_clear(struct display_device *dev) {
                      g_display.u.fb.bg_color);
         g_display.u.fb.cursor_x = 0;
         g_display.u.fb.cursor_y = 0;
+        g_display.u.fb.prev_cursor_row = -1;
+        g_display.u.fb.prev_cursor_col = -1;
     } else {
         vga_clear(&g_display.u.vga);
     }
@@ -257,6 +261,71 @@ static int displayd_set_color(struct display_device *dev, uint8_t attr) {
     return 0;
 }
 
+static int displayd_draw_cursor(struct display_device *dev, int row, int col) {
+    (void)dev;
+    pthread_mutex_lock(&g_display.lock);
+    if (g_display.mode == DISPLAY_MODE_FB) {
+        struct fb_display_state *st = &g_display.u.fb;
+
+        /* row < 0: 隐藏光标 (GUI 切换时) */
+        if (row < 0 || col < 0) {
+            if (st->prev_cursor_row >= 0) {
+                int old_px = st->prev_cursor_col * CHAR_WIDTH;
+                int old_py = st->prev_cursor_row * CHAR_HEIGHT + CHAR_HEIGHT - 2;
+                fb_fill_rect(st, old_px, old_py, CHAR_WIDTH, 2, st->bg_color);
+            }
+            st->prev_cursor_row = -1;
+            st->prev_cursor_col = -1;
+            st->cursor_visible = 0;
+            pthread_mutex_unlock(&g_display.lock);
+            return 0;
+        }
+
+        /* 擦除旧光标下划线 */
+        if (st->prev_cursor_row >= 0 &&
+            (st->prev_cursor_row != row || st->prev_cursor_col != col)) {
+            int old_px = st->prev_cursor_col * CHAR_WIDTH;
+            int old_py = st->prev_cursor_row * CHAR_HEIGHT + CHAR_HEIGHT - 2;
+            fb_fill_rect(st, old_px, old_py, CHAR_WIDTH, 2, st->bg_color);
+        }
+        /* 画新光标下划线 */
+        int px = col * CHAR_WIDTH;
+        int py = row * CHAR_HEIGHT + CHAR_HEIGHT - 2;
+        fb_fill_rect(st, px, py, CHAR_WIDTH, 2, st->fg_color);
+        st->prev_cursor_row = row;
+        st->prev_cursor_col = col;
+        st->cursor_visible = 1;
+    } else {
+        vga_set_cursor_pos(&g_display.u.vga, col, row);
+    }
+    pthread_mutex_unlock(&g_display.lock);
+    return 0;
+}
+
+static void *fb_cursor_blink_thread(void *arg) {
+    (void)arg;
+    while (1) {
+        msleep(500);
+        pthread_mutex_lock(&g_display.lock);
+        if (g_display.mode == DISPLAY_MODE_FB) {
+            struct fb_display_state *st = &g_display.u.fb;
+            if (st->prev_cursor_row >= 0) {
+                int px = st->prev_cursor_col * CHAR_WIDTH;
+                int py = st->prev_cursor_row * CHAR_HEIGHT + CHAR_HEIGHT - 2;
+                if (st->cursor_visible) {
+                    fb_fill_rect(st, px, py, CHAR_WIDTH, 2, st->bg_color);
+                    st->cursor_visible = 0;
+                } else {
+                    fb_fill_rect(st, px, py, CHAR_WIDTH, 2, st->fg_color);
+                    st->cursor_visible = 1;
+                }
+            }
+        }
+        pthread_mutex_unlock(&g_display.lock);
+    }
+    return NULL;
+}
+
 static int displayd_reset_color(struct display_device *dev) {
     (void)dev;
     pthread_mutex_lock(&g_display.lock);
@@ -274,6 +343,7 @@ static struct display_ops g_display_ops = {
     .clear       = displayd_clear,
     .scroll      = displayd_scroll,
     .set_cursor  = displayd_set_cursor,
+    .draw_cursor = displayd_draw_cursor,
     .set_color   = displayd_set_color,
     .reset_color = displayd_reset_color,
 };
@@ -330,6 +400,8 @@ static int init_fb_mode(void) {
     fb_apply_color(&g_display.u.fb, 7, 0);
     g_display.u.fb.cursor_x = 0;
     g_display.u.fb.cursor_y = 0;
+    g_display.u.fb.prev_cursor_row = -1;
+    g_display.u.fb.prev_cursor_col = -1;
     return 0;
 }
 
@@ -364,6 +436,10 @@ int main(int argc, char **argv) {
         dev.caps = DISPDEV_CAP_COLOR | DISPDEV_CAP_CURSOR | DISPDEV_CAP_SCROLL;
         dev.rows = g_display.u.fb.rows;
         dev.cols = g_display.u.fb.cols;
+
+        pthread_t blink_tid;
+        pthread_create(&blink_tid, NULL, fb_cursor_blink_thread, NULL);
+        pthread_detach(blink_tid);
     } else {
         if (init_vga_mode() < 0) {
             return 1;

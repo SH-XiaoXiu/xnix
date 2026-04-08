@@ -42,8 +42,12 @@ void vga_state_init(struct vga_state *st) {
 }
 
 void vga_hw_init(void) {
+    /* cursor start: scan line 14, bit5=0 (enabled) */
     sys_ioport_outb(VGA_CTRL_PORT, 0x0A);
-    sys_ioport_outb(VGA_DATA_PORT, 0x00);
+    sys_ioport_outb(VGA_DATA_PORT, 14);
+    /* cursor end: scan line 15 → underline cursor */
+    sys_ioport_outb(VGA_CTRL_PORT, 0x0B);
+    sys_ioport_outb(VGA_DATA_PORT, 15);
 }
 
 void vga_putc(struct vga_state *st, char c) {
@@ -69,8 +73,6 @@ void vga_putc(struct vga_state *st, char c) {
     case '\b':
         if (st->cursor_x > 0) {
             st->cursor_x--;
-            st->buffer[st->cursor_y * VGA_WIDTH + st->cursor_x] =
-                (uint16_t)' ' | ((uint16_t)st->attr << 8);
         }
         break;
     default:

@@ -93,6 +93,23 @@
 #define DISPDEV_RESET_COLOR 0x405
 
 /**
+ * DISPDEV_DRAW_CURSOR - 在指定位置渲染可见光标
+ *
+ * 与 DISPDEV_SET_CURSOR 的区别:
+ *   DISPDEV_SET_CURSOR 仅移动写入位置 (渲染循环中用).
+ *   DISPDEV_DRAW_CURSOR 在屏幕上实际绘制光标 (flush 结束时用).
+ *
+ * Request:
+ *   data[0] = DISPDEV_DRAW_CURSOR
+ *   data[1] = row
+ *   data[2] = col
+ *
+ * Reply:
+ *   data[0] = 0 成功
+ */
+#define DISPDEV_DRAW_CURSOR 0x407
+
+/**
  * DISPDEV_INFO - 查询设备信息
  *
  * Request:
