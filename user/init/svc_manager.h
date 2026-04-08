@@ -146,8 +146,9 @@ struct svc_runtime {
     uint32_t    start_ticks;
     bool        reported_ready;
     bool        mounted;
-    bool        ready;       /* 是否已报告就绪 */
-    int         ready_retry; /* ready 超时后的重试次数 */
+    bool        ready;        /* 是否已报告就绪 */
+    int         ready_retry;  /* ready 超时后的重试次数 */
+    bool        manual_stop;  /* 手动停止,抑制 respawn */
 };
 
 /**
@@ -169,6 +170,9 @@ struct svc_manager {
 
     /* init_notify endpoint (动态注入到每个服务) */
     handle_t init_notify_ep;
+
+    /* init_admin endpoint (管理命令通道) */
+    handle_t init_admin_ep;
 
     /* 进入交互阶段后静音 routine 状态日志，避免和 shell 前台输出互相污染 */
     bool quiet_routine_logs;
@@ -276,6 +280,11 @@ int svc_resolve_service_discovery(struct svc_manager *mgr);
  * @param mgr 管理器实例
  */
 void svc_tick_parallel(struct svc_manager *mgr);
+
+/* --- svc_admin --- */
+
+int  svc_admin_init(struct svc_manager *mgr);
+bool svc_admin_dispatch(struct svc_manager *mgr, struct ipc_message *msg);
 
 /* svc_suppress_diagnostics/svc_is_quiet 已移除.
  * init 诊断输出通过 fd 重定向到 serial (tty1). */

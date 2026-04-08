@@ -125,6 +125,7 @@ add_executable(init.elf
         init/svc/svc_runtime.c
         init/svc/svc_scheduler.c
         init/svc/svc_notify.c
+        init/svc/svc_admin.c
         init/ramfs.c
         init/initramfs_tar.c
         init/ramfsd_service.c

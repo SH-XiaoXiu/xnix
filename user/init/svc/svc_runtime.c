@@ -95,7 +95,7 @@ static void inject_svc_handles_image(struct proc_image_builder *b, struct svc_ma
         proc_image_add_handle(b, cfg->handles[i].src_handle, cfg->handles[i].name);
     }
 
-    /* init_notify */
+    /* init_notify (也用作 admin 命令通道) */
     if (mgr->init_notify_ep != HANDLE_INVALID) {
         proc_image_add_handle(b, mgr->init_notify_ep, "init_notify");
     }
@@ -119,7 +119,7 @@ static void inject_svc_handles(struct proc_builder *b, struct svc_manager *mgr,
         proc_add_handle(b, cfg->handles[i].src_handle, cfg->handles[i].name);
     }
 
-    /* init_notify */
+    /* init_notify (也用作 admin 命令通道) */
     if (mgr->init_notify_ep != HANDLE_INVALID) {
         proc_add_handle(b, mgr->init_notify_ep, "init_notify");
     }
@@ -300,7 +300,7 @@ void svc_handle_exit(struct svc_manager *mgr, int pid, int status) {
             rt->ready          = false;
             rt->ready_retry    = 0;
 
-            if (cfg->respawn) {
+            if (cfg->respawn && !rt->manual_stop) {
                 printf("Respawning %s...\n", cfg->name);
                 rt->state = SVC_STATE_PENDING;
             }

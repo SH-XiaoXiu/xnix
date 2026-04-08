@@ -65,6 +65,11 @@ static void drain_ready_notifications(handle_t init_notify_ep) {
             break;
         }
 
+        /* 管理命令走 admin dispatch, 就绪通知走原有逻辑 */
+        if (svc_admin_dispatch(&g_mgr, &msg)) {
+            continue; /* admin 已自行 reply */
+        }
+
         svc_handle_ready_notification(&g_mgr, &msg);
         if (msg.sender_tid != 0xFFFFFFFFu) {
             struct ipc_message reply = {0};
@@ -226,6 +231,9 @@ int main(int argc, char **argv) {
         printf("[INIT] init_notify endpoint created\n");
         g_mgr.init_notify_ep = (handle_t)init_notify_ep;
     }
+
+    /* 创建 init_admin endpoint */
+    svc_admin_init(&g_mgr);
 
     printf("[INIT] entering main loop\n");
 
