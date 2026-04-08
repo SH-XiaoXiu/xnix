@@ -4,8 +4,6 @@
  */
 
 #include "input.h"
-#include "compositor.h"
-#include "cursor.h"
 #include "window.h"
 #include "wsd.h"
 
@@ -86,14 +84,9 @@ void route_mouse_event(struct ws_server *srv, struct input_event *ev) {
                 win->x = srv->cursor_x - srv->drag_off_x;
                 win->y = srv->cursor_y - srv->drag_off_y;
             }
-            /* 拖拽窗口需要全量合成 */
-            srv->needs_composite = 1;
-        } else {
-            /* 纯光标移动: 局部更新,不触发全量合成 */
-            cursor_restore(srv);
-            cursor_save(srv);
-            cursor_draw(srv);
         }
+        /* 光标移动或拖拽均标脏, 由 render 线程合成 */
+        srv->needs_composite = 1;
 
         /* MOUSE_MOVE 不转发给客户端窗口, 避免每次移动触发全屏合成 */
     } else if (ev->type == INPUT_EVENT_MOUSE_BUTTON) {
@@ -189,9 +182,10 @@ static void *kbd_thread(void *arg) {
 
         pthread_mutex_lock(&srv->lock);
         route_kbd_event(srv, &ev);
-        if (srv->needs_composite)
-            compositor_composite(srv);
+        uint8_t need_render = srv->needs_composite;
         pthread_mutex_unlock(&srv->lock);
+        if (need_render)
+            sys_event_signal(srv->render_event, 1);
     }
 
     return NULL;
@@ -289,10 +283,10 @@ static void *mouse_thread(void *arg) {
 
         route_coalesced_mouse_move(srv, (int16_t)pending_dx, (int16_t)pending_dy);
 
-        if (srv->needs_composite)
-            compositor_composite(srv);
-
+        uint8_t need_render = srv->needs_composite;
         pthread_mutex_unlock(&srv->lock);
+        if (need_render)
+            sys_event_signal(srv->render_event, 1);
     }
 
     return NULL;

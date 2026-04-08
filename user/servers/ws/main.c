@@ -72,13 +72,15 @@ static void *client_watch_thread(void *arg) {
     if (victim) {
         window_destroy(srv, victim);
         srv->needs_composite = 1;
-        compositor_composite(srv);
     }
     srv->client_watches[slot].used         = 0;
     srv->client_watches[slot].pid          = 0;
     srv->client_watches[slot].notif_handle = HANDLE_INVALID;
     srv->client_watches[slot].watch_handle = HANDLE_INVALID;
+    uint8_t need_render = srv->needs_composite;
     pthread_mutex_unlock(&srv->lock);
+    if (need_render)
+        sys_event_signal(srv->render_event, 1);
 
     sys_handle_close(watch_handle);
     sys_handle_close(notif_handle);
@@ -186,7 +188,6 @@ static int handle_create_window(struct ws_server *srv,
     msg->handles.count = 1;
 
     srv->needs_composite = 1;
-    compositor_composite(srv);
 
 
     return 0;
@@ -210,7 +211,6 @@ static int handle_destroy_window(struct ws_server *srv,
 
     window_destroy(srv, win);
     srv->needs_composite = 1;
-    compositor_composite(srv);
 
 
 
@@ -239,7 +239,6 @@ static int handle_submit(struct ws_server *srv, struct ipc_message *msg) {
 
     /* MVP: 全量重绘 */
     srv->needs_composite = 1;
-    compositor_composite(srv);
 
 
 
@@ -268,7 +267,6 @@ static int handle_move_window(struct ws_server *srv,
     win->x = new_x;
     win->y = new_y;
     srv->needs_composite = 1;
-    compositor_composite(srv);
 
 
 
@@ -302,7 +300,6 @@ static int handle_set_title(struct ws_server *srv,
     }
 
     srv->needs_composite = 1;
-    compositor_composite(srv);
 
 
 
@@ -328,7 +325,6 @@ static int handle_set_active(struct ws_server *srv,
     if (srv->active) {
         srv->first_composite = 1;
         srv->needs_composite = 1;
-        compositor_composite(srv);
     }
     msg->regs.data[0] = 0;
     return 0;
@@ -418,7 +414,10 @@ static int ws_handler(struct ipc_message *msg) {
         break;
     }
 
+    uint8_t need_render = g_srv.needs_composite;
     pthread_mutex_unlock(&g_srv.lock);
+    if (need_render)
+        sys_event_signal(g_srv.render_event, 1);
     return ret;
 }
 
@@ -514,6 +513,17 @@ int main(void) {
     /* 初始化光标，首次合成延后到 GUI session 被激活 */
     cursor_init(&g_srv);
     g_srv.first_composite = 1;
+
+    /* 创建渲染事件并启动渲染线程 */
+    g_srv.render_event = (handle_t)sys_event_create();
+    if (g_srv.render_event == HANDLE_INVALID) {
+        ulog_errf("[ws] Failed to create render event\n");
+        return 1;
+    }
+    if (pthread_create(&g_srv.render_tid, NULL, compositor_render_thread, &g_srv) != 0) {
+        ulog_errf("[ws] Failed to create render thread\n");
+        return 1;
+    }
 
     /* 启动输入线程 */
     input_start_threads(&g_srv);

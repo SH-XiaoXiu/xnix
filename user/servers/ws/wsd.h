@@ -35,9 +35,6 @@ struct ws_server {
 
     /* 鼠标光标 */
     int32_t  cursor_x, cursor_y;
-    uint32_t cursor_saved[WS_CURSOR_W * WS_CURSOR_H];
-    int32_t  cursor_saved_x, cursor_saved_y;
-    uint8_t  cursor_visible;
 
     /* 拖拽 */
     uint8_t  dragging;
@@ -63,11 +60,12 @@ struct ws_server {
     uint8_t needs_composite;
     uint8_t first_composite;
 
-    /* 上一帧脏区域 (用于清除残影) */
-    int32_t prev_dirty_x, prev_dirty_y, prev_dirty_w, prev_dirty_h;
-
     /* 同步 (输入线程与主线程) */
     pthread_mutex_t lock;
+
+    /* 渲染线程 */
+    handle_t        render_event;
+    pthread_t       render_tid;
 };
 
 #endif /* WSD_WSD_H */
