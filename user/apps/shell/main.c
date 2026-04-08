@@ -110,10 +110,6 @@ static void shell_set_foreground(pid_t pid) {
 
 /* 内置命令 */
 static void cmd_help(int argc, char **argv);
-static void cmd_echo(int argc, char **argv);
-static void cmd_clear(int argc, char **argv);
-static void cmd_run(int argc, char **argv);
-static void cmd_kill(int argc, char **argv);
 static void cmd_path(int argc, char **argv);
 static void cmd_cd(int argc, char **argv);
 static void cmd_pwd(int argc, char **argv);
@@ -129,10 +125,6 @@ struct builtin_cmd {
 };
 
 static const struct builtin_cmd builtins[] = {{"help", cmd_help, "Show available commands"},
-                                              {"echo", cmd_echo, "Echo text"},
-                                              {"clear", cmd_clear, "Clear screen"},
-                                              {"run", cmd_run, "Run module by name"},
-                                              {"kill", cmd_kill, "Terminate process"},
                                               {"path", cmd_path, "Manage PATH"},
                                               {"cd", cmd_cd, "Change directory"},
                                               {"pwd", cmd_pwd, "Print working directory"},
@@ -441,11 +433,44 @@ static int split_pipeline(char *line, char **stages, int max_stages) {
     return count;
 }
 
+/**
+ * 在管道中执行内建命令
+ * 临时将 shell 的 stdout/stdin 重定向到管道 fd, 执行完恢复.
+ */
+static void run_builtin_in_pipe(const struct builtin_cmd *cmd, int argc, char **argv,
+                                int stdin_fd, int stdout_fd) {
+    int saved_stdout = -1;
+    int saved_stdin  = -1;
+
+    if (stdout_fd != STDOUT_FILENO) {
+        saved_stdout = dup(STDOUT_FILENO);
+        dup2(stdout_fd, STDOUT_FILENO);
+    }
+    if (stdin_fd != STDIN_FILENO) {
+        saved_stdin = dup(STDIN_FILENO);
+        dup2(stdin_fd, STDIN_FILENO);
+    }
+
+    fflush(stdout);
+    cmd->handler(argc, argv);
+    fflush(stdout);
+
+    if (saved_stdout >= 0) {
+        dup2(saved_stdout, STDOUT_FILENO);
+        close(saved_stdout);
+    }
+    if (saved_stdin >= 0) {
+        dup2(saved_stdin, STDIN_FILENO);
+        close(saved_stdin);
+    }
+}
+
 static void run_pipeline(char *line) {
     char *stages[MAX_PIPE_STAGES];
     char *argvs[MAX_PIPE_STAGES][MAX_ARGS];
     struct redirect_info redirs[MAX_PIPE_STAGES];
     char paths[MAX_PIPE_STAGES][256];
+    const struct builtin_cmd *builtin_cmds[MAX_PIPE_STAGES];
     int  pids[MAX_PIPE_STAGES];
     int  pipe_fds[MAX_PIPE_STAGES - 1][2]; /* [i][0]=read, [i][1]=write */
 
@@ -457,18 +482,30 @@ static void run_pipeline(char *line) {
 
     memset(pids, 0, sizeof(pids));
     memset(pipe_fds, -1, sizeof(pipe_fds));
+    memset(builtin_cmds, 0, sizeof(builtin_cmds));
 
-    /* 解析所有 stage */
+    /* 解析所有 stage, 区分内建命令和外部命令 */
     for (int i = 0; i < stage_count; i++) {
         int argc = parse_cmdline(stages[i], argvs[i], MAX_ARGS, &redirs[i]);
         if (argc == 0) {
             printf("Invalid pipe syntax\n");
             return;
         }
-        if (!path_find(argvs[i][0], paths[i], sizeof(paths[i]))) {
-            printf("Command not found: %s\n", argvs[i][0]);
-            return;
+
+        builtin_cmds[i] = find_builtin(argvs[i][0]);
+        if (builtin_cmds[i]) {
+            if (!builtin_cmds[i]->handler) {
+                printf("pipe: '%s' cannot be used in a pipeline\n", argvs[i][0]);
+                return;
+            }
+            paths[i][0] = '\0'; /* 内建命令不需要路径 */
+        } else {
+            if (!path_find(argvs[i][0], paths[i], sizeof(paths[i]))) {
+                printf("Command not found: %s\n", argvs[i][0]);
+                return;
+            }
         }
+
         if (i > 0 && redirs[i].stdin_file) {
             printf("pipe: stdin redirection is only allowed on the first stage\n");
             return;
@@ -494,30 +531,20 @@ static void run_pipeline(char *line) {
 
     /* 启动各 stage */
     for (int i = 0; i < stage_count; i++) {
-        struct proc_builder b;
-        proc_new(&b, paths[i]);
-        proc_inherit_named(&b);
-
+        /* 确定 stdin/stdout fd */
+        int stage_stdin  = (i > 0) ? pipe_fds[i - 1][0] : STDIN_FILENO;
+        int stage_stdout = (i < stage_count - 1) ? pipe_fds[i][1] : STDOUT_FILENO;
         int in_fd  = -1;
         int out_fd = -1;
-        handle_t stdin_handle;
-        handle_t stdout_handle;
 
-        /* stdin */
         if (i == 0 && redirs[i].stdin_file) {
             in_fd = open(redirs[i].stdin_file, O_RDONLY);
             if (in_fd < 0) {
                 printf("%s: %s\n", redirs[i].stdin_file, strerror(errno));
                 goto cleanup;
             }
-            stdin_handle = fd_get_handle(in_fd);
-        } else if (i > 0) {
-            stdin_handle = fd_get_handle(pipe_fds[i - 1][0]);
-        } else {
-            stdin_handle = fd_get_handle(STDIN_FILENO);
+            stage_stdin = in_fd;
         }
-
-        /* stdout */
         if (i == stage_count - 1 && redirs[i].stdout_file) {
             int flags = O_WRONLY | O_CREAT;
             flags |= redirs[i].stdout_append ? O_APPEND : O_TRUNC;
@@ -527,43 +554,64 @@ static void run_pipeline(char *line) {
                 printf("%s: %s\n", redirs[i].stdout_file, strerror(errno));
                 goto cleanup;
             }
-            stdout_handle = fd_get_handle(out_fd);
-        } else if (i < stage_count - 1) {
-            stdout_handle = fd_get_handle(pipe_fds[i][1]);
+            stage_stdout = out_fd;
+        }
+
+        if (builtin_cmds[i]) {
+            /* 内建命令: 在 shell 进程中执行, 重定向 stdio */
+            int argc = 0;
+            while (argvs[i][argc]) argc++;
+            run_builtin_in_pipe(builtin_cmds[i], argc, argvs[i], stage_stdin, stage_stdout);
+
+            /* 关闭内建命令使用的管道写端, 触发下游 EOF */
+            if (i < stage_count - 1) {
+                close(pipe_fds[i][1]);
+                pipe_fds[i][1] = -1;
+            }
+            pids[i] = 0; /* 标记为内建, 不需要 waitpid */
         } else {
-            stdout_handle = fd_get_handle(STDOUT_FILENO);
+            /* 外部命令: 启动子进程 */
+            struct proc_builder b;
+            proc_new(&b, paths[i]);
+            proc_inherit_named(&b);
+
+            proc_add_handle(&b, fd_get_handle(stage_stdin), HANDLE_STDIO_STDIN);
+            proc_add_handle(&b, fd_get_handle(stage_stdout), HANDLE_STDIO_STDOUT);
+            proc_add_handle(&b, fd_get_handle(STDERR_FILENO), HANDLE_STDIO_STDERR);
+
+            for (int j = 0; argvs[i][j]; j++) {
+                proc_add_arg(&b, argvs[i][j]);
+            }
+
+            pids[i] = proc_spawn(&b);
+            if (pids[i] < 0) {
+                printf("%s: %s\n", argvs[i][0], strerror(-pids[i]));
+                if (in_fd >= 0) close(in_fd);
+                if (out_fd >= 0) close(out_fd);
+                goto cleanup;
+            }
+            vfs_copy_cwd_to_child(pids[i]);
         }
 
-        proc_add_handle(&b, stdin_handle, HANDLE_STDIO_STDIN);
-        proc_add_handle(&b, stdout_handle, HANDLE_STDIO_STDOUT);
-        proc_add_handle(&b, fd_get_handle(STDERR_FILENO), HANDLE_STDIO_STDERR);
-
-        for (int j = 0; argvs[i][j]; j++) {
-            proc_add_arg(&b, argvs[i][j]);
-        }
-
-        pids[i] = proc_spawn(&b);
         if (in_fd >= 0) close(in_fd);
         if (out_fd >= 0) close(out_fd);
-
-        if (pids[i] < 0) {
-            printf("%s: %s\n", argvs[i][0], strerror(-pids[i]));
-            goto cleanup;
-        }
-        vfs_copy_cwd_to_child(pids[i]);
     }
 
-    /* 关闭 shell 侧的 pipe fd — 子进程已继承 handle */
+    /* 关闭 shell 侧剩余的 pipe fd — 子进程已继承 handle */
     for (int i = 0; i < pipe_count; i++) {
-        close(pipe_fds[i][0]);
-        close(pipe_fds[i][1]);
-        pipe_fds[i][0] = -1;
-        pipe_fds[i][1] = -1;
+        if (pipe_fds[i][0] >= 0) { close(pipe_fds[i][0]); pipe_fds[i][0] = -1; }
+        if (pipe_fds[i][1] >= 0) { close(pipe_fds[i][1]); pipe_fds[i][1] = -1; }
     }
 
-    shell_set_foreground(pids[stage_count - 1]);
+    /* 找最后一个外部命令设为前台 */
+    for (int i = stage_count - 1; i >= 0; i--) {
+        if (pids[i] > 0) {
+            shell_set_foreground(pids[i]);
+            break;
+        }
+    }
 
-    /* 等待所有 stage */
+    /* 等待所有外部 stage */
     for (int i = 0; i < stage_count; i++) {
         if (pids[i] > 0) {
             int status;
@@ -575,12 +623,10 @@ static void run_pipeline(char *line) {
     return;
 
 cleanup:
-    /* 关闭所有管道 fd */
     for (int i = 0; i < pipe_count; i++) {
         if (pipe_fds[i][0] >= 0) close(pipe_fds[i][0]);
         if (pipe_fds[i][1] >= 0) close(pipe_fds[i][1]);
     }
-    /* 等待已启动的进程 */
     for (int i = 0; i < stage_count; i++) {
         if (pids[i] > 0) {
             int status;
@@ -687,66 +733,6 @@ static void cmd_help(int argc, char **argv) {
     printf("\nExternal commands are searched in PATH.\n");
     printf("Use 'path' to view/modify PATH.\n");
     printf("\nRedirection: cmd > file, cmd < file, cmd1 | cmd2\n");
-}
-
-static void cmd_echo(int argc, char **argv) {
-    for (int i = 1; i < argc; i++) {
-        if (i > 1) {
-            printf(" ");
-        }
-        printf("%s", argv[i]);
-    }
-    printf("\n");
-}
-
-static void cmd_clear(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
-    printf("\033[2J\033[H");
-}
-
-static void cmd_run(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: run <program> [args...]\n");
-        return;
-    }
-
-    int pid = posix_spawnp(argv[1], argc - 1, (const char **)&argv[1]);
-    if (pid < 0) {
-        printf("run: %s: %s\n", argv[1], strerror(-pid));
-        return;
-    }
-
-    shell_set_foreground(pid);
-
-    int status;
-    waitpid(pid, &status, 0);
-
-    shell_set_foreground(0);
-
-    if (status != 0) {
-        printf("Process %d exited with status %d\n", pid, status);
-    }
-}
-
-static void cmd_kill(int argc, char **argv) {
-    if (argc < 2) {
-        printf("Usage: kill <pid>\n");
-        return;
-    }
-
-    int pid = simple_atoi(argv[1]);
-    if (pid <= 1) {
-        printf("Error: cannot kill pid %d\n", pid);
-        return;
-    }
-
-    int ret = sys_kill(pid, SIGTERM);
-    if (ret < 0) {
-        printf("Failed to kill pid %d: %s\n", pid, strerror(-ret));
-    } else {
-        printf("Sent SIGTERM to pid %d\n", pid);
-    }
 }
 
 static void cmd_path(int argc, char **argv) {
