@@ -30,11 +30,10 @@ int svc_notify_ready(const char *name) {
         return -1;
     }
 
-    /* 查找 init_notify endpoint */
+    /* 查找 init_notify endpoint (不存在说明非 init 管理的进程, 静默返回) */
     handle_t init_ep = sys_handle_find("init_notify");
     if (init_ep == HANDLE_INVALID) {
-        printf("[svc] %s: init_notify handle not found\n", name);
-        return -1; /* errno 已由系统调用包装器设置 */
+        return 0;
     }
 
     struct ipc_message msg = {0};
