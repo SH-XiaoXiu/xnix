@@ -101,6 +101,7 @@ static int ipc_msg_copy_out(struct ipc_message *user_msg, const struct ipc_messa
     memcpy(&out.handles, &kmsg->handles, sizeof(out.handles)); /* 拷贝传递的 handles */
     out.flags      = kmsg->flags;
     out.sender_tid = kmsg->sender_tid; /* 拷贝发送者 TID */
+    out.sender_pid = kmsg->sender_pid; /* 拷贝发送者 PID */
 
     return copy_to_user(user_msg, &out, sizeof(out));
 }

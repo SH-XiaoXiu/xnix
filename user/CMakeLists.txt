@@ -85,6 +85,7 @@ set(CORE_SYSTEM_SERVERS
         devfs
         syslog
         ws
+        userd
 )
 
 set(USER_SERVICES "")

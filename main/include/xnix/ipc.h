@@ -35,6 +35,7 @@ struct ipc_message {
     struct ipc_msg_handles handles;
     uint32_t               flags;
     tid_t                  sender_tid; /* 发送者 TID (receive 时填充, 用于延迟回复) */
+    pid_t                  sender_pid; /* 发送者 PID (receive 时填充) */
 };
 
 /* 消息标志 */

@@ -185,6 +185,7 @@ static int ipc_send_to_ep(struct ipc_endpoint *ep, struct ipc_message *msg,
         ipc_copy_msg(current, receiver, msg, receiver->ipc_reply_msg);
         receiver->ipc_peer                  = current->tid;
         receiver->ipc_reply_msg->sender_tid = current->tid;
+        receiver->ipc_reply_msg->sender_pid = current->owner ? current->owner->pid : 0;
         sched_wakeup_thread(receiver);
 
         pr_debug("[IPC] send -> recv: sender=%d receiver=%d\n", current->tid, receiver->tid);
@@ -372,6 +373,7 @@ int ipc_receive(handle_t ep_handle, struct ipc_message *msg, uint32_t timeout_ms
         /* 记录发送者 */
         current->ipc_peer = sender->tid;
         msg->sender_tid   = sender->tid; /* 填充 sender_tid 用于延迟回复 */
+        msg->sender_pid   = sender->owner ? sender->owner->pid : 0;
 
         pr_debug("[IPC] recv <- send: receiver=%d sender=%d\n", current->tid, sender->tid);
 

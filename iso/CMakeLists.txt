@@ -98,6 +98,7 @@ endforeach ()
 
 # 配置文件
 list(APPEND SYSTEM_FILES "${CMAKE_SOURCE_DIR}/user/sys.conf:/etc/sys.conf")
+list(APPEND SYSTEM_FILES "${CMAKE_SOURCE_DIR}/user/etc/passwd:/etc/passwd")
 
 # boot 文件 (磁盘启动使用)
 list(APPEND SYSTEM_FILES "${CMAKE_BINARY_DIR}/xnix.elf:/boot/xnix.elf")
