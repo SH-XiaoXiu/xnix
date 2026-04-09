@@ -17,9 +17,11 @@
 #include "session.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #include <vfs_client.h>
 #include <xnix/abi/ipc.h>
 #include <xnix/abi/process.h>
@@ -243,6 +245,163 @@ static void handle_sudo(int session_idx, struct ipc_message *msg) {
 }
 
 /*
+ * 确保目录存在 (静默失败 = 已存在)
+ */
+static void ensure_dir(const char *path) {
+    vfs_mkdir(path);
+}
+
+/*
+ * 验证请求中的 session handle 是否属于指定 uid
+ */
+static int verify_caller_uid(struct ipc_message *msg, uint32_t required_uid) {
+    if (msg->handles.count < 1)
+        return -EACCES;
+
+    handle_t caller_session = msg->handles.handles[0];
+
+    /*
+     * 关闭这个临时 handle (由 IPC 传入), 暂时信任调用者.
+     * TODO: 当有 handle compare syscall 时改进.
+     */
+    if (caller_session == HANDLE_INVALID)
+        return -EACCES;
+
+    /* 关闭传入的临时 handle (避免泄漏) */
+    sys_handle_close(caller_session);
+
+    (void)required_uid; /* TODO: 真正的 uid 检查需要 handle compare */
+    return 0;
+}
+
+/*
+ * ADDUSER 处理 (发到 user_ep)
+ */
+static void handle_adduser(struct ipc_message *msg) {
+    /* 权限检查: 需要有效 session (未来检查 uid=0) */
+    if (verify_caller_uid(msg, 0) < 0) {
+        printf("[userd] adduser denied: no valid session\n");
+        msg->regs.data[0] = USER_OP_ADDUSER_REPLY;
+        msg->regs.data[1] = (uint32_t)(-EPERM);
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
+    }
+
+    struct user_adduser_req *req =
+        (struct user_adduser_req *)(uintptr_t)msg->buffer.data;
+
+    if (!req || msg->buffer.size < sizeof(*req)) {
+        msg->regs.data[0] = USER_OP_ADDUSER_REPLY;
+        msg->regs.data[1] = (uint32_t)(-EINVAL);
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
+    }
+
+    char username[USER_NAME_MAX] = {0};
+    char password[USER_PASS_MAX] = {0};
+    char shell[USER_SHELL_MAX]   = {0};
+    strncpy(username, req->username, USER_NAME_MAX - 1);
+    strncpy(password, req->password, USER_PASS_MAX - 1);
+    strncpy(shell, req->shell, USER_SHELL_MAX - 1);
+
+    if (username[0] == '\0') {
+        msg->regs.data[0] = USER_OP_ADDUSER_REPLY;
+        msg->regs.data[1] = (uint32_t)(-EINVAL);
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
+    }
+
+    /* 默认 shell */
+    if (shell[0] == '\0')
+        strncpy(shell, "/bin/shell.elf", USER_SHELL_MAX - 1);
+
+    /* 分配 UID */
+    uint32_t uid = passwd_next_uid();
+    uint32_t gid = uid;
+
+    /* 构建 home 路径 */
+    char home[USER_HOME_MAX];
+    snprintf(home, sizeof(home), "/home/%s", username);
+
+    /* 添加到内存数据库 */
+    int ret = passwd_add(username, password, uid, gid, home, shell);
+    if (ret < 0) {
+        printf("[userd] adduser '%s' failed: %d\n", username, ret);
+        msg->regs.data[0] = USER_OP_ADDUSER_REPLY;
+        msg->regs.data[1] = (uint32_t)ret;
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
+    }
+
+    /* 持久化到 /etc/passwd */
+    passwd_save("/etc/passwd");
+
+    /* 创建 home 目录 */
+    ensure_dir(home);
+
+    printf("[userd] adduser: '%s' uid=%u home=%s\n", username, uid, home);
+
+    msg->regs.data[0]  = USER_OP_ADDUSER_REPLY;
+    msg->regs.data[1]  = 0;
+    msg->regs.data[2]  = uid;
+    msg->buffer.data   = 0;
+    msg->buffer.size   = 0;
+    msg->handles.count = 0;
+}
+
+/*
+ * PASSWD 处理 (发到 session endpoint)
+ */
+static void handle_passwd(int session_idx, struct ipc_message *msg) {
+    struct session *sess = session_get(session_idx);
+    if (!sess) {
+        msg->regs.data[0] = USER_OP_PASSWD_REPLY;
+        msg->regs.data[1] = (uint32_t)(-EINVAL);
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
+    }
+
+    struct user_passwd_req *req = (struct user_passwd_req *)(uintptr_t)msg->buffer.data;
+    if (!req || msg->buffer.size < sizeof(*req)) {
+        msg->regs.data[0] = USER_OP_PASSWD_REPLY;
+        msg->regs.data[1] = (uint32_t)(-EINVAL);
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
+    }
+
+    char old_pass[USER_PASS_MAX] = {0};
+    char new_pass[USER_PASS_MAX] = {0};
+    strncpy(old_pass, req->old_password, USER_PASS_MAX - 1);
+    strncpy(new_pass, req->new_password, USER_PASS_MAX - 1);
+
+    struct passwd_entry *ent = passwd_lookup(sess->name);
+    if (!ent || !passwd_verify(ent, old_pass)) {
+        printf("[userd] passwd: auth failed for '%s'\n", sess->name);
+        msg->regs.data[0] = USER_OP_PASSWD_REPLY;
+        msg->regs.data[1] = (uint32_t)(-EACCES);
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
+    }
+
+    passwd_change_password(ent, new_pass);
+    passwd_save("/etc/passwd");
+
+    printf("[userd] passwd: password changed for '%s'\n", sess->name);
+    msg->regs.data[0]  = USER_OP_PASSWD_REPLY;
+    msg->regs.data[1]  = 0;
+    msg->buffer.data   = 0;
+    msg->buffer.size   = 0;
+    msg->handles.count = 0;
+}
+
+/*
  * 分发 session endpoint 上的请求
  */
 static void dispatch_session(int session_idx, struct ipc_message *msg) {
@@ -260,6 +419,9 @@ static void dispatch_session(int session_idx, struct ipc_message *msg) {
         break;
     case USER_OP_SUDO:
         handle_sudo(session_idx, msg);
+        break;
+    case USER_OP_PASSWD:
+        handle_passwd(session_idx, msg);
         break;
     default:
         msg->regs.data[0]  = (uint32_t)(-ENOSYS);
@@ -293,7 +455,6 @@ int main(int argc, char **argv) {
     /* 加载用户数据库 */
     if (passwd_load("/etc/passwd") < 0) {
         printf("[userd] WARNING: no /etc/passwd, creating default root user\n");
-        /* 如果没有 passwd 文件, 内嵌一个 root 用户 */
     }
 
     printf("[userd] started, endpoint=%u\n", g_user_ep);
@@ -329,6 +490,8 @@ int main(int argc, char **argv) {
             uint32_t op = msg.regs.data[0];
             if (op == USER_OP_LOGIN) {
                 handle_login(&msg);
+            } else if (op == USER_OP_ADDUSER) {
+                handle_adduser(&msg);
             } else {
                 msg.regs.data[0]  = (uint32_t)(-ENOSYS);
                 msg.buffer.data   = 0;

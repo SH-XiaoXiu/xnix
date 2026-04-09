@@ -154,6 +154,21 @@ static bool ini_handler(const char *section, const char *key, const char *value,
             }
             memcpy(cfg->mount, value, len);
             cfg->mount[len] = '\0';
+        } else if (strcmp(key, "dirs") == 0) {
+            /* 解析空格分隔的目录路径列表 */
+            cfg->dirs_count = 0;
+            const char *p = value;
+            while (*p && cfg->dirs_count < SVC_DEPS_MAX) {
+                while (*p == ' ') p++;
+                if (!*p) break;
+                const char *start = p;
+                while (*p && *p != ' ') p++;
+                size_t len = (size_t)(p - start);
+                if (len >= SVC_PATH_MAX) len = SVC_PATH_MAX - 1;
+                memcpy(cfg->dirs[cfg->dirs_count], start, len);
+                cfg->dirs[cfg->dirs_count][len] = '\0';
+                cfg->dirs_count++;
+            }
         } else if (strcmp(key, "stdio") == 0) {
             size_t len = strlen(value);
             if (len >= SVC_HANDLE_NAME_MAX) {

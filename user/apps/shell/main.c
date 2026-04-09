@@ -23,6 +23,7 @@
 #include <xnix/fd.h>
 #include <xnix/ipc.h>
 #include <xnix/perm_api.h>
+#include <xnix/protocol/user.h>
 #include <xnix/proc.h>
 #include <xnix/svc.h>
 #include <xnix/syscall.h>
@@ -718,7 +719,8 @@ static void execute_command(char *line) {
             if (out_fd >= 0) close(out_fd);
             if (in_fd >= 0)  close(in_fd);
         } else if (strcmp(cmd->name, "exit") == 0) {
-            printf("Use Ctrl+D or close terminal to exit.\n");
+            line_save_history();
+            sys_exit(0);
         }
         return;
     }
@@ -936,6 +938,24 @@ int main(int argc, char **argv) {
 
     /* 初始化 PATH */
     path_init();
+
+    /* 查询用户信息, 设置 per-user history 路径 */
+    handle_t session_ep = env_get_handle("user_session");
+    if (session_ep != HANDLE_INVALID) {
+        struct ipc_message wreq = {0};
+        wreq.regs.data[0] = USER_OP_WHOAMI;
+        struct ipc_message wrep = {0};
+        struct user_info   uinfo;
+        wrep.buffer.data = (uint64_t)(uintptr_t)&uinfo;
+        wrep.buffer.size = sizeof(uinfo);
+        if (sys_ipc_call(session_ep, &wreq, &wrep, 2000) == 0 &&
+            (int32_t)wrep.regs.data[1] >= 0 && uinfo.home[0] != '\0') {
+            snprintf(g_history_file, sizeof(g_history_file),
+                     "%s/.shell_history", uinfo.home);
+            /* 切换到用户 home 目录 */
+            vfs_chdir(uinfo.home);
+        }
+    }
 
     /* 初始化行编辑器(加载历史) */
     line_init();

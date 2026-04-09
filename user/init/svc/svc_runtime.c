@@ -198,6 +198,14 @@ int svc_start_service(struct svc_manager *mgr, int idx) {
 
     rt->state = SVC_STATE_STARTING;
 
+    /* 启动前创建声明的目录 */
+    if (cfg->dirs_count > 0 && !cfg->dirs_created) {
+        for (int d = 0; d < cfg->dirs_count; d++) {
+            vfs_mkdir(cfg->dirs[d]);
+        }
+        cfg->dirs_created = true;
+    }
+
     int pid;
 
     if (cfg->ramfs_load) {

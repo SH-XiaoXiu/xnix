@@ -129,6 +129,11 @@ struct svc_config {
     char     mount[SVC_PATH_MAX]; /* 挂载路径(可选) */
     uint32_t mount_ep;            /* 挂载使用的 endpoint handle */
 
+    /* 启动前创建的目录 */
+    char dirs[SVC_DEPS_MAX][SVC_PATH_MAX];
+    int  dirs_count;
+    bool dirs_created;
+
     /* stdio 绑定 */
     char stdio[SVC_HANDLE_NAME_MAX]; /* stdio 绑定的 handle 名 (如 "tty1") */
 

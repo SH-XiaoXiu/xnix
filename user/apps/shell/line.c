@@ -18,6 +18,7 @@
 
 /* ---- 状态 ---- */
 
+char g_history_file[128] = HISTORY_FILE_DEFAULT;
 static char g_history[HISTORY_MAX][LINE_MAX_LEN];
 static int  g_history_count;
 
@@ -402,7 +403,7 @@ void line_init(void) {
     memset(g_history, 0, sizeof(g_history));
 
     /* 尝试加载历史文件 */
-    int fd = vfs_open(HISTORY_FILE, VFS_O_RDONLY);
+    int fd = vfs_open(g_history_file, VFS_O_RDONLY);
     if (fd < 0) return;
 
     char filebuf[4096];
@@ -451,7 +452,7 @@ void line_add_history(const char *cmd) {
 }
 
 void line_save_history(void) {
-    int fd = vfs_open(HISTORY_FILE, VFS_O_WRONLY | VFS_O_CREAT | VFS_O_TRUNC);
+    int fd = vfs_open(g_history_file, VFS_O_WRONLY | VFS_O_CREAT | VFS_O_TRUNC);
     if (fd < 0) return;
 
     for (int i = 0; i < g_history_count; i++) {

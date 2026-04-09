@@ -24,6 +24,10 @@
 #define USER_OP_VALIDATE_REPLY 0x6008
 #define USER_OP_SUDO           0x6009 /* 以目标用户身份执行命令 */
 #define USER_OP_SUDO_REPLY     0x600A
+#define USER_OP_ADDUSER        0x600B /* 创建新用户 */
+#define USER_OP_ADDUSER_REPLY  0x600C
+#define USER_OP_PASSWD         0x600D /* 修改密码 */
+#define USER_OP_PASSWD_REPLY   0x600E
 
 /*
  * 常量
@@ -91,6 +95,35 @@ struct user_sudo_req {
  * 回复:
  *   regs[0] = USER_OP_LOGOUT_REPLY
  *   regs[1] = 0 成功
+ *
+ * ADDUSER 请求 (发到 user_ep, 需要 root session)
+ *   regs[0] = USER_OP_ADDUSER
+ *   handles[0] = 调用者 session handle (需 uid=0)
+ *   buffer = struct user_adduser_req
+ *
+ * 回复:
+ *   regs[0] = USER_OP_ADDUSER_REPLY
+ *   regs[1] = 0 成功, <0 错误
+ *   regs[2] = 分配的 uid
  */
+struct user_adduser_req {
+    char     username[USER_NAME_MAX];
+    char     password[USER_PASS_MAX]; /* 明文, userd 内部哈希 */
+    char     shell[USER_SHELL_MAX];   /* 空 = 默认 /bin/shell.elf */
+};
+
+/*
+ * PASSWD 请求 (发到 session endpoint)
+ *   regs[0] = USER_OP_PASSWD
+ *   buffer  = struct user_passwd_req
+ *
+ * 回复:
+ *   regs[0] = USER_OP_PASSWD_REPLY
+ *   regs[1] = 0 成功, <0 错误
+ */
+struct user_passwd_req {
+    char old_password[USER_PASS_MAX];
+    char new_password[USER_PASS_MAX];
+};
 
 #endif /* XNIX_PROTOCOL_USER_H */

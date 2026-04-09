@@ -52,4 +52,29 @@ bool passwd_verify(struct passwd_entry *ent, const char *password);
  */
 void passwd_fill_info(struct passwd_entry *ent, struct user_info *info);
 
+/**
+ * 添加用户
+ * @param password 明文密码 (内部哈希)
+ * @return 0 成功, <0 错误
+ */
+int passwd_add(const char *name, const char *password,
+               uint32_t uid, uint32_t gid,
+               const char *home, const char *shell);
+
+/**
+ * 分配下一个可用 UID (从 1000 开始)
+ */
+uint32_t passwd_next_uid(void);
+
+/**
+ * 修改密码
+ * @return 0 成功, <0 错误
+ */
+int passwd_change_password(struct passwd_entry *ent, const char *new_password);
+
+/**
+ * 保存当前用户数据库到文件
+ */
+int passwd_save(const char *path);
+
 #endif /* USERD_PASSWD_H */

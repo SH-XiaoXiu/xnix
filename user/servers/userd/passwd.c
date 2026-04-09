@@ -156,3 +156,69 @@ void passwd_fill_info(struct passwd_entry *ent, struct user_info *info) {
     strncpy(info->home, ent->home, USER_HOME_MAX - 1);
     strncpy(info->shell, ent->shell, USER_SHELL_MAX - 1);
 }
+
+int passwd_change_password(struct passwd_entry *ent, const char *new_password) {
+    if (!ent)
+        return -EINVAL;
+    if (new_password[0] == '\0')
+        ent->hash[0] = '\0';
+    else
+        sha256_hex(new_password, strlen(new_password), ent->hash);
+    return 0;
+}
+
+uint32_t passwd_next_uid(void) {
+    uint32_t max_uid = 999;
+    for (int i = 0; i < g_user_count; i++) {
+        if (g_users[i].valid && g_users[i].uid > max_uid)
+            max_uid = g_users[i].uid;
+    }
+    return max_uid + 1;
+}
+
+int passwd_add(const char *name, const char *password,
+               uint32_t uid, uint32_t gid,
+               const char *home, const char *shell) {
+    if (g_user_count >= PASSWD_MAX_USERS)
+        return -ENOMEM;
+    if (passwd_lookup(name))
+        return -EEXIST;
+    if (passwd_lookup_uid(uid))
+        return -EEXIST;
+
+    struct passwd_entry *ent = &g_users[g_user_count];
+    memset(ent, 0, sizeof(*ent));
+    strncpy(ent->name, name, USER_NAME_MAX - 1);
+    ent->uid = uid;
+    ent->gid = gid;
+    strncpy(ent->home, home, USER_HOME_MAX - 1);
+    strncpy(ent->shell, shell, USER_SHELL_MAX - 1);
+    ent->valid = true;
+
+    /* 哈希密码 (空密码 = 空 hash) */
+    if (password[0] != '\0')
+        sha256_hex(password, strlen(password), ent->hash);
+
+    g_user_count++;
+    return 0;
+}
+
+int passwd_save(const char *path) {
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC);
+    if (fd < 0)
+        return -1;
+
+    for (int i = 0; i < g_user_count; i++) {
+        if (!g_users[i].valid)
+            continue;
+        struct passwd_entry *e = &g_users[i];
+        char line[512];
+        int  len = snprintf(line, sizeof(line), "%s:%s:%u:%u:%s:%s\n",
+                            e->name, e->hash, e->uid, e->gid, e->home, e->shell);
+        if (len > 0)
+            write(fd, line, (size_t)len);
+    }
+
+    close(fd);
+    return 0;
+}

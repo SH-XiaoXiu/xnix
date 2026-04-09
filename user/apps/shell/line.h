@@ -10,7 +10,10 @@
 
 #define LINE_MAX_LEN   256
 #define HISTORY_MAX    64
-#define HISTORY_FILE   "/etc/shell_history"
+#define HISTORY_FILE_DEFAULT "/etc/shell_history"
+
+/* 运行时 history 路径 (可被 shell main 覆盖为 ~/. shell_history) */
+extern char g_history_file[128];
 
 /**
  * 初始化行编辑器, 加载历史文件
