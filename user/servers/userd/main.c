@@ -5,11 +5,11 @@
  * 职责:
  *   - 用户认证 (LOGIN)
  *   - 会话管理 (WHOAMI, LOGOUT, VALIDATE)
- *   - 权限提升 (SUDO)
+ *   - 权限提升 (SUDO session issuance)
  *
  * 架构:
  *   user_ep: 接收 LOGIN 请求 (全局)
- *   session endpoint: 接收 WHOAMI/LOGOUT/VALIDATE/SUDO (per-session)
+ *   session endpoint: 接收 WHOAMI/LOGOUT/VALIDATE/SUDO/ADDUSER (per-session)
  *   userd 用 wait_any 同时监听 user_ep + 所有 session endpoint
  */
 
@@ -142,9 +142,10 @@ static void handle_logout(int session_idx, struct ipc_message *msg) {
  * 请求:
  *   regs[0] = USER_OP_SUDO
  *   regs[1] = target_uid (默认 0)
- *   buffer = struct user_sudo_req (password + exec_args)
+ *   buffer = struct user_sudo_req (password)
  *
- * userd 验证身份后以目标用户权限 spawn 命令.
+ * userd 只做认证和授权, 成功后返回目标用户的临时 session handle.
+ * 命令启动和等待由 sudo 客户端完成, 保持父子进程关系正确.
  */
 static void handle_sudo(int session_idx, struct ipc_message *msg) {
     struct session *sess = session_get(session_idx);
@@ -192,56 +193,38 @@ static void handle_sudo(int session_idx, struct ipc_message *msg) {
         return;
     }
 
-    printf("[userd] sudo: user '%s' -> uid %u, cmd='%s'\n",
-           sess->name, target_uid, req->exec_args.path);
+    printf("[userd] sudo: user '%s' -> uid %u\n", sess->name, target_uid);
 
     /* 为目标用户创建临时 session */
     int target_sid = session_create(target->uid, target->gid,
                                     target->name, target->home, target->shell);
-
-    /* 以目标用户身份 spawn 命令 */
-    struct abi_exec_args *exec = &req->exec_args;
-    exec->flags |= ABI_EXEC_INHERIT_STDIO;
-
-    /* 如果目标会话创建成功, 注入 session handle */
-    if (target_sid >= 0) {
-        struct session *ts = session_get(target_sid);
-        if (ts && exec->handle_count < ABI_EXEC_MAX_HANDLES) {
-            struct spawn_handle *sh = &exec->handles[exec->handle_count++];
-            sh->src = ts->ep;
-            strncpy(sh->name, "user_session", sizeof(sh->name) - 1);
-            sh->rights = HANDLE_RIGHT_ALL;
-        }
+    if (target_sid < 0) {
+        msg->regs.data[0] = USER_OP_SUDO_REPLY;
+        msg->regs.data[1] = (uint32_t)(-ENOMEM);
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
     }
 
-    /* 注入 vfs_ep 和 user_ep */
-    handle_t vfs_ep = env_get_handle("vfs_ep");
-    if (vfs_ep != HANDLE_INVALID && exec->handle_count < ABI_EXEC_MAX_HANDLES) {
-        struct spawn_handle *sh = &exec->handles[exec->handle_count++];
-        sh->src = vfs_ep;
-        strncpy(sh->name, "vfs_ep", sizeof(sh->name) - 1);
-        sh->rights = HANDLE_RIGHT_ALL;
-    }
-    if (exec->handle_count < ABI_EXEC_MAX_HANDLES) {
-        struct spawn_handle *sh = &exec->handles[exec->handle_count++];
-        sh->src = g_user_ep;
-        strncpy(sh->name, "user_ep", sizeof(sh->name) - 1);
-        sh->rights = HANDLE_RIGHT_ALL;
-    }
-
-    int pid = sys_exec(exec);
-
-    printf("[userd] sudo: spawned pid=%d\n", pid);
-
-    /* 如果 spawn 失败, 清理临时 session */
-    if (pid < 0 && target_sid >= 0)
+    struct session *target_sess = session_get(target_sid);
+    if (!target_sess) {
         session_destroy(target_sid);
+        msg->regs.data[0] = USER_OP_SUDO_REPLY;
+        msg->regs.data[1] = (uint32_t)(-EINVAL);
+        msg->buffer.data  = 0;
+        msg->buffer.size  = 0;
+        return;
+    }
 
-    msg->regs.data[0]  = USER_OP_SUDO_REPLY;
-    msg->regs.data[1]  = (uint32_t)pid;
-    msg->buffer.data   = 0;
-    msg->buffer.size   = 0;
-    msg->handles.count = 0;
+    struct user_info *info = (struct user_info *)g_reply_buf;
+    session_fill_info(target_sid, info);
+
+    msg->regs.data[0]       = USER_OP_SUDO_REPLY;
+    msg->regs.data[1]       = 0;
+    msg->handles.handles[0] = target_sess->ep;
+    msg->handles.count      = 1;
+    msg->buffer.data        = (uint64_t)(uintptr_t)info;
+    msg->buffer.size        = sizeof(*info);
 }
 
 /*
@@ -252,35 +235,12 @@ static void ensure_dir(const char *path) {
 }
 
 /*
- * 验证请求中的 session handle 是否属于指定 uid
+ * ADDUSER 处理 (发到 session endpoint)
  */
-static int verify_caller_uid(struct ipc_message *msg, uint32_t required_uid) {
-    if (msg->handles.count < 1)
-        return -EACCES;
-
-    handle_t caller_session = msg->handles.handles[0];
-
-    /*
-     * 关闭这个临时 handle (由 IPC 传入), 暂时信任调用者.
-     * TODO: 当有 handle compare syscall 时改进.
-     */
-    if (caller_session == HANDLE_INVALID)
-        return -EACCES;
-
-    /* 关闭传入的临时 handle (避免泄漏) */
-    sys_handle_close(caller_session);
-
-    (void)required_uid; /* TODO: 真正的 uid 检查需要 handle compare */
-    return 0;
-}
-
-/*
- * ADDUSER 处理 (发到 user_ep)
- */
-static void handle_adduser(struct ipc_message *msg) {
-    /* 权限检查: 需要有效 session (未来检查 uid=0) */
-    if (verify_caller_uid(msg, 0) < 0) {
-        printf("[userd] adduser denied: no valid session\n");
+static void handle_adduser(int session_idx, struct ipc_message *msg) {
+    struct session *sess = session_get(session_idx);
+    if (!sess || sess->uid != 0) {
+        printf("[userd] adduser denied: uid=%u\n", sess ? sess->uid : (uint32_t)-1);
         msg->regs.data[0] = USER_OP_ADDUSER_REPLY;
         msg->regs.data[1] = (uint32_t)(-EPERM);
         msg->buffer.data  = 0;
@@ -423,6 +383,9 @@ static void dispatch_session(int session_idx, struct ipc_message *msg) {
     case USER_OP_PASSWD:
         handle_passwd(session_idx, msg);
         break;
+    case USER_OP_ADDUSER:
+        handle_adduser(session_idx, msg);
+        break;
     default:
         msg->regs.data[0]  = (uint32_t)(-ENOSYS);
         msg->buffer.data   = 0;
@@ -490,8 +453,6 @@ int main(int argc, char **argv) {
             uint32_t op = msg.regs.data[0];
             if (op == USER_OP_LOGIN) {
                 handle_login(&msg);
-            } else if (op == USER_OP_ADDUSER) {
-                handle_adduser(&msg);
             } else {
                 msg.regs.data[0]  = (uint32_t)(-ENOSYS);
                 msg.buffer.data   = 0;

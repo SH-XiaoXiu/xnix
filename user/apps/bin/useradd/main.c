@@ -4,8 +4,8 @@
  *
  * Usage: useradd <username> [password]
  *
- * 通过 userd 创建新用户, 自动分配 UID 并创建 /home/<username>.
- * 需要 root 权限 (通过 session handle 验证 uid=0).
+ * 通过当前 user_session 创建新用户, 自动分配 UID 并创建 /home/<username>.
+ * 需要 root 权限 (由 userd 根据 session uid=0 验证).
  */
 
 #include <stdio.h>
@@ -18,12 +18,6 @@
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("Usage: useradd <username> [password]\n");
-        return 1;
-    }
-
-    handle_t user_ep = env_get_handle("user_ep");
-    if (user_ep == HANDLE_INVALID) {
-        printf("useradd: user_ep not found\n");
         return 1;
     }
 
@@ -40,14 +34,12 @@ int main(int argc, char **argv) {
         strncpy(add_req.password, argv[2], USER_PASS_MAX - 1);
 
     struct ipc_message req = {0};
-    req.regs.data[0]       = USER_OP_ADDUSER;
-    req.handles.handles[0] = session_ep; /* 身份验证 */
-    req.handles.count      = 1;
-    req.buffer.data        = (uint64_t)(uintptr_t)&add_req;
-    req.buffer.size        = sizeof(add_req);
+    req.regs.data[0] = USER_OP_ADDUSER;
+    req.buffer.data  = (uint64_t)(uintptr_t)&add_req;
+    req.buffer.size  = sizeof(add_req);
 
     struct ipc_message reply = {0};
-    int ret = sys_ipc_call(user_ep, &req, &reply, 5000);
+    int ret = sys_ipc_call(session_ep, &req, &reply, 5000);
     if (ret < 0) {
         printf("useradd: request failed\n");
         return 1;

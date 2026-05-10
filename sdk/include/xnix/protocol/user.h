@@ -3,12 +3,17 @@
  * @brief userd 用户服务 IPC 协议定义
  *
  * 用户认证, 会话管理, 权限提升.
+ *
+ * 身份边界:
+ *   - user_ep 只处理登录等全局入口.
+ *   - 登录成功后 userd 返回 session endpoint handle.
+ *   - 后续身份相关操作发到 session endpoint, userd 根据 endpoint
+ *     本身确定调用者 session.
  */
 
 #ifndef XNIX_PROTOCOL_USER_H
 #define XNIX_PROTOCOL_USER_H
 
-#include <xnix/abi/process.h>
 #include <xnix/abi/stdint.h>
 
 /*
@@ -22,7 +27,7 @@
 #define USER_OP_WHOAMI_REPLY   0x6006
 #define USER_OP_VALIDATE       0x6007 /* 验证会话 (供其他服务使用) */
 #define USER_OP_VALIDATE_REPLY 0x6008
-#define USER_OP_SUDO           0x6009 /* 以目标用户身份执行命令 */
+#define USER_OP_SUDO           0x6009 /* 认证并签发目标用户临时会话 */
 #define USER_OP_SUDO_REPLY     0x600A
 #define USER_OP_ADDUSER        0x600B /* 创建新用户 */
 #define USER_OP_ADDUSER_REPLY  0x600C
@@ -72,11 +77,12 @@ struct user_login_req {
  *
  * 回复:
  *   regs[0] = USER_OP_SUDO_REPLY
- *   regs[1] = pid (>0 成功, <0 错误)
+ *   regs[1] = 0 成功, <0 错误
+ *   handles[0] = target session handle (成功时)
+ *   buffer = struct user_info (成功时)
  */
 struct user_sudo_req {
-    char                password[USER_PASS_MAX]; /* 调用者密码 (re-auth) */
-    struct abi_exec_args exec_args;              /* 要执行的命令 */
+    char password[USER_PASS_MAX]; /* 调用者密码 (re-auth) */
 };
 
 /*
@@ -96,9 +102,8 @@ struct user_sudo_req {
  *   regs[0] = USER_OP_LOGOUT_REPLY
  *   regs[1] = 0 成功
  *
- * ADDUSER 请求 (发到 user_ep, 需要 root session)
+ * ADDUSER 请求 (发到 session endpoint, 需要 uid=0)
  *   regs[0] = USER_OP_ADDUSER
- *   handles[0] = 调用者 session handle (需 uid=0)
  *   buffer = struct user_adduser_req
  *
  * 回复:

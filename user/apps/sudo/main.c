@@ -2,8 +2,8 @@
  * @file main.c
  * @brief sudo: 以目标用户身份执行命令
  *
- * 通过 userd 认证并以 root 身份执行指定命令.
- * 向 session endpoint 发送 USER_OP_SUDO.
+ * 通过 userd 认证并获取临时目标用户 session, 再由 sudo 自己
+ * 以该 session 启动并等待指定命令.
  *
  * Usage: sudo <command> [args...]
  */
@@ -26,6 +26,29 @@
 #include <xnix/syscall.h>
 
 #define MAX_PASS 32
+
+static int add_session_handle(struct abi_exec_args *exec, handle_t session_ep) {
+    if (exec->handle_count >= ABI_EXEC_MAX_HANDLES)
+        return -E2BIG;
+
+    struct spawn_handle *sh = &exec->handles[exec->handle_count++];
+    memset(sh, 0, sizeof(*sh));
+    sh->src = session_ep;
+    strncpy(sh->name, "user_session", sizeof(sh->name) - 1);
+    sh->rights = HANDLE_RIGHT_ALL;
+    return 0;
+}
+
+static void logout_session(handle_t session_ep) {
+    if (session_ep == HANDLE_INVALID)
+        return;
+
+    struct ipc_message req = {0};
+    req.regs.data[0] = USER_OP_LOGOUT;
+
+    struct ipc_message reply = {0};
+    sys_ipc_call(session_ep, &req, &reply, 2000);
+}
 
 /**
  * RAW 模式读密码, 无回显
@@ -80,6 +103,17 @@ int main(int argc, char **argv) {
     if (vfs_ep != HANDLE_INVALID)
         vfs_client_init(vfs_ep);
 
+    struct abi_exec_args exec_args;
+    int build_ret = posix_spawnp_make_exec_args(
+        &exec_args, argv[1], argc - 1, (const char **)&argv[1]);
+    if (build_ret < 0) {
+        if (build_ret == -ENOENT)
+            printf("sudo: %s: command not found\n", argv[1]);
+        else
+            printf("sudo: %s\n", strerror(-build_ret));
+        return 1;
+    }
+
     /* 读取密码 (RAW 模式, 无回显) */
     write(STDOUT_FILENO, "[sudo] Password: ", 17);
     char password[MAX_PASS] = {0};
@@ -91,16 +125,6 @@ int main(int argc, char **argv) {
     strncpy(sudo_req.password, password, USER_PASS_MAX - 1);
     memset(password, 0, sizeof(password));
 
-    int build_ret = posix_spawnp_make_exec_args(
-        &sudo_req.exec_args, argv[1], argc - 1, (const char **)&argv[1]);
-    if (build_ret < 0) {
-        if (build_ret == -ENOENT)
-            printf("sudo: %s: command not found\n", argv[1]);
-        else
-            printf("sudo: %s\n", strerror(-build_ret));
-        return 1;
-    }
-
     /* 发送 USER_OP_SUDO 到 session endpoint */
     struct ipc_message req = {0};
     req.regs.data[0] = USER_OP_SUDO;
@@ -109,23 +133,52 @@ int main(int argc, char **argv) {
     req.buffer.size  = sizeof(sudo_req);
 
     struct ipc_message reply = {0};
+    char               reply_buf[sizeof(struct user_info)];
+    reply.buffer.data = (uint64_t)(uintptr_t)reply_buf;
+    reply.buffer.size = sizeof(reply_buf);
+
     int ret = sys_ipc_call(session_ep, &req, &reply, 10000);
+    memset(&sudo_req, 0, sizeof(sudo_req));
     if (ret < 0) {
         printf("sudo: request failed: %s\n", strerror(-ret));
         return 1;
     }
 
-    int pid = (int32_t)reply.regs.data[1];
-    if (pid < 0) {
-        if (pid == -EACCES)
+    int result = (int32_t)reply.regs.data[1];
+    if (result < 0) {
+        if (result == -EACCES)
             printf("sudo: authentication failed\n");
         else
-            printf("sudo: %s\n", strerror(-pid));
+            printf("sudo: %s\n", strerror(-result));
         return 1;
     }
+
+    handle_t target_session = HANDLE_INVALID;
+    if (reply.handles.count > 0)
+        target_session = reply.handles.handles[0];
+    if (target_session == HANDLE_INVALID) {
+        printf("sudo: invalid session reply\n");
+        return 1;
+    }
+
+    ret = add_session_handle(&exec_args, target_session);
+    if (ret < 0) {
+        printf("sudo: %s\n", strerror(-ret));
+        logout_session(target_session);
+        return 1;
+    }
+
+    int pid = sys_exec(&exec_args);
+    if (pid < 0) {
+        printf("sudo: %s\n", strerror(-pid));
+        logout_session(target_session);
+        return 1;
+    }
+    vfs_copy_cwd_to_child(pid);
 
     /* 等待子进程退出 */
     int status;
     waitpid(pid, &status, 0);
+    logout_session(target_session);
     return status;
 }
